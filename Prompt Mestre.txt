@@ -1,0 +1,1949 @@
+# PROMPT MESTRvocê atue como **arquiteto de software, desenvolvedor full-stack sênior, especialista em UX para mobile commerce, analytics e sistemas de vendas via WhatsApp**.
+
+Vamos desenvolver um produto chamado provisoriamente:
+
+# MARIA FLOR VITRINE
+
+Trata-se de uma plataforma própria para uma loja física de moda feminina consolidada, com forte audiência no Instagram, alto volume de conteúdo diário e giro extremamente rápido de mercadorias.
+
+Leia todo este documento antes de programar.
+
+---
+
+# 1. CONTEXTO DO NEGÓCIO
+
+A Maria Flor é uma loja física de moda feminina com muitos anos de atuação e uma audiência relevante no Instagram.
+
+O processo comercial atual funciona principalmente assim:
+
+1. chegam novidades constantemente;
+2. são produzidas fotos e provadores;
+3. os produtos são publicados principalmente nos Stories do Instagram;
+4. as clientes acompanham os Stories;
+5. quando se interessam, entram em contato pelo WhatsApp;
+6. uma vendedora confirma disponibilidade;
+7. a venda é concluída diretamente pelo atendimento.
+
+Esse modelo funciona comercialmente.
+
+O problema é que:
+
+* Stories desaparecem em 24 horas;
+* produtos antigos ficam difíceis de encontrar;
+* clientes não conseguem navegar facilmente por categorias;
+* uma cliente pode lembrar de uma peça dias depois e não encontrá-la;
+* o Instagram não funciona bem como catálogo permanente;
+* perdemos dados sobre o interesse real das clientes;
+* não conseguimos medir adequadamente quais produtos despertam mais desejo;
+* não conseguimos fazer remarketing de forma tão eficiente quanto poderíamos.
+
+Já houve tentativa de trabalhar com e-commerce tradicional, mas o modelo não se encaixa perfeitamente na operação.
+
+A loja possui:
+
+* estoque físico;
+* giro muito rápido;
+* vendas presenciais;
+* produtos que podem estar temporariamente fora da loja;
+* mercadorias consignadas/condicionais;
+* possibilidade de divergência entre estoque registrado e disponibilidade física real.
+
+Portanto:
+
+# REGRA DE NEGÓCIO Nº 1
+
+**A plataforma NÃO deve funcionar inicialmente como um e-commerce tradicional e NÃO deve garantir estoque ao consumidor.**
+
+Não criar inicialmente:
+
+* checkout;
+* carrinho tradicional;
+* pagamento online;
+* reserva automática de estoque;
+* baixa automática de estoque;
+* promessa de disponibilidade;
+* integração obrigatória com estoque;
+* cálculo de frete;
+* emissão fiscal;
+* ERP.
+
+O objetivo do MVP é:
+
+> MOSTRAR → GERAR DESEJO → ORGANIZAR → RASTREAR → LEVAR PARA O WHATSAPP → VENDEDORA CONFIRMA → VENDA.
+
+---
+
+# 2. VISÃO DO PRODUTO
+
+A Maria Flor Vitrine deve ser entendida como:
+
+> "O Story da Maria Flor que não desaparece."
+
+Instagram continuará sendo um dos principais canais de descoberta e geração de desejo.
+
+A plataforma será o ambiente permanente em que a cliente poderá:
+
+* visualizar novidades;
+* encontrar produtos vistos anteriormente;
+* navegar por categorias;
+* pesquisar pelo código da peça;
+* visualizar provadores;
+* visualizar looks completos;
+* favoritar produtos;
+* escolher o tamanho que procura;
+* entrar em contato com uma vendedora;
+* compartilhar produtos;
+* retornar posteriormente;
+* descobrir peças relacionadas.
+
+O fluxo principal será:
+
+INSTAGRAM
+↓
+MARIA FLOR VITRINE
+↓
+PRODUTO
+↓
+INTERESSE
+↓
+WHATSAPP
+↓
+VENDEDORA CONFIRMA DISPONIBILIDADE
+↓
+VENDA
+
+---
+
+# 3. PRINCÍPIO FUNDAMENTAL DE UX
+
+A plataforma será acessada predominantemente pelo celular.
+
+Portanto deve ser:
+
+* mobile-first;
+* extremamente rápida;
+* simples;
+* visual;
+* elegante;
+* intuitiva;
+* com poucas etapas;
+* otimizada para fotos de moda;
+* confortável para navegar usando apenas uma mão.
+
+Não quero visual de sistema empresarial.
+
+Não quero aparência de marketplace.
+
+Não quero aparência genérica de template de e-commerce.
+
+Quero uma experiência próxima de:
+
+Instagram + catálogo fashion + vitrine digital.
+
+Visual:
+
+* clean;
+* feminino sem exageros;
+* sofisticado;
+* moderno;
+* bastante espaço em branco;
+* tipografia elegante;
+* fotografias como protagonistas;
+* animações discretas;
+* navegação muito rápida.
+
+Nunca prejudicar velocidade em troca de efeitos visuais.
+
+---
+
+# 4. TECNOLOGIA
+
+Desenvolver utilizando arquitetura moderna e sustentável.
+
+Preferência inicial:
+
+Frontend/full-stack:
+
+* Next.js;
+* App Router;
+* TypeScript;
+* React;
+* Tailwind CSS.
+
+Backend/banco:
+
+* Supabase;
+* PostgreSQL.
+
+Autenticação administrativa:
+
+* Supabase Auth.
+
+Segurança:
+
+* Row Level Security;
+* separação clara entre conteúdo público e operações administrativas;
+* nenhuma service role exposta no navegador;
+* secrets apenas server-side;
+* validação de dados no servidor.
+
+Imagens:
+
+* começar com Supabase Storage ou arquitetura equivalente de baixo custo;
+* criar abstração para permitir migração futura para Cloudinary ou outro CDN de imagens;
+* gerar thumbnails;
+* otimizar imagens;
+* lazy loading;
+* formatos modernos quando possível;
+* preservar qualidade visual.
+
+Analytics:
+
+* Google Analytics 4;
+* Meta Pixel;
+* Meta Conversions API;
+* analytics interno próprio para ações essenciais.
+
+Não fixar versões antigas.
+
+Utilizar versões estáveis e atuais das dependências.
+
+---
+
+# 5. ESTRUTURA PRINCIPAL
+
+Separar a aplicação em dois ambientes:
+
+## ÁREA PÚBLICA
+
+Acessada pelas clientes.
+
+## PAINEL ADMINISTRATIVO
+
+Acessado pela equipe da Maria Flor.
+
+Manter componentes, serviços, banco de dados e permissões organizados de maneira modular.
+
+Não misturar lógica administrativa com apresentação pública.
+
+---
+
+# 6. HOME
+
+A Home precisa priorizar descoberta de produtos.
+
+Estrutura sugerida:
+
+### Cabeçalho
+
+Logo Maria Flor.
+
+Busca.
+
+Favoritos.
+
+Menu.
+
+Não ocupar muito espaço vertical no celular.
+
+---
+
+### Bloco principal
+
+Mensagem possível:
+
+"As novidades que você viu nos nossos Stories, agora em um só lugar."
+
+CTA:
+
+VER NOVIDADES
+
+---
+
+### Busca em destaque
+
+Título:
+
+VIU NO INSTAGRAM? ENCONTRE AQUI.
+
+Campo:
+
+"Digite o nome ou código da peça..."
+
+A busca deve pesquisar:
+
+* código;
+* nome;
+* descrição;
+* categoria;
+* tags futuramente.
+
+---
+
+### Acabaram de chegar
+
+Grid de produtos mais recentes.
+
+CTA:
+
+VER TODAS AS NOVIDADES
+
+---
+
+### Categorias
+
+Exemplos:
+
+* Jeans;
+* Calças;
+* Blusas;
+* T-shirts;
+* Conjuntos;
+* Vestidos;
+* Shorts;
+* Saias;
+* Acessórios.
+
+Categorias devem ser administráveis.
+
+Não hardcode.
+
+---
+
+### Provador da Eliara
+
+Mostrar os provadores mais recentes.
+
+Exemplo:
+
+PROVADOR DE HOJE
+
+[imagem]
+
+VER PROVADOR
+
+---
+
+### Mais desejados
+
+Ranking calculado através da interação das clientes.
+
+---
+
+### Drops/Coleções
+
+Exemplos:
+
+DROP POÁ
+
+JEANS WEEK
+
+VERÃO
+
+CHEGOU HOJE
+
+As coleções devem ser criadas pelo administrativo.
+
+---
+
+# 7. LISTAGEM DE PRODUTOS
+
+Criar páginas como:
+
+/novidades
+
+/categoria/[slug]
+
+/colecao/[slug]
+
+/busca
+
+/provador/[slug]
+
+Produtos apresentados em cards.
+
+Card deverá permitir:
+
+* fotografia;
+* nome;
+* preço;
+* código opcionalmente;
+* indicador de status;
+* favorito;
+* acesso rápido ao produto.
+
+Priorizar fotografia.
+
+Evitar excesso de informação.
+
+---
+
+# 8. PÁGINA DO PRODUTO
+
+URL amigável:
+
+/produto/calca-balloon-poa-mf-7284
+
+Informações:
+
+* galeria de fotos;
+* nome;
+* preço;
+* código;
+* tamanhos disponíveis para consulta;
+* descrição curta;
+* categoria;
+* status;
+* produtos relacionados;
+* botão de favoritos;
+* botão compartilhar;
+* botão principal para WhatsApp.
+
+Exemplo:
+
+CALÇA BALLOON POÁ
+
+R$ 199,99
+
+Código: MF-7284
+
+Tamanhos:
+
+36
+38
+40
+42
+
+Adicionar mensagem visível porém discreta:
+
+"Disponibilidade sujeita à confirmação devido ao giro rápido das peças."
+
+---
+
+# 9. STATUS DO PRODUTO
+
+Não trabalhar inicialmente com quantidade real em estoque.
+
+Criar enum/status:
+
+ACTIVE
+LAST_UNITS
+CHECK_AVAILABILITY
+SOLD_OUT
+ARCHIVED
+
+Interface em português:
+
+ACTIVE:
+"Disponível para consulta"
+
+LAST_UNITS:
+"Últimas peças"
+
+CHECK_AVAILABILITY:
+"Consulte disponibilidade"
+
+SOLD_OUT:
+"Esgotado"
+
+ARCHIVED:
+não aparecer na vitrine pública.
+
+IMPORTANTE:
+
+Mesmo ACTIVE não significa garantia contratual de estoque.
+
+Sempre existir confirmação através do atendimento.
+
+---
+
+# 10. TAMANHOS
+
+Um produto pode possuir vários tamanhos.
+
+Exemplo:
+
+PP
+P
+M
+G
+GG
+
+ou
+
+34
+36
+38
+40
+42
+44
+46
+
+Não hardcode tamanhos.
+
+Criar estrutura flexível.
+
+Antes da cliente entrar no WhatsApp, quando fizer sentido, perguntar:
+
+"Qual tamanho você procura?"
+
+Registrar:
+
+product_id
+size
+session_id
+timestamp
+
+Essa informação será muito importante para análise futura de demanda.
+
+---
+
+# 11. WHATSAPP
+
+Esse é um dos pontos mais importantes do sistema.
+
+CTA principal:
+
+"QUERO ESSA PEÇA"
+
+Antes de abrir o WhatsApp, registrar o evento.
+
+Gerar automaticamente uma mensagem estruturada.
+
+Exemplo:
+
+"Oi! Vi essa peça na Vitrine Maria Flor ❤️
+
+Calça Balloon Poá
+Código: MF-7284
+Tamanho que procuro: 40
+R$ 199,99
+
+Poderia verificar a disponibilidade para mim?"
+
+Adicionar URL do produto quando conveniente.
+
+---
+
+# 12. VENDEDORAS
+
+Criar desde o início estrutura de banco que permita várias vendedoras.
+
+Tabela sellers.
+
+Campos sugeridos:
+
+id
+name
+phone
+whatsapp_number
+active
+avatar_url
+order_priority
+created_at
+updated_at
+
+O sistema deve suportar diferentes estratégias futuramente:
+
+* número principal;
+* escolha de vendedora;
+* distribuição round-robin;
+* vendedora preferencial;
+* distribuição baseada em origem;
+* CRM.
+
+No MVP pode existir uma configuração simples definindo:
+
+WHATSAPP_MODE:
+
+DEFAULT
+CHOOSE_SELLER
+ROUND_ROBIN
+
+Não desenvolver CRM complexo agora.
+
+Somente deixar a arquitetura preparada.
+
+Registrar qual vendedora recebeu cada clique quando possível.
+
+---
+
+# 13. FAVORITOS
+
+Cliente poderá tocar:
+
+♡ FAVORITAR
+
+Não obrigar criação de conta.
+
+No MVP utilizar identificador anônimo/session + armazenamento local quando adequado.
+
+Favoritos devem permanecer no dispositivo.
+
+Página:
+
+/favoritos
+
+A cliente poderá visualizar todas as peças salvas.
+
+Adicionar CTA:
+
+"ENVIAR MEUS FAVORITOS PARA UMA VENDEDORA"
+
+Gerar mensagem contendo os códigos e links dos produtos.
+
+Exemplo:
+
+"Oi! Separei algumas peças na Vitrine Maria Flor ❤️
+
+MF-7284 — Calça Balloon Poá
+MF-7285 — T-shirt Algodão
+MF-7290 — Saia Marrant
+
+Poderia verificar a disponibilidade para mim?"
+
+---
+
+# 14. CAPTURA DE LEADS
+
+Não obrigar cadastro ou login da cliente para navegar.
+
+Captura deve ser opcional e contextual.
+
+Exemplos:
+
+"Quer receber nossas novidades?"
+
+"Quer salvar seus favoritos?"
+
+"Quer receber novidades de jeans?"
+
+"Quer ser avisada quando chegarem peças parecidas?"
+
+Campos básicos:
+
+nome
+WhatsApp
+
+Opcional:
+
+e-mail.
+
+Registrar consentimentos separadamente.
+
+Campos:
+
+marketing_consent
+whatsapp_consent
+consent_timestamp
+consent_source
+
+Preparar para conformidade com LGPD.
+
+Nunca pré-marcar autorização de marketing.
+
+---
+
+# 15. PROVADOR DA ELIARA
+
+Essa deverá ser uma área importante do produto.
+
+Criar entidade:
+
+PROVADOR
+
+Exemplo:
+
+Provador 27/08
+
+Possui:
+
+* título;
+* data;
+* capa;
+* descrição opcional;
+* status;
+* slug;
+* produtos relacionados;
+* looks.
+
+URL:
+
+/provador/27-08-2026
+
+Exemplo:
+
+LOOK 01
+
+[foto do look]
+
+Calça Balloon Poá
+R$ 199,99
+
+T-shirt Algodão
+R$ 69,99
+
+Colar
+R$ 49,99
+
+Cada produto clicável.
+
+CTA:
+
+QUERO O LOOK
+
+Ao clicar:
+
+registrar evento e abrir WhatsApp com todos os produtos daquele look.
+
+---
+
+# 16. DROPS / COLEÇÕES
+
+Criar estrutura genérica de coleções.
+
+Exemplo:
+
+DROP POÁ
+
+Possui:
+
+* título;
+* slug;
+* imagem;
+* descrição;
+* produtos;
+* data inicial opcional;
+* data final opcional;
+* ativo/inativo.
+
+Página:
+
+/colecao/poa
+
+Isso permitirá criar landing pages rapidamente para:
+
+* campanhas;
+* tendências;
+* anúncios;
+* coleções;
+* eventos;
+* lançamentos.
+
+---
+
+# 17. PAINEL ADMINISTRATIVO
+
+Criar rota protegida:
+
+/admin
+
+Layout extremamente simples.
+
+Mobile-first também.
+
+Menu:
+
+Dashboard
+Produtos
+Provadores
+Coleções
+Categorias
+Clientes/Leads
+Vendedoras
+Relatórios
+Configurações
+
+---
+
+# 18. CADASTRO DE PRODUTO
+
+Essa operação precisa ser EXTREMAMENTE RÁPIDA.
+
+Objetivo:
+
+uma pessoa deve conseguir cadastrar uma peça pelo celular em poucos segundos.
+
+Campos obrigatórios:
+
+Fotos
+Código
+Nome
+Preço
+Categoria
+
+Campos muito rápidos:
+
+Tamanhos
+Status
+
+Campos opcionais:
+
+Descrição
+Preço promocional
+Tags
+Provador
+Coleção
+Destaque
+
+Fluxo:
+
+* NOVO PRODUTO
+
+Adicionar fotos
+
+Código
+
+Nome
+
+Preço
+
+Categoria
+
+Tamanhos
+
+Status
+
+PUBLICAR
+
+Evitar telas desnecessárias.
+
+---
+
+# 19. UPLOAD EM LOTE
+
+Criar arquitetura para cadastro rápido de várias novidades.
+
+Exemplo:
+
+Usuária seleciona 15 fotografias.
+
+Sistema cria 15 rascunhos.
+
+Depois apresenta interface rápida:
+
+FOTO 1
+Código:
+Nome:
+Preço:
+Categoria:
+
+FOTO 2
+Código:
+Nome:
+Preço:
+Categoria:
+
+etc.
+
+Possibilitar aplicar a mesma categoria para vários produtos.
+
+Possibilitar aplicar tamanhos em lote.
+
+Possibilitar publicar todos.
+
+Essa funcionalidade pode entrar após o cadastro individual estar completamente estável.
+
+---
+
+# 20. DUPLICAR PRODUTO
+
+Criar botão:
+
+DUPLICAR
+
+Muito útil quando produtos possuem características semelhantes.
+
+Copiar:
+
+categoria
+tamanhos
+descrição
+status padrão
+
+Nunca copiar código automaticamente como código definitivo.
+
+Solicitar novo código.
+
+---
+
+# 21. ARQUIVAR EM VEZ DE APAGAR
+
+Produtos normalmente não devem ser deletados.
+
+Utilizar soft delete/status ARCHIVED.
+
+Ao arquivar:
+
+* desaparece da vitrine;
+* mantém analytics;
+* mantém histórico;
+* mantém relacionamentos.
+
+Isso é essencial para análises futuras.
+
+---
+
+# 22. ANALYTICS INTERNO
+
+Além de GA4 e Meta, criar rastreamento próprio de eventos importantes.
+
+Eventos iniciais:
+
+PRODUCT_VIEW
+CATEGORY_VIEW
+SEARCH
+SIZE_SELECTED
+FAVORITE_ADDED
+FAVORITE_REMOVED
+WHATSAPP_CLICK
+PROVADOR_VIEW
+LOOK_WHATSAPP_CLICK
+COLLECTION_VIEW
+LEAD_SUBMITTED
+SHARE_PRODUCT
+
+Estrutura aproximada:
+
+analytics_events
+
+id
+event_type
+session_id
+product_id nullable
+category_id nullable
+provador_id nullable
+collection_id nullable
+seller_id nullable
+size nullable
+source nullable
+utm_source nullable
+utm_medium nullable
+utm_campaign nullable
+utm_content nullable
+referrer nullable
+metadata jsonb
+created_at
+
+IMPORTANTE:
+
+Não salvar informações pessoais desnecessárias.
+
+Não depender de endereço IP para identificar cliente.
+
+Criar session_id anônimo.
+
+---
+
+# 23. UTM
+
+Persistir UTMs durante a sessão.
+
+Capturar:
+
+utm_source
+utm_medium
+utm_campaign
+utm_content
+utm_term
+
+Exemplo:
+
+Instagram Story
+
+utm_source=instagram
+utm_medium=story
+utm_campaign=provador_2708
+
+Anúncios:
+
+utm_source=meta
+utm_medium=paid
+utm_campaign=poa_agosto
+
+Quando houver clique no WhatsApp, preservar a atribuição.
+
+Assim conseguiremos descobrir:
+
+"Esta conversa foi originada do Story."
+
+ou:
+
+"Esta conversa veio do anúncio X."
+
+---
+
+# 24. META PIXEL
+
+Preparar integração com Meta Pixel.
+
+Mapear eventos para padrões da Meta quando apropriado.
+
+Exemplos:
+
+visualizou produto:
+ViewContent
+
+buscou:
+Search
+
+favoritou:
+AddToWishlist
+
+enviou lead:
+Lead
+
+contato:
+Contact ou evento correspondente adequado
+
+Também podem existir eventos personalizados.
+
+Enviar product_id/content_ids de forma consistente.
+
+---
+
+# 25. META CONVERSIONS API
+
+Arquitetura server-side.
+
+Não expor secrets.
+
+Evitar eventos duplicados.
+
+Implementar event_id para deduplicação Pixel/CAPI quando aplicável.
+
+Respeitar consentimento de marketing.
+
+Criar módulo independente:
+
+/lib/analytics/meta
+
+Não espalhar código da Meta por toda aplicação.
+
+---
+
+# 26. GOOGLE ANALYTICS 4
+
+Criar camada centralizada de analytics.
+
+Mapear ações quando apropriado:
+
+view_item
+view_item_list
+search
+select_item
+generate_lead
+
+E eventos customizados quando necessário:
+
+whatsapp_click
+size_selected
+provador_view
+
+---
+
+# 27. CONSENTIMENTO / PRIVACIDADE
+
+Criar consentimento simples e não invasivo.
+
+Categorias:
+
+Necessários
+Analytics
+Marketing
+
+Scripts de marketing só devem ser habilitados conforme configuração e consentimento aplicável.
+
+Registrar consentimento quando necessário.
+
+Criar:
+
+/politica-de-privacidade
+
+Não utilizar dark patterns.
+
+---
+
+# 28. ÍNDICE DE DESEJO
+
+Criar estrutura para calcular um indicador chamado:
+
+ÍNDICE DE DESEJO
+
+Primeira fórmula sugerida:
+
+visualização = 1
+favorito = 5
+seleção de tamanho = 7
+clique WhatsApp = 10
+
+A fórmula NÃO deverá ficar espalhada no frontend.
+
+Criar configuração central ou serviço.
+
+Exemplo:
+
+desire_score =
+views * 1 +
+favorites * 5 +
+size_selections * 7 +
+whatsapp_clicks * 10
+
+No dashboard mostrar:
+
+MAIS DESEJADOS
+
+1. Calça Balloon
+2. Conjunto Poá
+3. Vestido Marrant
+
+Preparar para alterar pesos futuramente.
+
+---
+
+# 29. DASHBOARD ADMINISTRATIVO
+
+Dashboard inicial simples.
+
+Cards:
+
+Visitantes hoje
+Visualizações de produtos
+Cliques WhatsApp
+Favoritos
+Leads
+
+Ranking:
+
+Produtos mais visualizados
+
+Produtos mais favoritados
+
+Produtos com mais cliques no WhatsApp
+
+Produtos com maior Índice de Desejo
+
+Categorias mais acessadas
+
+Tamanhos mais procurados
+
+Origem dos acessos
+
+Não criar BI complexo no MVP.
+
+---
+
+# 30. BANCO DE DADOS
+
+Planejar pelo menos as seguintes entidades:
+
+profiles
+roles
+
+products
+product_images
+product_sizes
+
+categories
+
+provadores
+provador_looks
+provador_look_products
+
+collections
+collection_products
+
+sellers
+
+leads
+lead_interests
+
+analytics_events
+
+site_settings
+
+consent_records
+
+Se for realmente necessário:
+
+favorites
+
+Criar IDs apropriados.
+
+Usar:
+
+created_at
+updated_at
+
+quando aplicável.
+
+Adicionar índices para consultas frequentes.
+
+Criar foreign keys.
+
+Criar constraints.
+
+Não criar banco improvisado.
+
+---
+
+# 31. PRODUTO
+
+Estrutura sugerida:
+
+products
+
+id
+code
+name
+slug
+description
+price
+promotional_price nullable
+category_id
+status
+featured
+published_at
+created_at
+updated_at
+archived_at nullable
+
+Código deve possuir restrição adequada para evitar duplicação acidental.
+
+---
+
+# 32. IMAGENS
+
+product_images
+
+id
+product_id
+storage_path
+public_url ou referência segura
+alt_text
+position
+created_at
+
+Permitir ordenar fotografias.
+
+Imagem principal:
+
+position = 0 ou campo correspondente.
+
+Nunca armazenar imagem em base64 no PostgreSQL.
+
+---
+
+# 33. SEO E COMPARTILHAMENTO
+
+Cada produto deverá possuir:
+
+title
+description
+canonical
+Open Graph
+imagem social
+
+Ao compartilhar pelo WhatsApp deve aparecer:
+
+foto
+nome da peça
+Maria Flor
+
+Gerar sitemap para páginas públicas relevantes.
+
+Criar robots.txt.
+
+Não indexar:
+
+/admin
+rotas internas
+rascunhos
+arquivados
+
+---
+
+# 34. PERFORMANCE
+
+Performance é prioridade.
+
+Implementar:
+
+* otimização de imagens;
+* lazy loading;
+* cache quando apropriado;
+* server components quando fizer sentido;
+* paginação/infinite loading eficiente;
+* consultas indexadas;
+* evitar N+1;
+* bundles pequenos;
+* skeletons discretos.
+
+Não instalar bibliotecas pesadas sem necessidade.
+
+---
+
+# 35. PWA
+
+Preparar a aplicação para PWA.
+
+Objetivo futuro:
+
+cliente pode adicionar:
+
+"Maria Flor"
+
+à tela inicial do celular.
+
+Não criar aplicativo nativo agora.
+
+---
+
+# 36. BUSCA
+
+Busca precisa ser rápida.
+
+Exemplo:
+
+cliente digita:
+
+7284
+
+retorna:
+
+MF-7284
+Calça Balloon Poá
+
+Também pesquisar por:
+
+"balloon"
+"poá"
+"calça"
+
+Normalizar acentos e caixa quando conveniente.
+
+---
+
+# 37. PRODUTOS RELACIONADOS
+
+Na página do produto mostrar:
+
+VOCÊ TAMBÉM PODE GOSTAR
+
+Primeira versão:
+
+mesma categoria
+mesma coleção
+produtos recentes
+
+Futuramente usar analytics/recomendação.
+
+---
+
+# 38. PRODUTO ESGOTADO
+
+Não simplesmente produzir página 404.
+
+Se produto estiver SOLD_OUT:
+
+mostrar:
+
+ESGOTADO
+
+e:
+
+"Gostou dessa peça?"
+
+CTA:
+
+QUERO ALGO PARECIDO
+
+ou:
+
+AVISE-ME SE VOLTAR
+
+Preparar captura de interesse.
+
+Isso transforma produto esgotado em lead.
+
+---
+
+# 39. IDENTIDADE DA CLIENTE
+
+Não criar login obrigatório.
+
+Cliente anônima deve conseguir:
+
+* navegar;
+* pesquisar;
+* favoritar;
+* selecionar tamanho;
+* clicar no WhatsApp.
+
+Gerar UUID anônimo para session/visitor quando apropriado.
+
+Futuramente poderemos relacionar uma sessão a um lead quando houver consentimento.
+
+---
+
+# 40. SEGURANÇA
+
+Implementar:
+
+* RLS;
+* validação server-side;
+* autenticação administrativa;
+* autorização por papel;
+* proteção contra upload indevido;
+* limites de tamanho de arquivo;
+* sanitização;
+* rate limiting em endpoints sensíveis;
+* proteção contra spam de formulário;
+* logs apropriados.
+
+Nenhuma credencial no frontend.
+
+Nenhuma service_role no browser.
+
+---
+
+# 41. PAPÉIS ADMINISTRATIVOS
+
+Preparar:
+
+ADMIN
+CATALOG_EDITOR
+
+ADMIN:
+acesso total.
+
+CATALOG_EDITOR:
+produtos
+fotos
+categorias
+provadores
+coleções.
+
+Preparar arquitetura para papel:
+
+SELLER
+
+futuramente.
+
+---
+
+# 42. NÃO IMPLEMENTAR NO MVP
+
+Esta parte é extremamente importante.
+
+NÃO implemente agora:
+
+* checkout;
+* gateway de pagamento;
+* carrinho tradicional;
+* controle real de estoque;
+* sincronização com ERP;
+* emissão fiscal;
+* cálculo de frete;
+* aplicativo nativo;
+* chatbot de IA;
+* CRM completo;
+* automação complexa de WhatsApp;
+* programa de pontos;
+* marketplace;
+* integração com dezenas de APIs;
+* sistema financeiro.
+
+Não aumente o escopo sem necessidade.
+
+---
+
+# 43. FASE 1 — MVP
+
+Entregar primeiro uma aplicação completamente funcional contendo:
+
+### Cliente
+
+Home
+
+Novidades
+
+Categorias
+
+Busca
+
+Página do produto
+
+Seleção de tamanho
+
+Favoritos
+
+WhatsApp
+
+Produtos relacionados
+
+Provadores
+
+Coleções/Drops
+
+Compartilhamento
+
+### Administrativo
+
+Login
+
+Dashboard básico
+
+Produtos
+
+Cadastro produto
+
+Edição
+
+Arquivar
+
+Categorias
+
+Provadores
+
+Coleções
+
+Configuração WhatsApp
+
+### Dados
+
+Analytics interno
+
+UTMs
+
+Meta Pixel preparado
+
+GA4 preparado
+
+Consentimento
+
+---
+
+# 44. FASE 2
+
+Somente depois do MVP estar estável:
+
+Upload em lote aprimorado
+
+Lead capture avançado
+
+Lista de espera
+
+Aviso de reposição
+
+Dashboard avançado
+
+Índice de Desejo aprimorado
+
+Relatórios
+
+Distribuição inteligente entre vendedoras
+
+Atribuição de leads
+
+Melhoria de remarketing
+
+Meta Conversions API completa
+
+---
+
+# 45. FASE 3
+
+Futuramente:
+
+CRM WhatsApp
+
+WhatsApp Cloud API
+
+Pipeline comercial
+
+Histórico de clientes
+
+Vendedora responsável
+
+Conversas
+
+Follow-up
+
+Segmentação
+
+Automação
+
+Campanhas
+
+Recuperação de clientes
+
+IA para recomendação de produtos
+
+IA para descrição
+
+IA para identificação de tendências
+
+Integração opcional com o sistema de gestão.
+
+---
+
+# 46. PREPARAÇÃO PARA CRM
+
+Mesmo não implementando CRM agora, não tome decisões arquiteturais que impossibilitem futuramente:
+
+cliente
+lead
+conversa
+vendedora
+produto
+origem
+campanha
+venda
+
+serem relacionados.
+
+---
+
+# 47. PRINCÍPIO DE DESENVOLVIMENTO
+
+Não quero que você tente gerar toda a plataforma de uma vez.
+
+Trabalhe incrementalmente.
+
+A cada módulo:
+
+1. entender;
+2. modelar;
+3. implementar;
+4. validar tipos;
+5. validar banco;
+6. validar segurança;
+7. validar responsividade;
+8. testar;
+9. somente depois avançar.
+
+Não quebrar módulos já funcionando para adicionar novos.
+
+---
+
+# 48. QUALIDADE DO CÓDIGO
+
+Exijo:
+
+TypeScript estrito.
+
+Componentes reutilizáveis.
+
+Separação:
+
+UI
+business logic
+database
+analytics
+integrations
+
+Não criar componentes gigantes.
+
+Não duplicar lógica.
+
+Não usar `any` sem necessidade excepcional.
+
+Criar tratamento de erros.
+
+Criar loading states.
+
+Criar empty states.
+
+Criar feedback de sucesso/erro.
+
+---
+
+# 49. DESIGN SYSTEM
+
+Criar design system simples.
+
+Componentes:
+
+Button
+Input
+SearchInput
+ProductCard
+ProductGrid
+Price
+Badge
+SizeSelector
+FavoriteButton
+WhatsAppButton
+Modal
+Drawer
+Toast
+Skeleton
+EmptyState
+
+Não criar dezenas de variações antes da necessidade.
+
+---
+
+# 50. EXPERIÊNCIA ADMINISTRATIVA
+
+O painel administrativo deve ser pensado para uma loja real em operação.
+
+Pergunta obrigatória durante decisões de UX:
+
+"Isso facilita ou atrapalha uma funcionária cadastrando 20 novidades pelo celular?"
+
+Se atrapalhar:
+
+simplifique.
+
+Velocidade operacional é mais importante que quantidade de recursos.
+
+---
+
+# 51. MÉTRICA PRINCIPAL
+
+O objetivo não é medir apenas visitas.
+
+A principal conversão inicial é:
+
+WHATSAPP_CLICK
+
+Precisamos saber:
+
+qual produto;
+qual tamanho;
+qual provador;
+qual coleção;
+qual campanha;
+qual origem;
+qual vendedora;
+qual sessão;
+
+geraram aquele contato.
+
+---
+
+# 52. FUNIL
+
+Dashboard deve futuramente suportar:
+
+VISITANTE
+↓
+VISUALIZOU PRODUTO
+↓
+SELECIONOU TAMANHO
+↓
+FAVORITOU
+↓
+CLICOU WHATSAPP
+↓
+LEAD
+↓
+VENDA
+
+No MVP temos dados até WhatsApp/Lead.
+
+Venda será integrada posteriormente.
+
+---
+
+# 53. META FINAL
+
+Não estamos construindo "um site bonito".
+
+Estamos construindo um ativo digital capaz de transformar:
+
+AUDIÊNCIA
+
+em
+
+INTENÇÃO
+
+em
+
+DADOS
+
+em
+
+CONVERSAS
+
+em
+
+VENDAS.
+
+A plataforma deve transformar o conteúdo diário da Maria Flor em um catálogo permanente e mensurável.
+
+---
+
+# 54. COMO VOCÊ DEVE COMEÇAR
+
+Antes de sair criando telas aleatoriamente:
+
+### ETAPA A
+
+Analise todo este escopo.
+
+### ETAPA B
+
+Proponha a arquitetura final do MVP.
+
+Apresente:
+
+* estrutura de pastas;
+* arquitetura;
+* banco;
+* relacionamentos;
+* autenticação;
+* permissões;
+* analytics;
+* estratégia de imagens;
+* fluxo público;
+* fluxo administrativo.
+
+### ETAPA C
+
+Crie migrations/schema do banco.
+
+### ETAPA D
+
+Crie a estrutura base da aplicação.
+
+### ETAPA E
+
+Implemente primeiro:
+
+1. autenticação administrativa;
+2. categorias;
+3. produtos;
+4. upload de fotos;
+5. listagem pública;
+6. página de produto;
+7. botão WhatsApp;
+8. busca.
+
+### ETAPA F
+
+Depois:
+
+9. favoritos;
+10. provadores;
+11. coleções;
+12. analytics;
+13. dashboard.
+
+Não pule diretamente para recursos avançados.
+
+---
+
+# 55. IMPORTANTE AO TRABALHAR EM UM REPOSITÓRIO EXISTENTE
+
+Se já existir código:
+
+NÃO reescreva tudo automaticamente.
+
+Primeiro:
+
+* examine estrutura;
+* dependências;
+* banco;
+* migrations;
+* rotas;
+* componentes;
+* autenticação;
+* variáveis de ambiente.
+
+Depois apresente resumidamente:
+
+O QUE EXISTE
+O QUE SERÁ PRESERVADO
+O QUE PRECISA SER ALTERADO
+O QUE SERÁ CRIADO
+
+Priorize evolução incremental.
+
+---
+
+# 56. DOCUMENTAÇÃO DO PROJETO
+
+Manter:
+
+README.md
+
+e criar:
+
+/docs/architecture.md
+/docs/database.md
+/docs/analytics.md
+/docs/business-rules.md
+
+business-rules.md deverá registrar principalmente:
+
+1. site não garante estoque;
+2. venda é finalizada por vendedora;
+3. WhatsApp é conversão principal;
+4. produtos podem ser arquivados;
+5. cliente não precisa de conta;
+6. analytics é parte do produto;
+7. cadastro precisa ser rápido;
+8. MVP não possui checkout.
+
+Isso evita que futuras alterações destruam a lógica original.
+
+---
+
+# 57. CRITÉRIO DE SUCESSO DO MVP
+
+Consideraremos o MVP funcional quando for possível:
+
+1. entrar no administrativo pelo celular;
+2. cadastrar um produto em poucos segundos;
+3. adicionar fotografias;
+4. adicionar código;
+5. preço;
+6. categoria;
+7. tamanhos;
+8. publicar;
+9. abrir a vitrine pública;
+10. encontrar o produto imediatamente;
+11. pesquisar pelo código;
+12. selecionar tamanho;
+13. clicar em "Quero essa peça";
+14. abrir WhatsApp com mensagem correta;
+15. registrar o clique;
+16. identificar origem/UTM;
+17. favoritar produto;
+18. abrir um provador;
+19. abrir uma coleção;
+20. visualizar os produtos mais acessados no painel.
+
+---
+
+# 58. REGRA FINAL
+
+Sempre que surgir uma nova ideia, pergunte tecnicamente:
+
+"Isso é necessário para aumentar a capacidade da vitrine de gerar interesse, dados ou conversas no WhatsApp?"
+
+Se não:
+
+não adicionar ao MVP.
+
+Prioridades absolutas:
+
+SIMPLICIDADE
+VELOCIDADE
+CONVERSÃO
+RASTREAMENTO
+FACILIDADE DE CADASTRO
+MANUTENIBILIDADE
+
+---
+
+Agora analise este projeto como arquiteto sênior.
+
+Não comece criando dezenas de funcionalidades ao mesmo tempo.
+
+Primeiro apresente a arquitetura proposta para o MVP, esquema do banco e ordem de implementação.
+
+Depois inicie a construção pela fundação e pela Fase 1, mantendo o sistema funcional a cada etapa.
