@@ -1,6 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type { UserRole } from "@/types/database";
 
 export interface CurrentAdmin {
@@ -14,6 +15,8 @@ export interface CurrentAdmin {
  * Retorna null se não houver sessão válida.
  */
 export async function getCurrentAdmin(): Promise<CurrentAdmin | null> {
+  if (!isSupabaseConfigured()) return null;
+
   const supabase = await createClient();
   const {
     data: { user },

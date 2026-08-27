@@ -9,15 +9,22 @@ import { NextResponse, type NextRequest } from "next/server";
  * A checagem de *papel* (admin/catalog_editor) acontece depois, em cada
  * página/rota administrativa — o middleware só garante que existe sessão.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+  const isAdminRoute = request.nextUrl.pathname.startsWith("/admin");
+  const isLoginRoute = request.nextUrl.pathname.startsWith("/admin/login");
+
   if (!supabaseUrl || !supabaseAnonKey) {
-    // Ambiente ainda não configurado (.env.local vazio): não bloqueia o dev
-    // server, só deixa de tentar validar sessão.
+    // Ambiente ainda não configurado (.env.local vazio): a vitrine pública
+    // segue funcionando, mas /admin fica bloqueado (fail-closed) em vez de
+    // deixar passar sem sessão.
+    if (isAdminRoute && !isLoginRoute) {
+      return NextResponse.redirect(new URL("/admin/login", request.url));
+    }
     return response;
   }
 
@@ -39,9 +46,6 @@ export async function middleware(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const isAdminRoute = request.nextUrl.pathname.startsWith("/admin");
-  const isLoginRoute = request.nextUrl.pathname.startsWith("/admin/login");
 
   if (isAdminRoute && !isLoginRoute && !user) {
     const loginUrl = new URL("/admin/login", request.url);
