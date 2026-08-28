@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { Price } from "@/components/ui/Price";
 import { ProductGallery } from "@/components/catalog/ProductGallery";
+import { ProductWhatsAppFlow } from "@/components/catalog/ProductWhatsAppFlow";
 import { PRODUCT_STATUS_LABELS, publicStatusBadge } from "@/lib/catalog/status";
 import { getProductBySlugPublic } from "@/lib/db/products";
+import { getActiveSellersForModal } from "@/lib/db/sellers";
 
 export async function generateMetadata({
   params,
@@ -36,6 +38,8 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
 
   if (!product) notFound();
 
+  const sellers = await getActiveSellersForModal();
+
   const badge = publicStatusBadge(product.status);
   const isSoldOut = product.status === "SOLD_OUT";
 
@@ -62,22 +66,6 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
             <p className="text-sm font-medium text-red-600">{PRODUCT_STATUS_LABELS.SOLD_OUT}</p>
           )}
 
-          {product.sizes.length > 0 && (
-            <div>
-              <p className="mb-1.5 text-sm font-medium text-text">Tamanhos para consulta</p>
-              <div className="flex flex-wrap gap-1.5">
-                {product.sizes.map((size) => (
-                  <span
-                    key={size}
-                    className="flex h-9 min-w-9 items-center justify-center rounded-full border border-border px-3 text-sm text-text"
-                  >
-                    {size}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
           {product.description && (
             <p className="whitespace-pre-line text-sm text-text-muted">{product.description}</p>
           )}
@@ -86,14 +74,9 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
             Disponibilidade sujeita à confirmação devido ao giro rápido das peças.
           </p>
 
-          {/* CTA de WhatsApp será implementado e validado em módulo separado */}
-          <button
-            type="button"
-            disabled
-            className="mt-2 h-12 rounded-full bg-muted text-sm font-medium text-text-muted"
-          >
-            Quero essa peça (em breve)
-          </button>
+          <div className="mt-2">
+            <ProductWhatsAppFlow productId={product.id} sizes={product.sizes} sellers={sellers} />
+          </div>
         </div>
       </div>
     </main>

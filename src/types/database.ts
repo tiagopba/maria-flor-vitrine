@@ -195,6 +195,7 @@ export interface Database {
           active: boolean;
           avatar_url: string | null;
           order_priority: number;
+          round_robin: boolean;
           created_at: string;
           updated_at: string;
         },

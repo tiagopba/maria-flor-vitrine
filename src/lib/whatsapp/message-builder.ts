@@ -25,12 +25,15 @@ export function buildProductWhatsAppMessage({
     `Código: ${code}`,
   ];
 
-  if (size) lines.push(`Tamanho que procuro: ${size}`);
+  if (size) lines.push(`Tamanho: ${size}`);
 
-  lines.push(formatPrice(price));
+  lines.push(`Preço: ${formatPrice(price)}`);
   lines.push("Poderia verificar a disponibilidade para mim?");
 
-  if (productUrl) lines.push(productUrl);
+  if (productUrl) {
+    lines.push("");
+    lines.push(productUrl);
+  }
 
   return lines.join("\n");
 }

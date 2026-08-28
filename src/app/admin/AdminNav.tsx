@@ -17,7 +17,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Coleções", href: "/admin/colecoes", available: false },
   { label: "Categorias", href: "/admin/categorias", available: true },
   { label: "Clientes/Leads", href: "/admin/leads", available: false },
-  { label: "Vendedoras", href: "/admin/vendedoras", available: false },
+  { label: "Vendedoras", href: "/admin/vendedoras", available: true },
   { label: "Relatórios", href: "/admin/relatorios", available: false },
   { label: "Configurações", href: "/admin/configuracoes", available: false },
 ];
