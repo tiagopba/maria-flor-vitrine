@@ -8,9 +8,10 @@
   --color-muted: #f6f1ec;
   --color-border: #ece3db;
 
-  --color-primary: #a6503f;
+  /* Rosa da marca Maria Flor (logomarca) */
+  --color-primary: #d6217d;
   --color-primary-foreground: #fffdfb;
-  --color-accent: #c98a76;
+  --color-accent: #f2a6ce;
 
   --color-text: #221c1a;
   --color-text-muted: #75695f;

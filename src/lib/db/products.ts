@@ -116,15 +116,20 @@ export async function getProductByIdAdmin(id: string): Promise<ProductDetail | n
 export async function getProductBySlugPublic(slug: string): Promise<ProductDetail | null> {
   const supabase = await createClient();
 
-  // Filtro explícito além do RLS (que já bloqueia ARCHIVED/não publicado):
-  // deixa a regra visível aqui e evita depender só da policy do banco.
+  // status/published_at IS NOT NULL são filtrados aqui também (não só via
+  // RLS) para deixar a regra visível no código. A comparação "published_at
+  // <= agora" propositalmente NÃO é repetida aqui — isso é deixado só para
+  // a RLS (policy "products_public_read"), porque o Postgres usa o relógio
+  // do próprio banco. Se essa checagem fosse feita na aplicação com
+  // `new Date()`, um relógio de servidor dessincronizado esconderia
+  // produtos recém-publicados (foi exatamente isso que aconteceu e foi
+  // corrigido aqui).
   const { data: product, error } = await supabase
     .from("products")
     .select("*")
     .eq("slug", slug)
     .neq("status", "ARCHIVED")
     .not("published_at", "is", null)
-    .lte("published_at", new Date().toISOString())
     .maybeSingle();
 
   if (error) throw new Error(error.message);
@@ -152,7 +157,6 @@ export async function listPublishedProducts(limit = 24): Promise<ProductListItem
     .select("*")
     .neq("status", "ARCHIVED")
     .not("published_at", "is", null)
-    .lte("published_at", new Date().toISOString())
     .order("published_at", { ascending: false })
     .limit(limit);
 
@@ -170,8 +174,33 @@ export async function listPublishedProductsByCategory(categoryId: string): Promi
     .eq("category_id", categoryId)
     .neq("status", "ARCHIVED")
     .not("published_at", "is", null)
-    .lte("published_at", new Date().toISOString())
     .order("published_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return attachCategoryAndMainImage(data ?? []);
+}
+
+/**
+ * Busca pública por código, nome ou descrição — sempre restrita a produtos
+ * publicados e não arquivados (mesma regra de visibilidade das outras
+ * listagens).
+ */
+export async function searchPublishedProducts(query: string, limit = 24): Promise<ProductListItem[]> {
+  const term = query.trim();
+  if (!term) return [];
+
+  const supabase = await createClient();
+  const escaped = term.replace(/[%_]/g, "\\$&");
+
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .neq("status", "ARCHIVED")
+    .not("published_at", "is", null)
+    .or(`code.ilike.%${escaped}%,name.ilike.%${escaped}%,description.ilike.%${escaped}%`)
+    .order("published_at", { ascending: false })
+    .limit(limit);
 
   if (error) throw new Error(error.message);
 
