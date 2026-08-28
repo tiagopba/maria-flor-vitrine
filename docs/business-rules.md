@@ -35,6 +35,28 @@ decisão de mudar a regra é do negócio, não do código.
 - `seller`: papel preparado no schema para uso futuro (CRM/atribuição de
   leads), sem tela própria no MVP.
 
+## Evolução futura planejada — preço à vista / a prazo
+
+**Não implementar agora.** Registrado aqui só para orientar quando isso for
+priorizado.
+
+Hoje `products` tem `price` e `promotional_price`. No futuro, a loja quer
+diferenciar **condição de pagamento** (à vista vs. a prazo), o que é
+conceitualmente diferente de **promoção**:
+
+- `promotional_price` continua existindo e continua significando promoção —
+  **nunca reaproveitar esse campo para representar preço à vista**.
+- A evolução prevista é acrescentar `cash_price` (preço à vista) e
+  `installment_price` (preço a prazo) via **migration aditiva**, sem alterar
+  ou remover colunas existentes.
+- Ao aplicar essa migration, os produtos já cadastrados devem ser
+  preenchidos automaticamente a partir do `price` atual (ex:
+  `cash_price = price`, `installment_price = price`), para nenhum produto
+  existente ficar com o campo vazio ou quebrar a exibição.
+- Vitrine passaria a mostrar algo como "R$ 149,99 à vista" / "R$ 169,99 a
+  prazo" — sem exigir recadastro de produtos, categorias, fotos ou mudança
+  na estrutura do site.
+
 ## Fórmula do Índice de Desejo
 
 Única fonte de verdade: [`src/lib/desire-score/calculate.ts`](../src/lib/desire-score/calculate.ts).
