@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import type { CategoryInput } from "@/lib/validation/category";
 import type { Database } from "@/types/database";
 
@@ -47,7 +48,7 @@ export async function getCategoryByIdAdmin(id: string): Promise<Category | null>
 
 /** Categorias ativas, ordenadas — para Home/navegação pública. */
 export async function getActiveCategoriesPublic(): Promise<Category[]> {
-  const supabase = await createClient();
+  const supabase = createPublicClient();
   const { data, error } = await supabase
     .from("categories")
     .select("*")
@@ -59,7 +60,7 @@ export async function getActiveCategoriesPublic(): Promise<Category[]> {
 }
 
 export async function getCategoryBySlugPublic(slug: string): Promise<Category | null> {
-  const supabase = await createClient();
+  const supabase = createPublicClient();
   const { data, error } = await supabase
     .from("categories")
     .select("*")

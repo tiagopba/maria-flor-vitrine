@@ -43,9 +43,26 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getUser() pode lançar (ex: refresh token expirado/inválido) em vez de
+  // só devolver user: null — sem esse try/catch, um cookie de sessão velho
+  // no navegador derrubava a aplicação inteira (até as páginas públicas),
+  // não só o /admin. Além disso, se não limparmos os cookies aqui, o mesmo
+  // cookie inválido volta em toda request seguinte e derruba os Server
+  // Components (ex: a Home, que nem chama getUser diretamente) porque o
+  // supabase-js tenta usar/renovar essa sessão internamente ao montar
+  // qualquer query .from(...).select(...).
+  let user = null;
+  try {
+    const result = await supabase.auth.getUser();
+    user = result.data.user;
+  } catch (error) {
+    console.error("[proxy] falha ao validar sessão:", error);
+    try {
+      await supabase.auth.signOut({ scope: "local" });
+    } catch (signOutError) {
+      console.error("[proxy] falha ao limpar sessão inválida:", signOutError);
+    }
+  }
 
   if (isAdminRoute && !isLoginRoute && !user) {
     const loginUrl = new URL("/admin/login", request.url);

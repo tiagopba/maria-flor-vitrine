@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 /**
@@ -7,8 +8,15 @@ import Link from "next/link";
 export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-surface/95 px-4 backdrop-blur-sm sm:px-6">
-      <Link href="/" className="font-display text-lg text-text">
-        Maria Flor
+      <Link href="/" aria-label="Maria Flor" className="flex items-center">
+        <Image
+          src="/logo-maria-flor.png"
+          alt="Maria Flor"
+          width={288}
+          height={110}
+          priority
+          className="h-8 w-auto sm:h-9"
+        />
       </Link>
 
       <nav className="flex items-center gap-1">

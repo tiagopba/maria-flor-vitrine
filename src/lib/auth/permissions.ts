@@ -18,9 +18,18 @@ export async function getCurrentAdmin(): Promise<CurrentAdmin | null> {
   if (!isSupabaseConfigured()) return null;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+
+  // getUser() pode lançar (refresh token expirado/inválido) em vez de só
+  // devolver user: null — tratamos como "sem sessão", nunca derrubando a
+  // página com um 500.
+  let user = null;
+  try {
+    const result = await supabase.auth.getUser();
+    user = result.data.user;
+  } catch (error) {
+    console.error("[getCurrentAdmin] falha ao validar sessão:", error);
+    return null;
+  }
 
   if (!user) return null;
 

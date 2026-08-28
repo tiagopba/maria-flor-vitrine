@@ -1,5 +1,7 @@
 import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import { deleteImage } from "@/lib/images/provider";
 import { publicImageUrl } from "@/lib/images/url";
 import type { ProductInput } from "@/lib/validation/product";
@@ -23,11 +25,11 @@ export interface ProductDetail extends Product {
 const PRODUCTS_BUCKET = "products";
 
 async function attachCategoryAndMainImage(
+  supabase: SupabaseClient<Database>,
   products: Product[]
 ): Promise<ProductListItem[]> {
   if (products.length === 0) return [];
 
-  const supabase = await createClient();
   const categoryIds = [...new Set(products.map((p) => p.category_id))];
   const productIds = products.map((p) => p.id);
 
@@ -84,7 +86,7 @@ export async function listProductsAdmin(
   const { data, error } = await query;
   if (error) throw new Error(error.message);
 
-  return attachCategoryAndMainImage(data ?? []);
+  return attachCategoryAndMainImage(supabase, data ?? []);
 }
 
 export async function getProductByIdAdmin(id: string): Promise<ProductDetail | null> {
@@ -114,7 +116,7 @@ export async function getProductByIdAdmin(id: string): Promise<ProductDetail | n
 }
 
 export async function getProductBySlugPublic(slug: string): Promise<ProductDetail | null> {
-  const supabase = await createClient();
+  const supabase = createPublicClient();
 
   // status/published_at IS NOT NULL são filtrados aqui também (não só via
   // RLS) para deixar a regra visível no código. A comparação "published_at
@@ -150,7 +152,7 @@ export async function getProductBySlugPublic(slug: string): Promise<ProductDetai
 }
 
 export async function listPublishedProducts(limit = 24): Promise<ProductListItem[]> {
-  const supabase = await createClient();
+  const supabase = createPublicClient();
 
   const { data, error } = await supabase
     .from("products")
@@ -162,11 +164,11 @@ export async function listPublishedProducts(limit = 24): Promise<ProductListItem
 
   if (error) throw new Error(error.message);
 
-  return attachCategoryAndMainImage(data ?? []);
+  return attachCategoryAndMainImage(supabase, data ?? []);
 }
 
 export async function listPublishedProductsByCategory(categoryId: string): Promise<ProductListItem[]> {
-  const supabase = await createClient();
+  const supabase = createPublicClient();
 
   const { data, error } = await supabase
     .from("products")
@@ -178,7 +180,7 @@ export async function listPublishedProductsByCategory(categoryId: string): Promi
 
   if (error) throw new Error(error.message);
 
-  return attachCategoryAndMainImage(data ?? []);
+  return attachCategoryAndMainImage(supabase, data ?? []);
 }
 
 /**
@@ -190,7 +192,7 @@ export async function searchPublishedProducts(query: string, limit = 24): Promis
   const term = query.trim();
   if (!term) return [];
 
-  const supabase = await createClient();
+  const supabase = createPublicClient();
   const escaped = term.replace(/[%_]/g, "\\$&");
 
   const { data, error } = await supabase
@@ -204,7 +206,7 @@ export async function searchPublishedProducts(query: string, limit = 24): Promis
 
   if (error) throw new Error(error.message);
 
-  return attachCategoryAndMainImage(data ?? []);
+  return attachCategoryAndMainImage(supabase, data ?? []);
 }
 
 /**
