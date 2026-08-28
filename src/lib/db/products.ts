@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { uploadImage, validateImageFile } from "@/lib/images/provider";
+import { deleteImage, uploadImage, validateImageFile } from "@/lib/images/provider";
 import { publicImageUrl } from "@/lib/images/url";
 import type { ProductInput } from "@/lib/validation/product";
 import type { Database } from "@/types/database";
@@ -269,12 +269,36 @@ export async function addProductImages(productId: string, imageFiles: File[]): P
   await insertProductImages(productId, imageFiles, startPosition);
 }
 
+/**
+ * Remove a imagem: apaga o arquivo do Storage e depois o registro em
+ * `product_images`. Se o arquivo já não existir mais no Storage (ou a
+ * remoção falhar por qualquer outro motivo), a falha é registrada mas não
+ * bloqueia a limpeza do registro — o banco é sempre a fonte de verdade de
+ * quais fotos o produto tem; não deixamos um registro "preso" só porque o
+ * arquivo já sumiu. Isso evita órfãos novos sem precisar de um job de
+ * garbage collection separado.
+ */
 export async function deleteProductImage(imageId: string): Promise<void> {
   const supabase = await createClient();
+
+  const { data: image, error: fetchError } = await supabase
+    .from("product_images")
+    .select("storage_path")
+    .eq("id", imageId)
+    .maybeSingle();
+
+  if (fetchError) throw new Error(fetchError.message);
+
+  if (image) {
+    try {
+      await deleteImage(PRODUCTS_BUCKET, image.storage_path);
+    } catch (err) {
+      console.error(`[deleteProductImage] falha ao remover do Storage (${image.storage_path}):`, err);
+    }
+  }
+
   const { error } = await supabase.from("product_images").delete().eq("id", imageId);
   if (error) throw new Error(error.message);
-  // O arquivo no Storage fica órfão intencionalmente (sem custo relevante no MVP);
-  // limpeza pode virar uma rotina futura se necessário.
 }
 
 export async function moveProductImage(productId: string, imageId: string, direction: "up" | "down"): Promise<void> {
