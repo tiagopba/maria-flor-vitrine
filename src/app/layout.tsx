@@ -13,8 +13,12 @@ const manrope = Manrope({
   subsets: ["latin"],
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.modamariaflor.com.br";
-const siteName = process.env.NEXT_PUBLIC_SITE_NAME ?? "Maria Flor";
+// "||" (não "??"): NEXT_PUBLIC_SITE_URL pode chegar como string vazia (não
+// undefined) quando a variável existe na plataforma de deploy mas foi
+// deixada em branco — nesse caso o fallback também precisa entrar em ação,
+// senão `new URL("")` derruba o build.
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.modamariaflor.com.br";
+const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "Maria Flor";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
