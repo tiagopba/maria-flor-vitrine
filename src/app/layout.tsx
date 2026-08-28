@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Manrope } from "next/font/google";
+import { getSiteUrl } from "@/lib/site";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -13,11 +14,7 @@ const manrope = Manrope({
   subsets: ["latin"],
 });
 
-// "||" (não "??"): NEXT_PUBLIC_SITE_URL pode chegar como string vazia (não
-// undefined) quando a variável existe na plataforma de deploy mas foi
-// deixada em branco — nesse caso o fallback também precisa entrar em ação,
-// senão `new URL("")` derruba o build.
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.modamariaflor.com.br";
+const siteUrl = getSiteUrl();
 const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "Maria Flor";
 
 export const metadata: Metadata = {

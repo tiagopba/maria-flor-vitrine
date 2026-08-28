@@ -16,7 +16,7 @@ export default async function Home() {
     <main className="flex flex-1 flex-col">
       {/* Hero */}
       <section className="px-4 py-10 text-center sm:py-14">
-        <h1 className="mx-auto max-w-md font-display text-2xl text-text sm:text-3xl">
+        <h1 className="mx-auto max-w-md font-display text-xl text-text sm:text-3xl">
           As novidades que você viu nos nossos Stories, agora em um só lugar.
         </h1>
         <Link href="/novidades">

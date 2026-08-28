@@ -1,7 +1,8 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildProductWhatsAppMessage, buildWhatsAppUrl } from "./message-builder";
+import { getSiteUrl } from "@/lib/site";
+import { buildProductWhatsAppMessage, buildSoldOutWhatsAppMessage, buildWhatsAppUrl } from "./message-builder";
 
 export interface WhatsAppClickInput {
   productId: string;
@@ -40,8 +41,8 @@ export async function submitWhatsAppClick(input: WhatsAppClickInput): Promise<Wh
   if (productError) return { error: "Não foi possível carregar o produto." };
   if (!product || product.status === "ARCHIVED") return { error: "Produto não encontrado." };
 
-  let seller: { id: string; whatsapp_number: string } | null = null;
-  const selectionType: "manual" | "round_robin" = input.sellerId ? "manual" : "round_robin";
+  let seller: { id: string | null; whatsapp_number: string } | null = null;
+  const selectionMode: "manual" | "round_robin" = input.sellerId ? "manual" : "round_robin";
 
   if (input.sellerId) {
     const { data } = await supabase
@@ -51,8 +52,7 @@ export async function submitWhatsAppClick(input: WhatsAppClickInput): Promise<Wh
       .eq("active", true)
       .maybeSingle();
 
-    if (!data) return { error: "Essa vendedora não está disponível no momento." };
-    seller = data;
+    seller = data ?? null;
   } else {
     const { data: candidates } = await supabase
       .from("sellers")
@@ -61,27 +61,36 @@ export async function submitWhatsAppClick(input: WhatsAppClickInput): Promise<Wh
       .eq("round_robin", true)
       .order("order_priority", { ascending: true });
 
-    if (!candidates || candidates.length === 0) {
-      return { error: "Nenhuma vendedora disponível no momento." };
+    if (candidates && candidates.length > 0) {
+      // Distribuição simples por tempo — suficiente para o volume do MVP;
+      // uma rotação mais precisa (contagem real de cliques) fica para depois.
+      const index = Math.floor(Date.now() / 1000) % candidates.length;
+      seller = candidates[index];
     }
+  }
 
-    // Distribuição simples por tempo — suficiente para o volume do MVP;
-    // uma rotação mais precisa (contagem real de cliques) fica para depois.
-    const index = Math.floor(Date.now() / 1000) % candidates.length;
-    seller = candidates[index];
+  // Ninguém ativa, ninguém no rodízio, ou a vendedora escolhida manualmente
+  // não está mais ativa — cai no número padrão da loja em vez de deixar a
+  // cliente sem opção de atendimento (NEXT_PUBLIC_WHATSAPP_DEFAULT_NUMBER).
+  if (!seller) {
+    const fallbackNumber = process.env.NEXT_PUBLIC_WHATSAPP_DEFAULT_NUMBER;
+    if (!fallbackNumber) return { error: "Nenhuma vendedora disponível no momento." };
+    seller = { id: null, whatsapp_number: fallbackNumber };
   }
 
   const price = product.promotional_price ?? product.price;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.modamariaflor.com.br";
-  const productUrl = `${siteUrl}/produto/${product.slug}`;
+  const productUrl = `${getSiteUrl()}/produto/${product.slug}`;
 
-  const message = buildProductWhatsAppMessage({
-    productName: product.name,
-    code: product.code,
-    price,
-    size: input.size ?? undefined,
-    productUrl,
-  });
+  const message =
+    product.status === "SOLD_OUT"
+      ? buildSoldOutWhatsAppMessage({ productName: product.name, code: product.code })
+      : buildProductWhatsAppMessage({
+          productName: product.name,
+          code: product.code,
+          price,
+          size: input.size ?? undefined,
+          productUrl,
+        });
 
   const { error: insertError } = await supabase.from("analytics_events").insert({
     event_type: "WHATSAPP_CLICK",
@@ -89,12 +98,13 @@ export async function submitWhatsAppClick(input: WhatsAppClickInput): Promise<Wh
     product_id: product.id,
     seller_id: seller.id,
     size: input.size,
+    source: "product_page",
     utm_source: input.utmSource,
     utm_medium: input.utmMedium,
     utm_campaign: input.utmCampaign,
     utm_content: input.utmContent,
     referrer: input.referrer,
-    metadata: { selection_type: selectionType },
+    metadata: { selection_mode: selectionMode },
   });
 
   if (insertError) {

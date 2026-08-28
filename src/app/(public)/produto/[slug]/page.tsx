@@ -75,7 +75,12 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
           </p>
 
           <div className="mt-2">
-            <ProductWhatsAppFlow productId={product.id} sizes={product.sizes} sellers={sellers} />
+            <ProductWhatsAppFlow
+              productId={product.id}
+              status={product.status}
+              sizes={product.sizes}
+              sellers={sellers}
+            />
           </div>
         </div>
       </div>

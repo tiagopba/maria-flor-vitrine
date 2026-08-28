@@ -43,8 +43,8 @@ export function SellerForm({
       <Input
         id="whatsapp_number"
         name="whatsapp_number"
-        label="WhatsApp (com DDI e DDD, só números)"
-        placeholder="5511999998888"
+        label="WhatsApp (com DDI e DDD)"
+        placeholder="+55 (67) 99999-9999"
         defaultValue={defaultValues?.whatsapp_number}
         error={state.fieldErrors?.whatsapp_number}
         required

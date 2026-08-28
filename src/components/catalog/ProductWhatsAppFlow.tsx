@@ -7,23 +7,28 @@ import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
 import { submitWhatsAppClick } from "@/lib/whatsapp/click-action";
 import { cn } from "@/lib/utils";
+import type { ProductStatus } from "@/types/database";
 
 export function ProductWhatsAppFlow({
   productId,
+  status,
   sizes,
   sellers,
 }: {
   productId: string;
+  status: ProductStatus;
   sizes: string[];
   sellers: { id: string; name: string }[];
 }) {
+  const isSoldOut = status === "SOLD_OUT";
   const singleSize = sizes.length === 1 ? sizes[0] : null;
   const [selectedSize, setSelectedSize] = useState<string | null>(singleSize);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [submitting, setSubmitting] = useState<string | null>(null); // sellerId sendo processado, ou "any"
   const [error, setError] = useState<string | null>(null);
 
-  const needsSize = sizes.length > 0 && !selectedSize;
+  // Peça esgotada não pede tamanho — a pergunta vira "tem algo parecido?".
+  const needsSize = !isSoldOut && sizes.length > 0 && !selectedSize;
 
   async function handleSellerChoice(sellerId: string | null) {
     setError(null);
@@ -58,7 +63,7 @@ export function ProductWhatsAppFlow({
 
   return (
     <div className="flex flex-col gap-3">
-      {sizes.length > 1 && (
+      {!isSoldOut && sizes.length > 1 && (
         <div>
           <p className="mb-1.5 text-sm font-medium text-text">Selecione o tamanho</p>
           <div className="flex flex-wrap gap-1.5">
@@ -81,7 +86,7 @@ export function ProductWhatsAppFlow({
         </div>
       )}
 
-      {singleSize && (
+      {!isSoldOut && singleSize && (
         <p className="text-sm text-text">
           Tamanho: <span className="font-medium">{singleSize}</span>
         </p>
@@ -93,11 +98,11 @@ export function ProductWhatsAppFlow({
         onClick={() => setDrawerOpen(true)}
         className="h-12"
       >
-        Quero essa peça
+        {isSoldOut ? "Quero algo parecido" : "Quero essa peça"}
       </Button>
-      {needsSize && <p className="text-xs text-text-muted">Selecione um tamanho para continuar.</p>}
+      {needsSize && <p className="text-xs text-text-muted">Escolha o tamanho que você procura.</p>}
 
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title="Falar com uma vendedora">
+      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title="Com quem você quer falar?">
         <div className="flex flex-col gap-2">
           {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -105,9 +110,14 @@ export function ProductWhatsAppFlow({
             type="button"
             disabled={submitting !== null}
             onClick={() => handleSellerChoice(null)}
-            className="flex h-12 items-center justify-center rounded-xl bg-primary text-sm font-medium text-primary-foreground disabled:opacity-60"
+            className="flex flex-col items-center justify-center gap-0.5 rounded-xl bg-primary px-4 py-2.5 text-center text-primary-foreground disabled:opacity-60"
           >
-            {submitting === "any" ? "Abrindo..." : "Qualquer vendedora"}
+            <span className="text-sm font-medium">
+              {submitting === "any" ? "Abrindo..." : "Qualquer vendedora"}
+            </span>
+            {submitting !== "any" && (
+              <span className="text-xs opacity-80">Te encaminhamos para uma vendedora disponível.</span>
+            )}
           </button>
 
           {sellers.map((seller) => (

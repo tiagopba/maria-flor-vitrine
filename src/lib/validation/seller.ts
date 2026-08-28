@@ -2,12 +2,13 @@ import { z } from "zod";
 
 export const sellerSchema = z.object({
   name: z.string().trim().min(1, "Informe o nome.").max(80, "Nome muito longo."),
+  // Aceita formatos amigáveis no formulário (com parênteses, espaço, traço,
+  // "+") e normaliza para só dígitos no formato internacional aqui — o
+  // banco e a URL do wa.me sempre recebem o número já limpo.
   whatsapp_number: z
     .string()
-    .trim()
-    .min(8, "Número de WhatsApp inválido.")
-    .max(20, "Número de WhatsApp inválido.")
-    .regex(/^\+?[0-9]+$/, "Use só dígitos (com DDI e DDD), ex: 5511999998888."),
+    .transform((v) => v.replace(/\D/g, ""))
+    .refine((v) => v.length >= 10 && v.length <= 15, "Número de WhatsApp inválido — inclua DDI e DDD."),
   phone: z
     .string()
     .trim()
