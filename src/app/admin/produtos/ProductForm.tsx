@@ -3,8 +3,10 @@
 import { useActionState, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { ImageUploadQueueList } from "@/components/admin/ImageUploadQueueList";
 import { SizeSelector } from "@/components/catalog/SizeSelector";
 import { PRODUCT_STATUS_LABELS } from "@/lib/catalog/status";
+import { useImageUploadQueue } from "@/lib/images/use-image-upload-queue";
 import { slugify } from "@/lib/utils";
 import type { ProductFormState } from "./actions";
 
@@ -47,11 +49,13 @@ export function ProductForm({
   const slugTouched = useRef(Boolean(defaultValues?.slug));
 
   const [sizes, setSizes] = useState<string[]>(defaultValues?.sizes ?? []);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const imageQueue = useImageUploadQueue("products");
 
   function handleImagesChange(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
-    setImagePreviews(files.map((file) => URL.createObjectURL(file)));
+    if (files.length === 0) return;
+    imageQueue.addFiles(files);
+    event.target.value = "";
   }
 
   return (
@@ -61,23 +65,19 @@ export function ProductForm({
           <label htmlFor="images" className="text-sm font-medium text-text">
             Fotos
           </label>
+          {imageQueue.successfulPaths.map((path) => (
+            <input key={path} type="hidden" name="image_paths" value={path} />
+          ))}
           <input
             id="images"
-            name="images"
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
             multiple
             onChange={handleImagesChange}
+            disabled={imageQueue.isUploading}
             className="text-sm text-text-muted file:mr-3 file:rounded-full file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-text"
           />
-          {imagePreviews.length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-2">
-              {imagePreviews.map((src, i) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={i} src={src} alt="" className="h-16 w-16 rounded-lg object-cover" />
-              ))}
-            </div>
-          )}
+          <ImageUploadQueueList items={imageQueue.items} onRetry={imageQueue.retry} />
         </div>
       )}
 
@@ -219,7 +219,7 @@ export function ProductForm({
 
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
 
-      <Button type="submit" disabled={pending} className="mt-2">
+      <Button type="submit" disabled={pending || imageQueue.isUploading} className="mt-2">
         {pending ? "Salvando..." : submitLabel}
       </Button>
     </form>

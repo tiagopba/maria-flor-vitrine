@@ -38,10 +38,11 @@ function parseProductFormData(formData: FormData) {
   return { parsed, sizes: sizesParsed.success ? sizesParsed.data : [] };
 }
 
-function collectImageFiles(formData: FormData): File[] {
+function collectImagePaths(formData: FormData): string[] {
   return formData
-    .getAll("images")
-    .filter((value): value is File => value instanceof File && value.size > 0);
+    .getAll("image_paths")
+    .map(String)
+    .filter(Boolean);
 }
 
 function fieldErrorsFrom(parsed: { success: false; error: { flatten: () => { fieldErrors: Record<string, string[] | undefined> } } }) {
@@ -72,11 +73,11 @@ export async function createProductAction(
     return { fieldErrors: fieldErrorsFrom(parsed) };
   }
 
-  const imageFiles = collectImageFiles(formData);
+  const imagePaths = collectImagePaths(formData);
 
   let productId: string;
   try {
-    const product = await createProduct(parsed.data, sizes, imageFiles);
+    const product = await createProduct(parsed.data, sizes, imagePaths);
     productId = product.id;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Não foi possível publicar o produto.";
@@ -131,13 +132,17 @@ export async function toggleArchiveProductAction(id: string, archive: boolean) {
   revalidatePath(`/produto/${existing.slug}`);
 }
 
-export async function addProductImagesAction(productId: string, formData: FormData) {
+/**
+ * Chamada diretamente do client (não via <form action>) depois que o
+ * navegador já subiu os arquivos direto pro Storage — só recebe os paths
+ * resultantes, nunca os bytes da imagem.
+ */
+export async function addProductImagesAction(productId: string, imagePaths: string[]) {
   await requireAdmin(["admin", "catalog_editor"]);
 
-  const files = collectImageFiles(formData);
-  if (files.length === 0) return;
+  if (imagePaths.length === 0) return;
 
-  await addProductImages(productId, files);
+  await addProductImages(productId, imagePaths);
   revalidatePath(`/admin/produtos/${productId}`);
 }
 

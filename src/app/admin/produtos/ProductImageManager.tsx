@@ -1,10 +1,7 @@
 import Image from "next/image";
 import type { ProductImage } from "@/lib/db/products";
-import {
-  addProductImagesAction,
-  deleteProductImageAction,
-  moveProductImageAction,
-} from "./actions";
+import { deleteProductImageAction, moveProductImageAction } from "./actions";
+import { ProductImageUploader } from "./ProductImageUploader";
 
 export function ProductImageManager({
   productId,
@@ -65,21 +62,7 @@ export function ProductImageManager({
         </div>
       )}
 
-      <form action={addProductImagesAction.bind(null, productId)} className="flex flex-col gap-2">
-        <input
-          type="file"
-          name="images"
-          accept="image/jpeg,image/png,image/webp"
-          multiple
-          className="text-sm text-text-muted file:mr-3 file:rounded-full file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-text"
-        />
-        <button
-          type="submit"
-          className="self-start rounded-full border border-border px-4 py-1.5 text-sm font-medium text-text hover:bg-muted"
-        >
-          Adicionar fotos
-        </button>
-      </form>
+      <ProductImageUploader productId={productId} />
     </div>
   );
 }

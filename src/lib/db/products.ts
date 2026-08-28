@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { deleteImage, uploadImage, validateImageFile } from "@/lib/images/provider";
+import { deleteImage } from "@/lib/images/provider";
 import { publicImageUrl } from "@/lib/images/url";
 import type { ProductInput } from "@/lib/validation/product";
 import type { Database } from "@/types/database";
@@ -178,34 +178,31 @@ export async function listPublishedProductsByCategory(categoryId: string): Promi
   return attachCategoryAndMainImage(data ?? []);
 }
 
-function extensionFor(file: File): string {
-  if (file.type === "image/png") return "png";
-  if (file.type === "image/webp") return "webp";
-  return "jpg";
-}
+/**
+ * Grava as linhas de product_images a partir de paths já enviados ao
+ * Storage (upload acontece direto do navegador — ver
+ * lib/images/upload-client.ts — nunca passa pelo corpo de uma Server
+ * Action/Route Handler, por causa do limite de 4.5MB da Vercel).
+ */
+async function insertProductImageRows(productId: string, storagePaths: string[], startPosition: number) {
+  if (storagePaths.length === 0) return;
 
-async function insertProductImages(productId: string, files: File[], startPosition: number) {
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const validationError = validateImageFile(file);
-    if (validationError) throw new Error(validationError);
+  const supabase = await createClient();
+  const { error } = await supabase.from("product_images").insert(
+    storagePaths.map((storage_path, i) => ({
+      product_id: productId,
+      storage_path,
+      position: startPosition + i,
+    }))
+  );
 
-    const path = `${productId}/${crypto.randomUUID()}.${extensionFor(file)}`;
-    const { path: storedPath } = await uploadImage({ bucket: PRODUCTS_BUCKET, path, file });
-
-    const supabase = await createClient();
-    const { error } = await supabase
-      .from("product_images")
-      .insert({ product_id: productId, storage_path: storedPath, position: startPosition + i });
-
-    if (error) throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
 }
 
 export async function createProduct(
   input: ProductInput,
   sizes: string[],
-  imageFiles: File[]
+  imagePaths: string[]
 ): Promise<Product> {
   const supabase = await createClient();
 
@@ -224,9 +221,7 @@ export async function createProduct(
     if (sizesError) throw new Error(sizesError.message);
   }
 
-  if (imageFiles.length > 0) {
-    await insertProductImages(product.id, imageFiles, 0);
-  }
+  await insertProductImageRows(product.id, imagePaths, 0);
 
   return product;
 }
@@ -256,7 +251,7 @@ export async function updateProduct(id: string, input: ProductInput, sizes: stri
   return product;
 }
 
-export async function addProductImages(productId: string, imageFiles: File[]): Promise<void> {
+export async function addProductImages(productId: string, imagePaths: string[]): Promise<void> {
   const supabase = await createClient();
   const { data: existing } = await supabase
     .from("product_images")
@@ -266,7 +261,7 @@ export async function addProductImages(productId: string, imageFiles: File[]): P
     .limit(1);
 
   const startPosition = (existing?.[0]?.position ?? -1) + 1;
-  await insertProductImages(productId, imageFiles, startPosition);
+  await insertProductImageRows(productId, imagePaths, startPosition);
 }
 
 /**
@@ -283,7 +278,7 @@ export async function deleteProductImage(imageId: string): Promise<void> {
 
   const { data: image, error: fetchError } = await supabase
     .from("product_images")
-    .select("storage_path")
+    .select("storage_path, product_id")
     .eq("id", imageId)
     .maybeSingle();
 
@@ -299,6 +294,36 @@ export async function deleteProductImage(imageId: string): Promise<void> {
 
   const { error } = await supabase.from("product_images").delete().eq("id", imageId);
   if (error) throw new Error(error.message);
+
+  // Sem isso, remover a foto que estava na posição 0 (ex: depois de
+  // reordenar) deixa nenhuma imagem nessa posição — e a "imagem principal"
+  // das listagens é sempre buscada por position=0, então o produto passaria
+  // a aparecer como "sem foto" mesmo tendo fotos.
+  if (image) {
+    await renumberProductImages(image.product_id);
+  }
+}
+
+async function renumberProductImages(productId: string): Promise<void> {
+  const supabase = await createClient();
+
+  const { data: remaining, error } = await supabase
+    .from("product_images")
+    .select("id, position")
+    .eq("product_id", productId)
+    .order("position", { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  for (let i = 0; i < (remaining?.length ?? 0); i++) {
+    if (remaining![i].position !== i) {
+      const { error: updateError } = await supabase
+        .from("product_images")
+        .update({ position: i })
+        .eq("id", remaining![i].id);
+      if (updateError) throw new Error(updateError.message);
+    }
+  }
 }
 
 export async function moveProductImage(productId: string, imageId: string, direction: "up" | "down"): Promise<void> {

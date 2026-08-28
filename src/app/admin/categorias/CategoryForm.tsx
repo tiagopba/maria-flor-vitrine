@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useActionState, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { uploadImageDirect, validateImageFile } from "@/lib/images/upload-client";
 import { slugify } from "@/lib/utils";
 import type { CategoryFormState } from "./actions";
 
@@ -44,27 +45,26 @@ export function CategoryForm({
     const file = event.target.files?.[0];
     if (!file) return;
 
+    const validationError = validateImageFile(file);
+    if (validationError) {
+      setUploadError(validationError);
+      event.target.value = "";
+      return;
+    }
+
     setUploading(true);
     setUploadError(null);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const response = await fetch("/api/admin/categories/cover", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        setUploadError(data.error ?? "Falha no upload.");
-      } else {
-        setCoverImage(data.url as string);
-      }
-    } catch {
-      setUploadError("Falha no upload. Tente novamente.");
+      // Direto do navegador pro Storage — nunca passa pela Vercel, que
+      // recusa requisições acima de 4.5MB (limite de infraestrutura).
+      const { url } = await uploadImageDirect("categories", file);
+      setCoverImage(url);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Falha no upload. Tente novamente.");
     } finally {
       setUploading(false);
+      event.target.value = "";
     }
   }
 
@@ -132,7 +132,7 @@ export function CategoryForm({
 
         <input
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
           onChange={handleFileChange}
           disabled={uploading}
           className="text-sm text-text-muted file:mr-3 file:rounded-full file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-text"
