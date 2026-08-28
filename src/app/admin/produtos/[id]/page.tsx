@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { SuccessToast } from "@/components/admin/SuccessToast";
 import { getActiveCategoriesPublic } from "@/lib/db/categories";
 import { getProductByIdAdmin } from "@/lib/db/products";
 import { updateProductAction } from "../actions";
@@ -25,6 +26,7 @@ export default async function EditProductPage({
 
   return (
     <div className="max-w-2xl">
+      <SuccessToast />
       <Link href="/admin/produtos" className="text-sm text-text-muted hover:text-text">
         ← Produtos
       </Link>

@@ -46,7 +46,7 @@ export async function createCategoryAction(
   }
 
   revalidatePath("/admin/categorias");
-  redirect("/admin/categorias");
+  redirect(`/admin/categorias?sucesso=${encodeURIComponent("Categoria criada com sucesso.")}`);
 }
 
 export async function updateCategoryAction(
@@ -77,7 +77,7 @@ export async function updateCategoryAction(
   revalidatePath("/admin/categorias");
   revalidatePath(`/categoria/${existing.slug}`);
   if (existing.slug !== parsed.data.slug) revalidatePath(`/categoria/${parsed.data.slug}`);
-  redirect("/admin/categorias");
+  redirect(`/admin/categorias?sucesso=${encodeURIComponent("Alterações salvas com sucesso.")}`);
 }
 
 export async function toggleCategoryActiveAction(id: string, active: boolean) {

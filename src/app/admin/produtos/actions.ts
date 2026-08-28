@@ -86,7 +86,7 @@ export async function createProductAction(
 
   revalidatePath("/admin/produtos");
   revalidatePath("/novidades");
-  redirect(`/admin/produtos/${productId}`);
+  redirect(`/admin/produtos/${productId}?sucesso=${encodeURIComponent("Produto cadastrado com sucesso.")}`);
 }
 
 export async function updateProductAction(
@@ -116,7 +116,7 @@ export async function updateProductAction(
   revalidatePath(`/produto/${existing.slug}`);
   if (existing.slug !== parsed.data.slug) revalidatePath(`/produto/${parsed.data.slug}`);
   revalidatePath(`/categoria`);
-  redirect(`/admin/produtos/${id}`);
+  redirect(`/admin/produtos/${id}?sucesso=${encodeURIComponent("Alterações salvas com sucesso.")}`);
 }
 
 export async function toggleArchiveProductAction(id: string, archive: boolean) {

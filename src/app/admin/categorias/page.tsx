@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SuccessToast } from "@/components/admin/SuccessToast";
 import { Button } from "@/components/ui/Button";
 import { listCategoriesAdmin } from "@/lib/db/categories";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,7 @@ export default async function CategoriesPage() {
 
   return (
     <div>
+      <SuccessToast />
       <div className="mb-6 flex items-center justify-between">
         <h1 className="font-display text-2xl text-text">Categorias</h1>
         <Link href="/admin/categorias/nova">
