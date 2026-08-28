@@ -30,8 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files (nunca versionar segredos reais; .env.example é documentação e deve ser versionado)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -42,3 +43,7 @@ supabase/.temp
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scripts temporários usados durante desenvolvimento/depuração (nunca devem
+# ir para o repositório — normalmente já são apagados manualmente ao final)
+.scratch-*

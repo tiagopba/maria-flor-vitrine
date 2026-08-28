@@ -24,6 +24,7 @@ Next.js 16 (App Router) + TypeScript + Tailwind CSS v4 + Supabase
 - [`docs/database.md`](docs/database.md) — schema, relacionamentos, RLS
 - [`docs/analytics.md`](docs/analytics.md) — eventos, GA4, Meta Pixel/CAPI, Índice de Desejo
 - [`docs/business-rules.md`](docs/business-rules.md) — regras de negócio
+- [`docs/deploy.md`](docs/deploy.md) — variáveis de ambiente, GitHub, Vercel, Supabase Auth em produção
 
 ## Setup local
 
@@ -58,6 +59,12 @@ Next.js 16 (App Router) + TypeScript + Tailwind CSS v4 + Supabase
 
    Vitrine pública em `http://localhost:3000`, painel em
    `http://localhost:3000/admin`.
+
+## Deploy
+
+Vercel (frontend) + Supabase Cloud (o mesmo projeto de desenvolvimento).
+Passo a passo completo, variáveis de ambiente e ajustes de Auth em
+[`docs/deploy.md`](docs/deploy.md).
 
 ## Estrutura
 

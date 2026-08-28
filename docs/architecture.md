@@ -33,8 +33,11 @@ supabase/migrations → schema versionado em SQL puro
 
 **Regra de dependência:** `lib/supabase/admin.ts` (service role) só é
 importado dentro de `app/api/**/route.ts` ou `app/admin/**` (server
-components/actions). Nunca em um Client Component. O pacote `server-only`
-garante isso em build time.
+components/actions), e só quando a operação realmente exige ignorar RLS
+(hoje: `lib/desire-score`, `lib/whatsapp/resolve-number.ts`). Nunca em um
+Client Component. O pacote `server-only` garante isso em build time. Upload
+de imagem deliberadamente **não** usa mais o client admin — ver
+"Estratégia de imagens" abaixo.
 
 ## Autenticação e autorização
 
@@ -58,18 +61,27 @@ garante isso em build time.
   `lead_interests`) não têm policy de insert para `anon`/`authenticated`:
   toda escrita passa por route handlers que usam o client admin
   (service role, valida com zod antes de gravar).
-- Upload de imagem: bucket público `products` no Storage, mas sem policy de
-  insert para o client — upload sempre via route handler autenticado como
-  `catalog_editor`/`admin`, usando o client admin.
+- Upload de imagem: buckets públicos `products`/`categories` no Storage,
+  com policy de insert/update/delete liberada para
+  `is_catalog_editor_or_admin()` — o upload usa o client autenticado da
+  própria sessão (não service role); a RLS do Storage é a autorização real,
+  reforçada por `requireAdmin()`/`getCurrentAdmin()` na aplicação antes de
+  chamar o Storage (dá erro amigável em vez de deixar a policy rejeitar
+  cru).
 
 ## Estratégia de imagens
 
-- MVP: Supabase Storage, bucket `products`, leitura pública, upload
-  server-side com validação de tipo (`jpeg/png/webp`) e tamanho (5MB).
-- Abstração em `lib/images/provider.ts` (a criar junto com o módulo de
-  upload) isola quem chama do provedor concreto, para permitir trocar por
-  Cloudinary/outro CDN sem alterar as telas.
+- MVP: Supabase Storage, buckets `products`/`categories`, leitura pública,
+  upload autenticado (sessão do admin/catalog_editor) com validação de tipo
+  (`jpeg/png/webp`) e tamanho (5MB) tanto na aplicação quanto no bucket.
+- Abstração em `lib/images/provider.ts` isola quem chama do provedor
+  concreto, para permitir trocar por Cloudinary/outro CDN sem alterar as
+  telas.
 - `next/image` para otimização, lazy loading e formatos modernos.
+- Remoção de imagem apaga o arquivo do Storage e o registro em
+  `product_images` nessa ordem; se o arquivo já não existir, a falha é
+  logada mas não bloqueia a limpeza do registro (evita órfãos sem precisar
+  de rotina de garbage collection).
 
 ## Analytics — três trilhos independentes
 
