@@ -1,0 +1,101 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { Badge } from "@/components/ui/Badge";
+import { Price } from "@/components/ui/Price";
+import { ProductGallery } from "@/components/catalog/ProductGallery";
+import { PRODUCT_STATUS_LABELS, publicStatusBadge } from "@/lib/catalog/status";
+import { getProductBySlugPublic } from "@/lib/db/products";
+
+export async function generateMetadata({
+  params,
+}: PageProps<"/produto/[slug]">): Promise<Metadata> {
+  const { slug } = await params;
+  const product = await getProductBySlugPublic(slug);
+
+  if (!product) return {};
+
+  const title = `${product.name} | Maria Flor`;
+  const description = product.description ?? `${product.name} — Código ${product.code}. Confira na Vitrine Maria Flor.`;
+  const image = product.images[0]?.url;
+
+  return {
+    title: product.name,
+    description,
+    alternates: { canonical: `/produto/${product.slug}` },
+    openGraph: {
+      title,
+      description,
+      images: image ? [image] : undefined,
+    },
+  };
+}
+
+export default async function ProductPage({ params }: PageProps<"/produto/[slug]">) {
+  const { slug } = await params;
+  const product = await getProductBySlugPublic(slug);
+
+  if (!product) notFound();
+
+  const badge = publicStatusBadge(product.status);
+  const isSoldOut = product.status === "SOLD_OUT";
+
+  return (
+    <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6">
+      <div className="grid gap-8 sm:grid-cols-2">
+        <ProductGallery images={product.images} productName={product.name} />
+
+        <div className="flex flex-col gap-4">
+          {product.categoryName && (
+            <p className="text-xs uppercase tracking-wide text-text-muted">{product.categoryName}</p>
+          )}
+
+          <h1 className="font-display text-2xl text-text sm:text-3xl">{product.name}</h1>
+
+          <div className="flex items-center gap-2">
+            <Price price={product.price} promotionalPrice={product.promotional_price} />
+            {badge && <Badge tone="warning">{badge}</Badge>}
+          </div>
+
+          <p className="text-xs text-text-muted">Código: {product.code}</p>
+
+          {isSoldOut && (
+            <p className="text-sm font-medium text-red-600">{PRODUCT_STATUS_LABELS.SOLD_OUT}</p>
+          )}
+
+          {product.sizes.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-sm font-medium text-text">Tamanhos para consulta</p>
+              <div className="flex flex-wrap gap-1.5">
+                {product.sizes.map((size) => (
+                  <span
+                    key={size}
+                    className="flex h-9 min-w-9 items-center justify-center rounded-full border border-border px-3 text-sm text-text"
+                  >
+                    {size}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {product.description && (
+            <p className="whitespace-pre-line text-sm text-text-muted">{product.description}</p>
+          )}
+
+          <p className="text-xs text-text-muted">
+            Disponibilidade sujeita à confirmação devido ao giro rápido das peças.
+          </p>
+
+          {/* CTA de WhatsApp será implementado e validado em módulo separado */}
+          <button
+            type="button"
+            disabled
+            className="mt-2 h-12 rounded-full bg-muted text-sm font-medium text-text-muted"
+          >
+            Quero essa peça (em breve)
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+}

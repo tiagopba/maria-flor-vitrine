@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
+import { ProductGrid } from "@/components/catalog/ProductGrid";
 import { getCategoryBySlugPublic } from "@/lib/db/categories";
+import { listPublishedProductsByCategory } from "@/lib/db/products";
 
 export async function generateMetadata({
   params,
@@ -32,6 +34,8 @@ export default async function CategoryPage({ params }: PageProps<"/categoria/[sl
 
   if (!category) notFound();
 
+  const products = await listPublishedProductsByCategory(category.id);
+
   const emptyMessage =
     category.description ??
     `As novidades em ${category.name.toLowerCase()} da Maria Flor aparecem aqui.`;
@@ -51,12 +55,16 @@ export default async function CategoryPage({ params }: PageProps<"/categoria/[sl
         </div>
       )}
 
-      <div className="mx-auto w-full max-w-2xl px-6 py-10 text-center">
-        <h1 className="font-display text-3xl text-text">{category.name}</h1>
+      <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+        <h1 className="mb-6 font-display text-2xl text-text sm:text-3xl">{category.name}</h1>
 
-        <div className="mt-16 flex flex-col items-center gap-2 text-text-muted">
-          <p className="max-w-sm">{emptyMessage}</p>
-        </div>
+        {products.length === 0 ? (
+          <div className="mt-10 flex flex-col items-center gap-2 py-10 text-center text-text-muted">
+            <p className="max-w-sm">{emptyMessage}</p>
+          </div>
+        ) : (
+          <ProductGrid products={products} />
+        )}
       </div>
     </main>
   );

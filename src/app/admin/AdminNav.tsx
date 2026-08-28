@@ -12,7 +12,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/admin", available: true },
-  { label: "Produtos", href: "/admin/produtos", available: false },
+  { label: "Produtos", href: "/admin/produtos", available: true },
   { label: "Provadores", href: "/admin/provadores", available: false },
   { label: "Coleções", href: "/admin/colecoes", available: false },
   { label: "Categorias", href: "/admin/categorias", available: true },
