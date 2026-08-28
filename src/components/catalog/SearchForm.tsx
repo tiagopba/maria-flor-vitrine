@@ -10,7 +10,7 @@ export function SearchForm({ defaultValue }: { defaultValue?: string }) {
         name="q"
         defaultValue={defaultValue}
         placeholder="Busque pelo nome ou código da peça"
-        className="h-11 flex-1 rounded-full border border-border bg-surface px-4 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+        className="h-11 min-w-0 flex-1 rounded-full border border-border bg-surface px-4 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
       />
       <button
         type="submit"

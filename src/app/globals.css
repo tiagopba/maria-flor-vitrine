@@ -40,6 +40,16 @@
   --radius-card: var(--radius-card);
 }
 
+html {
+  /* Evita o Safari do iOS "inflar" o tamanho do texto automaticamente em
+     certos layouts (ex: ao girar a tela) — 100% não muda nada por si só,
+     não afeta o zoom do usuário nem o tamanho de fonte do sistema. Não é
+     o conserto do overflow (isso está nos próprios componentes) — é só
+     para tirar essa variável do caminho. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

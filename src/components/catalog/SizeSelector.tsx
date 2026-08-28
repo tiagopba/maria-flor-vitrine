@@ -75,7 +75,7 @@ export function SizeSelector({
             }
           }}
           placeholder='Outro (ex: "Único")'
-          className="h-9 flex-1 rounded-lg border border-border bg-surface px-3 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+          className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
         />
         <button
           type="button"
