@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, Manrope } from "next/font/google";
 import "./globals.css";
 
@@ -33,6 +33,14 @@ export const metadata: Metadata = {
     locale: "pt_BR",
     siteName,
   },
+};
+
+// Sem isso, o Safari do iPhone renderiza a página numa largura virtual de
+// desktop (~980px) e encolhe pra caber na tela — o conteúdo fica cortado
+// nas bordas em vez de responsivo de verdade.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
