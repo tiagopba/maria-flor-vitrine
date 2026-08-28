@@ -15,7 +15,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Produtos", href: "/admin/produtos", available: false },
   { label: "Provadores", href: "/admin/provadores", available: false },
   { label: "Coleções", href: "/admin/colecoes", available: false },
-  { label: "Categorias", href: "/admin/categorias", available: false },
+  { label: "Categorias", href: "/admin/categorias", available: true },
   { label: "Clientes/Leads", href: "/admin/leads", available: false },
   { label: "Vendedoras", href: "/admin/vendedoras", available: false },
   { label: "Relatórios", href: "/admin/relatorios", available: false },
@@ -28,7 +28,8 @@ export function AdminNav() {
   return (
     <nav className="flex gap-1 overflow-x-auto px-4 py-2 sm:flex-col sm:gap-0.5 sm:overflow-visible sm:px-2 sm:py-4">
       {NAV_ITEMS.map((item) => {
-        const isActive = pathname === item.href;
+        const isActive =
+          item.href === "/admin" ? pathname === item.href : pathname.startsWith(item.href);
 
         if (!item.available) {
           return (

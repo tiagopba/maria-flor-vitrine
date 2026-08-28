@@ -61,6 +61,8 @@ export interface Database {
           id: string;
           name: string;
           slug: string;
+          description: string | null;
+          cover_image: string | null;
           position: number;
           active: boolean;
           created_at: string;
