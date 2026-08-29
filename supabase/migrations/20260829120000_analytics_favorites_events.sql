@@ -4,10 +4,10 @@
 -- rodar contra o banco compartilhado entre Preview e Production).
 --
 -- Amplia a lista de event_type permitida em analytics_events para incluir
--- os dois novos eventos do módulo Favoritos (FAVORITE_ADDED e
--- FAVORITE_REMOVED já existiam desde a fundação do projeto e não são
+-- os eventos novos de Favoritos e de Seleção Compartilhável (FAVORITE_ADDED
+-- e FAVORITE_REMOVED já existiam desde a fundação do projeto e não são
 -- afetados). Puramente aditiva: nenhuma linha existente é alterada ou
--- perdida, só passa a aceitar dois valores novos.
+-- perdida, só passa a aceitar quatro valores novos.
 --
 -- O nome da constraint abaixo (analytics_events_event_type_check) segue a
 -- convenção padrão do Postgres para uma CHECK inline sem nome explícito
@@ -23,5 +23,6 @@ alter table analytics_events
     'PRODUCT_VIEW', 'CATEGORY_VIEW', 'SEARCH', 'SIZE_SELECTED',
     'FAVORITE_ADDED', 'FAVORITE_REMOVED', 'WHATSAPP_CLICK', 'PROVADOR_VIEW',
     'LOOK_WHATSAPP_CLICK', 'COLLECTION_VIEW', 'LEAD_SUBMITTED', 'SHARE_PRODUCT',
-    'FAVORITES_VIEW', 'FAVORITES_WHATSAPP_CLICK'
+    'FAVORITES_VIEW', 'FAVORITES_WHATSAPP_CLICK',
+    'SELECTION_CREATED', 'SELECTION_VIEWED'
   ));

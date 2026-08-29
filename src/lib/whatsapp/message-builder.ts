@@ -15,6 +15,10 @@ const formatPrice = (value: number) =>
 // aparentemente uma etapa do bundler no Windows não preservava esse
 // caractere ao empacotar a Server Action. Escape explícito é imune a isso.
 const HEART = String.fromCharCode(0x2764, 0xfe0f);
+// Mesmo cuidado do HEART acima, mas com fromCodePoint (0x1F4F8 está fora do
+// plano básico — precisa de par substituto, que fromCharCode não monta
+// sozinho a partir de um único code point).
+const CAMERA = String.fromCodePoint(0x1f4f8);
 
 /**
  * Mensagem para "Quero essa peça" na página de produto.
@@ -69,8 +73,6 @@ export function buildLookWhatsAppMessage({ lookTitle, products }: LookMessageInp
 
 export interface FavoritesSelectionItem {
   productName: string;
-  code: string;
-  price: number;
   size?: string;
 }
 
@@ -79,18 +81,26 @@ export interface FavoritesSelectionItem {
  * SOLD_OUT nunca chega aqui (quem chama já filtrou antes; ver
  * favorites-click-action.ts), então todo item da lista é, por definição,
  * uma peça disponível para consulta.
+ *
+ * Compacta de propósito (sem código/preço por item) — quem quiser esse
+ * detalhe visual entra no link da seleção compartilhável, que é a
+ * referência visual real; repetir tudo na mensagem só deixaria ela grande
+ * e a URL individual de cada produto redundante.
  */
-export function buildFavoritesWhatsAppMessage(products: FavoritesSelectionItem[]): string {
+export function buildFavoritesWhatsAppMessage(products: FavoritesSelectionItem[], selectionUrl?: string): string {
   const lines = [`Oi! Separei algumas peças na Vitrine Maria Flor ${HEART}`, ""];
 
   products.forEach((product, index) => {
-    lines.push(`${index + 1}. ${product.productName}`);
-    lines.push(product.size ? `Código: ${product.code} | Tam: ${product.size}` : `Código: ${product.code}`);
-    lines.push(formatPrice(product.price));
-    lines.push("");
+    lines.push(
+      product.size ? `${index + 1}. ${product.productName} — Tam: ${product.size}` : `${index + 1}. ${product.productName}`
+    );
   });
 
-  lines.push("Pode verificar quais estão disponíveis pra mim?");
+  lines.push("", "Pode verificar quais estão disponíveis pra mim?");
+
+  if (selectionUrl) {
+    lines.push("", `${CAMERA} Veja as fotos da minha seleção:`, selectionUrl);
+  }
 
   return lines.join("\n");
 }

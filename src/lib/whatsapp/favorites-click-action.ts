@@ -1,8 +1,13 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createSharedSelection } from "@/lib/db/shared-selections";
+import { getSiteUrl } from "@/lib/site";
+import type { Database } from "@/types/database";
 import { buildFavoritesWhatsAppMessage, buildWhatsAppUrl } from "./message-builder";
 import { resolveSeller } from "./resolve-seller";
+
+type AnalyticsEventInsert = Database["public"]["Tables"]["analytics_events"]["Insert"];
 
 export interface FavoritesWhatsAppItem {
   productId: string;
@@ -66,37 +71,66 @@ export async function submitFavoritesWhatsAppClick(
   const { seller, selectionMode } = await resolveSeller(supabase, input.sellerId);
   if (!seller) return { error: "Nenhuma vendedora disponível no momento." };
 
+  // Seleção Compartilhável: só product_id + tamanho (nunca nome/preço/foto
+  // — isso a página /selecao/[token] busca ao vivo). Se a tabela ainda não
+  // existir (migration pendente de aprovação) ou a gravação falhar por
+  // qualquer motivo, createSharedSelection devolve null e a mensagem sai
+  // sem o link de fotos — nunca bloqueia o envio por causa disso.
+  const token = await createSharedSelection(
+    available.map((p) => ({ product_id: p.id, selected_size: sizeByProductId.get(p.id) ?? null })),
+    input.sessionId
+  );
+  const selectionUrl = token ? `${getSiteUrl()}/selecao/${token}` : undefined;
+
   const message = buildFavoritesWhatsAppMessage(
     available.map((p) => ({
       productName: p.name,
-      code: p.code,
-      price: p.promotional_price ?? p.price,
       size: sizeByProductId.get(p.id) ?? undefined,
-    }))
+    })),
+    selectionUrl
   );
 
-  const { error: insertError } = await supabase.from("analytics_events").insert({
-    event_type: "FAVORITES_WHATSAPP_CLICK",
-    session_id: input.sessionId,
-    seller_id: seller.id,
-    source: "favorites_page",
-    utm_source: input.utmSource,
-    utm_medium: input.utmMedium,
-    utm_campaign: input.utmCampaign,
-    utm_content: input.utmContent,
-    referrer: input.referrer,
-    metadata: {
-      favorites_count: input.items.length,
-      available_products_count: available.length,
-      selection_mode: selectionMode,
+  const eventsToInsert: AnalyticsEventInsert[] = [
+    {
+      event_type: "FAVORITES_WHATSAPP_CLICK",
+      session_id: input.sessionId,
+      seller_id: seller.id,
+      source: "favorites_page",
+      utm_source: input.utmSource,
+      utm_medium: input.utmMedium,
+      utm_campaign: input.utmCampaign,
+      utm_content: input.utmContent,
+      referrer: input.referrer,
+      metadata: {
+        favorites_count: input.items.length,
+        available_products_count: available.length,
+        selection_mode: selectionMode,
+      },
     },
-  });
+  ];
+
+  if (token) {
+    eventsToInsert.push({
+      event_type: "SELECTION_CREATED",
+      session_id: input.sessionId,
+      seller_id: seller.id,
+      source: "favorites_page",
+      utm_source: input.utmSource,
+      utm_medium: input.utmMedium,
+      utm_campaign: input.utmCampaign,
+      utm_content: input.utmContent,
+      referrer: input.referrer,
+      metadata: { items_count: available.length },
+    });
+  }
+
+  const { error: insertError } = await supabase.from("analytics_events").insert(eventsToInsert);
 
   if (insertError) {
     // Não bloqueia a conversa por causa de uma falha no registro do evento
-    // (mesmo padrão de click-action.ts). Se FAVORITES_WHATSAPP_CLICK ainda
-    // não existir na constraint do banco, é exatamente isso que acontece
-    // aqui — falha logada, sem quebrar o envio.
+    // (mesmo padrão de click-action.ts). Se FAVORITES_WHATSAPP_CLICK/
+    // SELECTION_CREATED ainda não existirem na constraint do banco, é
+    // exatamente isso que acontece aqui — falha logada, sem quebrar o envio.
     console.error("[submitFavoritesWhatsAppClick] falha ao registrar analytics_events:", insertError.message);
   }
 

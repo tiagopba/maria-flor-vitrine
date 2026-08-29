@@ -1,13 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
+import { CategoryMenuDrawer } from "@/components/layout/CategoryMenuDrawer";
 import { FavoritesHeaderLink } from "@/components/layout/FavoritesHeaderLink";
 
 /**
- * Header público — compacto (não come altura útil no celular). Continua
- * Server Component; só o contador de favoritos (FavoritesHeaderLink)
- * precisa ser client, por depender de localStorage.
+ * Header público — compacto (não come altura útil no celular), o mesmo em
+ * toda página pública (Home/Novidades/Categoria/Busca/Produto/Favoritos/
+ * Seleção — todas ficam dentro de app/(public)/layout.tsx). Continua
+ * Server Component; só o contador de favoritos e o menu precisam ser
+ * client, por dependerem de localStorage/estado de abertura.
  */
-export function SiteHeader() {
+export function SiteHeader({ categories }: { categories: { name: string; slug: string }[] }) {
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-surface/95 px-4 backdrop-blur-sm sm:px-6">
       <Link href="/" aria-label="Maria Flor" className="flex items-center">
@@ -29,6 +32,8 @@ export function SiteHeader() {
         >
           <SearchIcon />
         </Link>
+
+        <CategoryMenuDrawer categories={categories} />
 
         <FavoritesHeaderLink />
       </nav>

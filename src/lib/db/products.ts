@@ -18,6 +18,7 @@ export interface ProductListItem extends Product {
 
 export interface ProductDetail extends Product {
   categoryName: string | null;
+  categorySlug: string | null;
   images: (ProductImage & { url: string })[];
   sizes: string[];
 }
@@ -103,13 +104,14 @@ export async function getProductByIdAdmin(id: string): Promise<ProductDetail | n
 
   const { data: category } = await supabase
     .from("categories")
-    .select("name")
+    .select("name, slug")
     .eq("id", product.category_id)
     .maybeSingle();
 
   return {
     ...product,
     categoryName: category?.name ?? null,
+    categorySlug: category?.slug ?? null,
     images: (images ?? []).map((img) => ({ ...img, url: publicImageUrl(PRODUCTS_BUCKET, img.storage_path) })),
     sizes: (sizes ?? []).map((s) => s.size),
   };
@@ -140,15 +142,41 @@ export async function getProductBySlugPublic(slug: string): Promise<ProductDetai
   const [{ data: images }, { data: sizes }, { data: category }] = await Promise.all([
     supabase.from("product_images").select("*").eq("product_id", product.id).order("position"),
     supabase.from("product_sizes").select("*").eq("product_id", product.id).order("position"),
-    supabase.from("categories").select("name").eq("id", product.category_id).maybeSingle(),
+    supabase.from("categories").select("name, slug").eq("id", product.category_id).maybeSingle(),
   ]);
 
   return {
     ...product,
     categoryName: category?.name ?? null,
+    categorySlug: category?.slug ?? null,
     images: (images ?? []).map((img) => ({ ...img, url: publicImageUrl(PRODUCTS_BUCKET, img.storage_path) })),
     sizes: (sizes ?? []).map((s) => s.size),
   };
+}
+
+/**
+ * "Você também pode gostar" — mesma categoria, mais recentes primeiro,
+ * excluindo o próprio produto. Uma consulta só (reaproveita
+ * attachCategoryAndMainImage, sem N+1). Sem motor de recomendação: se a
+ * categoria tiver menos que `limit` peças publicadas, mostra só o que
+ * existe — não completa com outras categorias.
+ */
+export async function getRelatedProductsPublic(productId: string, categoryId: string, limit = 8): Promise<ProductListItem[]> {
+  const supabase = createPublicClient();
+
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("category_id", categoryId)
+    .neq("id", productId)
+    .neq("status", "ARCHIVED")
+    .not("published_at", "is", null)
+    .order("published_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw new Error(error.message);
+
+  return attachCategoryAndMainImage(supabase, data ?? []);
 }
 
 export async function listPublishedProducts(limit = 24): Promise<ProductListItem[]> {
@@ -235,10 +263,11 @@ export async function getProductsByIdsPublic(ids: string[]): Promise<ProductDeta
   const [{ data: images }, { data: sizes }, { data: categories }] = await Promise.all([
     supabase.from("product_images").select("*").in("product_id", validIds).order("position"),
     supabase.from("product_sizes").select("*").in("product_id", validIds).order("position"),
-    supabase.from("categories").select("id, name").in("id", categoryIds),
+    supabase.from("categories").select("id, name, slug").in("id", categoryIds),
   ]);
 
   const categoryNameById = new Map((categories ?? []).map((c) => [c.id, c.name]));
+  const categorySlugById = new Map((categories ?? []).map((c) => [c.id, c.slug]));
 
   const imagesByProduct = new Map<string, ProductImage[]>();
   for (const img of images ?? []) {
@@ -257,6 +286,7 @@ export async function getProductsByIdsPublic(ids: string[]): Promise<ProductDeta
   return products.map((product) => ({
     ...product,
     categoryName: categoryNameById.get(product.category_id) ?? null,
+    categorySlug: categorySlugById.get(product.category_id) ?? null,
     images: (imagesByProduct.get(product.id) ?? []).map((img) => ({
       ...img,
       url: publicImageUrl(PRODUCTS_BUCKET, img.storage_path),
