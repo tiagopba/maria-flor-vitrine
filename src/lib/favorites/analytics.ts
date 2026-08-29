@@ -27,11 +27,8 @@ export interface RecordFavoriteEventInput {
  * "fire-and-forget" pelo client (não bloqueia o coração instantâneo nem o
  * carregamento da página) — falha aqui nunca deve impedir a ação real.
  *
- * PRODUCT_FLOW_STARTED/PRODUCT_FLOW_SEE_MORE_CLICK ainda não estão na
- * constraint de event_type do banco — enquanto a migration aditiva não for
- * aprovada e aplicada, chamadas com esses tipos falham aqui e ficam só no
- * log, sem quebrar nada (mesmo padrão já usado para todo o módulo de
- * Favoritos/Seleção Compartilhável). Ver docs/deployment.md seção 4.
+ * Todos os event_type deste módulo (incluindo PRODUCT_FLOW_STARTED/
+ * PRODUCT_FLOW_SEE_MORE_CLICK) já estão na constraint do banco.
  */
 export async function recordFavoriteEvent(input: RecordFavoriteEventInput): Promise<void> {
   const supabase = createAdminClient();

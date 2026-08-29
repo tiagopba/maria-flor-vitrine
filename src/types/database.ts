@@ -35,17 +35,11 @@ export type AnalyticsEventType =
   | "LEAD_SUBMITTED"
   | "SHARE_PRODUCT"
   // Já aplicados na constraint do banco (módulos Favoritos/Seleção
-  // Compartilhável).
+  // Compartilhável/fluxo guiado de seleção no produto).
   | "FAVORITES_VIEW"
   | "FAVORITES_WHATSAPP_CLICK"
   | "SELECTION_CREATED"
   | "SELECTION_VIEWED"
-  // ATENÇÃO: os dois abaixo ainda NÃO existem na constraint do banco —
-  // migration preparada em supabase/migrations/, mas não aplicada (ver
-  // aviso na entrega do fluxo guiado de seleção no produto). Até ser
-  // aprovada e aplicada, inserts com esses valores falham
-  // (silenciosamente, sem quebrar a UI — mesmo padrão de toda gravação em
-  // analytics_events deste projeto).
   | "PRODUCT_FLOW_STARTED"
   | "PRODUCT_FLOW_SEE_MORE_CLICK";
 
