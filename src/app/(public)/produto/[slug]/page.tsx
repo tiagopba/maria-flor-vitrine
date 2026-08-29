@@ -64,7 +64,7 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
 
           <div className="flex items-start justify-between gap-3">
             <h1 className="font-display text-2xl text-text sm:text-3xl">{product.name}</h1>
-            <FavoriteButton productId={product.id} withLabel className="shrink-0" />
+            <FavoriteButton productId={product.id} className="shrink-0 bg-muted hover:bg-border" />
           </div>
 
           <div className="flex items-center gap-2">

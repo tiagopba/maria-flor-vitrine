@@ -34,16 +34,14 @@ export type AnalyticsEventType =
   | "COLLECTION_VIEW"
   | "LEAD_SUBMITTED"
   | "SHARE_PRODUCT"
-  // ATENÇÃO: os quatro abaixo ainda NÃO existem na constraint do banco —
-  // migration preparada em supabase/migrations/, mas não aplicada (ver
-  // aviso na entrega dos módulos Favoritos/Seleção Compartilhável). Até
-  // ser aprovada e aplicada, inserts com esses valores falham
-  // (silenciosamente, sem quebrar a UI — mesmo padrão de toda gravação em
-  // analytics_events deste projeto).
+  // Já aplicados na constraint do banco (módulos Favoritos/Seleção
+  // Compartilhável/fluxo guiado de seleção no produto).
   | "FAVORITES_VIEW"
   | "FAVORITES_WHATSAPP_CLICK"
   | "SELECTION_CREATED"
-  | "SELECTION_VIEWED";
+  | "SELECTION_VIEWED"
+  | "PRODUCT_FLOW_STARTED"
+  | "PRODUCT_FLOW_SEE_MORE_CLICK";
 
 type Table<Row, RequiredInsertKeys extends keyof Row> = {
   Row: Row;

@@ -5,7 +5,7 @@ import { FavoritesPageClient } from "./FavoritesPageClient";
 // noindex: página pessoal (o conteúdo depende do localStorage de cada
 // cliente) — não há nada de único para o Google indexar aqui.
 export const metadata: Metadata = {
-  title: "Meus Favoritos",
+  title: "Minha Seleção",
   robots: { index: false, follow: true },
 };
 
@@ -19,9 +19,9 @@ export default async function FavoritosPage() {
 
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-8 sm:px-6">
-      <h1 className="font-display text-2xl text-text sm:text-3xl">Meus Favoritos</h1>
+      <h1 className="font-display text-2xl text-text sm:text-3xl">Minha Seleção</h1>
       <p className="mt-1 mb-6 text-sm text-text-muted">
-        Separe as peças que você gostou e envie sua seleção para uma de nossas vendedoras.
+        Confira as peças que você escolheu, selecione os tamanhos e envie tudo para uma vendedora.
       </p>
 
       <FavoritesPageClient sellers={sellers} />
