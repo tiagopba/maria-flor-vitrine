@@ -33,7 +33,17 @@ export type AnalyticsEventType =
   | "LOOK_WHATSAPP_CLICK"
   | "COLLECTION_VIEW"
   | "LEAD_SUBMITTED"
-  | "SHARE_PRODUCT";
+  | "SHARE_PRODUCT"
+  // ATENÇÃO: os quatro abaixo ainda NÃO existem na constraint do banco —
+  // migration preparada em supabase/migrations/, mas não aplicada (ver
+  // aviso na entrega dos módulos Favoritos/Seleção Compartilhável). Até
+  // ser aprovada e aplicada, inserts com esses valores falham
+  // (silenciosamente, sem quebrar a UI — mesmo padrão de toda gravação em
+  // analytics_events deste projeto).
+  | "FAVORITES_VIEW"
+  | "FAVORITES_WHATSAPP_CLICK"
+  | "SELECTION_CREATED"
+  | "SELECTION_VIEWED";
 
 type Table<Row, RequiredInsertKeys extends keyof Row> = {
   Row: Row;
@@ -259,6 +269,20 @@ export interface Database {
           updated_at: string;
         },
         "key" | "value"
+      >;
+
+      // ATENÇÃO: tabela ainda NÃO existe no banco — migration preparada em
+      // supabase/migrations/20260829130000_shared_selections.sql, não
+      // aplicada (ver aviso na entrega do módulo Seleção Compartilhável).
+      shared_selections: Table<
+        {
+          token: string;
+          items: { product_id: string; selected_size: string | null }[];
+          session_id: string | null;
+          created_at: string;
+          expires_at: string;
+        },
+        "token" | "items" | "expires_at"
       >;
 
       consent_records: Table<

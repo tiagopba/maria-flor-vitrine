@@ -9,12 +9,15 @@ export interface ProductMessageInput {
 const formatPrice = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-// Emoji de coração via escape unicode explícito (não literal no arquivo) —
-// o coração literal estava saindo corrompido (replacement character U+FFFD)
-// na URL final do wa.me, mesmo com os bytes do arquivo em UTF-8 correto;
-// aparentemente uma etapa do bundler no Windows não preservava esse
-// caractere ao empacotar a Server Action. Escape explícito é imune a isso.
+// Emoji via escape unicode explícito (não literal no arquivo) — a causa
+// real do U+FFFD investigada nesta sessão era o redirect do wa.me (ver
+// buildWhatsAppUrl abaixo), não o bundler; mantido assim mesmo assim por
+// ser imune a qualquer problema de encoding de arquivo/bundler.
 const HEART = String.fromCharCode(0x2764, 0xfe0f);
+// Mesmo cuidado do HEART acima, mas com fromCodePoint (0x1F4F8 está fora do
+// plano básico — precisa de par substituto, que fromCharCode não monta
+// sozinho a partir de um único code point).
+const CAMERA = String.fromCodePoint(0x1f4f8);
 
 /**
  * Mensagem para "Quero essa peça" na página de produto.
@@ -67,29 +70,53 @@ export function buildLookWhatsAppMessage({ lookTitle, products }: LookMessageInp
   return lines.join("\n");
 }
 
-export interface FavoritesMessageInput {
-  products: { code: string; productName: string }[];
+export interface FavoritesSelectionItem {
+  productName: string;
+  size?: string;
 }
 
 /**
- * Mensagem para "Enviar meus favoritos para uma vendedora".
+ * Mensagem para "Enviar minha seleção" na página /favoritos — uma peça
+ * SOLD_OUT nunca chega aqui (quem chama já filtrou antes; ver
+ * favorites-click-action.ts), então todo item da lista é, por definição,
+ * uma peça disponível para consulta.
+ *
+ * Compacta de propósito (sem código/preço por item) — quem quiser esse
+ * detalhe visual entra no link da seleção compartilhável, que é a
+ * referência visual real; repetir tudo na mensagem só deixaria ela grande
+ * e a URL individual de cada produto redundante.
  */
-export function buildFavoritesWhatsAppMessage({ products }: FavoritesMessageInput): string {
+export function buildFavoritesWhatsAppMessage(products: FavoritesSelectionItem[], selectionUrl?: string): string {
   const lines = [`Oi! Separei algumas peças na Vitrine Maria Flor ${HEART}`, ""];
 
-  products.forEach((product) => {
-    lines.push(`${product.code} — ${product.productName}`);
+  products.forEach((product, index) => {
+    lines.push(
+      product.size ? `${index + 1}. ${product.productName} — Tam: ${product.size}` : `${index + 1}. ${product.productName}`
+    );
   });
 
-  lines.push("", "Poderia verificar a disponibilidade para mim?");
+  lines.push("", "Pode verificar quais estão disponíveis pra mim?");
+
+  if (selectionUrl) {
+    lines.push("", `${CAMERA} Fotos das peças:`, selectionUrl);
+  }
 
   return lines.join("\n");
 }
 
 /**
- * Monta a URL final do wa.me a partir do número (formato internacional, só dígitos).
+ * Monta a URL final a partir do número (formato internacional, só dígitos).
+ *
+ * Usa api.whatsapp.com/send diretamente em vez de wa.me — achado nesta
+ * sessão, isolado com curl puro (sem nenhum código nosso envolvido): o
+ * redirect 302 do wa.me corrompe qualquer caractere de múltiplas unidades
+ * UTF-16 no parâmetro `text` (ex: ❤️ = coração + seletor de variação,
+ * 📸 = par substituto) em U+FFFD ao reconstruir a URL de destino. Chamando
+ * api.whatsapp.com/send diretamente (o próprio destino final do redirect
+ * do wa.me) esse passo intermediário quebrado é evitado, e o emoji chega
+ * correto — confirmado via curl direto com os mesmos bytes exatos.
  */
 export function buildWhatsAppUrl(phoneNumber: string, message: string): string {
   const digitsOnly = phoneNumber.replace(/\D/g, "");
-  return `https://wa.me/${digitsOnly}?text=${encodeURIComponent(message)}`;
+  return `https://api.whatsapp.com/send/?phone=${digitsOnly}&text=${encodeURIComponent(message)}`;
 }

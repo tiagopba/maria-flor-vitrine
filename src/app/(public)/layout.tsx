@@ -1,9 +1,14 @@
+import { NavigationTracker } from "@/components/layout/NavigationTracker";
 import { SiteHeader } from "@/components/layout/SiteHeader";
+import { getActiveCategoriesPublic } from "@/lib/db/categories";
 
-export default function PublicLayout({ children }: { children: React.ReactNode }) {
+export default async function PublicLayout({ children }: { children: React.ReactNode }) {
+  const categories = await getActiveCategoriesPublic();
+
   return (
     <>
-      <SiteHeader />
+      <NavigationTracker />
+      <SiteHeader categories={categories} />
       {children}
     </>
   );
