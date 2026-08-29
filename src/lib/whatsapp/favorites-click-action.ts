@@ -31,6 +31,9 @@ export interface FavoritesWhatsAppInput {
    * Nunca acionado automaticamente.
    */
   skipSelectionLink?: boolean;
+  /** Default "favorites_page" — o fluxo guiado no produto passa
+   * "product_page" pra distinguir a origem no funil. */
+  source?: string;
 }
 
 export type FavoritesWhatsAppResult =
@@ -115,7 +118,7 @@ export async function submitFavoritesWhatsAppClick(
       event_type: "FAVORITES_WHATSAPP_CLICK",
       session_id: input.sessionId,
       seller_id: seller.id,
-      source: "favorites_page",
+      source: input.source ?? "favorites_page",
       utm_source: input.utmSource,
       utm_medium: input.utmMedium,
       utm_campaign: input.utmCampaign,
@@ -134,7 +137,7 @@ export async function submitFavoritesWhatsAppClick(
       event_type: "SELECTION_CREATED",
       session_id: input.sessionId,
       seller_id: seller.id,
-      source: "favorites_page",
+      source: input.source ?? "favorites_page",
       utm_source: input.utmSource,
       utm_medium: input.utmMedium,
       utm_campaign: input.utmCampaign,

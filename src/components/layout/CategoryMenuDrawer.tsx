@@ -152,7 +152,7 @@ export function CategoryMenuDrawer({ categories }: { categories: { name: string;
             tabIndex={open ? 0 : -1}
             className="mt-3 block rounded-lg px-3 py-2.5 text-base font-semibold text-text hover:bg-muted"
           >
-            ❤️ Favoritos
+            ❤️ Minha seleção
           </Link>
         </nav>
       </div>

@@ -19,14 +19,10 @@ export function FavoriteButton({
   productId,
   className,
   size = "md",
-  withLabel = false,
 }: {
   productId: string;
   className?: string;
   size?: "sm" | "md";
-  /** Texto autoexplicativo ao lado do ícone — usado só na página do produto;
-   * os cards mantêm apenas o coração para preservar o visual clean. */
-  withLabel?: boolean;
 }) {
   const favorited = useIsFavorited(productId);
   const [, startTransition] = useTransition();
@@ -57,24 +53,6 @@ export function FavoriteButton({
 
   const dimension = size === "sm" ? "h-8 w-8" : "h-9 w-9";
   const iconSize = size === "sm" ? 15 : 17;
-
-  if (withLabel) {
-    return (
-      <button
-        type="button"
-        onClick={handleClick}
-        aria-pressed={favorited}
-        className={cn(
-          "flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-border",
-          favorited && "text-primary",
-          className
-        )}
-      >
-        <HeartIcon filled={favorited} size={iconSize} />
-        {favorited ? "Salvo nos favoritos" : "Salvar para ver depois"}
-      </button>
-    );
-  }
 
   return (
     <button
