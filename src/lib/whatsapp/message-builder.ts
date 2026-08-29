@@ -9,11 +9,10 @@ export interface ProductMessageInput {
 const formatPrice = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-// Emoji de coração via escape unicode explícito (não literal no arquivo) —
-// o coração literal estava saindo corrompido (replacement character U+FFFD)
-// na URL final do wa.me, mesmo com os bytes do arquivo em UTF-8 correto;
-// aparentemente uma etapa do bundler no Windows não preservava esse
-// caractere ao empacotar a Server Action. Escape explícito é imune a isso.
+// Emoji via escape unicode explícito (não literal no arquivo) — a causa
+// real do U+FFFD investigada nesta sessão era o redirect do wa.me (ver
+// buildWhatsAppUrl abaixo), não o bundler; mantido assim mesmo assim por
+// ser imune a qualquer problema de encoding de arquivo/bundler.
 const HEART = String.fromCharCode(0x2764, 0xfe0f);
 // Mesmo cuidado do HEART acima, mas com fromCodePoint (0x1F4F8 está fora do
 // plano básico — precisa de par substituto, que fromCharCode não monta
@@ -106,9 +105,18 @@ export function buildFavoritesWhatsAppMessage(products: FavoritesSelectionItem[]
 }
 
 /**
- * Monta a URL final do wa.me a partir do número (formato internacional, só dígitos).
+ * Monta a URL final a partir do número (formato internacional, só dígitos).
+ *
+ * Usa api.whatsapp.com/send diretamente em vez de wa.me — achado nesta
+ * sessão, isolado com curl puro (sem nenhum código nosso envolvido): o
+ * redirect 302 do wa.me corrompe qualquer caractere de múltiplas unidades
+ * UTF-16 no parâmetro `text` (ex: ❤️ = coração + seletor de variação,
+ * 📸 = par substituto) em U+FFFD ao reconstruir a URL de destino. Chamando
+ * api.whatsapp.com/send diretamente (o próprio destino final do redirect
+ * do wa.me) esse passo intermediário quebrado é evitado, e o emoji chega
+ * correto — confirmado via curl direto com os mesmos bytes exatos.
  */
 export function buildWhatsAppUrl(phoneNumber: string, message: string): string {
   const digitsOnly = phoneNumber.replace(/\D/g, "");
-  return `https://wa.me/${digitsOnly}?text=${encodeURIComponent(message)}`;
+  return `https://api.whatsapp.com/send/?phone=${digitsOnly}&text=${encodeURIComponent(message)}`;
 }
