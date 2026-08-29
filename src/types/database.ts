@@ -33,7 +33,14 @@ export type AnalyticsEventType =
   | "LOOK_WHATSAPP_CLICK"
   | "COLLECTION_VIEW"
   | "LEAD_SUBMITTED"
-  | "SHARE_PRODUCT";
+  | "SHARE_PRODUCT"
+  // ATENÇÃO: os dois abaixo ainda NÃO existem na constraint do banco —
+  // migration preparada em supabase/migrations/, mas não aplicada (ver
+  // aviso na entrega do módulo Favoritos). Até ser aprovada e aplicada,
+  // inserts com esses valores falham (silenciosamente, sem quebrar a UI —
+  // mesmo padrão de toda gravação em analytics_events deste projeto).
+  | "FAVORITES_VIEW"
+  | "FAVORITES_WHATSAPP_CLICK";
 
 type Table<Row, RequiredInsertKeys extends keyof Row> = {
   Row: Row;

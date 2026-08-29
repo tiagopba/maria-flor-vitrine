@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Drawer } from "@/components/ui/Drawer";
+import { SellerSelectionDrawer } from "@/components/catalog/SellerSelectionDrawer";
+import { SingleSizeSelector } from "@/components/catalog/SingleSizeSelector";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
 import { submitWhatsAppClick } from "@/lib/whatsapp/click-action";
-import { cn } from "@/lib/utils";
 import type { ProductStatus } from "@/types/database";
 
 export function ProductWhatsAppFlow({
@@ -21,8 +21,7 @@ export function ProductWhatsAppFlow({
   sellers: { id: string; name: string }[];
 }) {
   const isSoldOut = status === "SOLD_OUT";
-  const singleSize = sizes.length === 1 ? sizes[0] : null;
-  const [selectedSize, setSelectedSize] = useState<string | null>(singleSize);
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [submitting, setSubmitting] = useState<string | null>(null); // sellerId sendo processado, ou "any"
   const [error, setError] = useState<string | null>(null);
@@ -63,82 +62,21 @@ export function ProductWhatsAppFlow({
 
   return (
     <div className="flex flex-col gap-3">
-      {!isSoldOut && sizes.length > 1 && (
-        <div>
-          <p className="mb-1.5 text-sm font-medium text-text">Selecione o tamanho</p>
-          <div className="flex flex-wrap gap-1.5">
-            {sizes.map((size) => (
-              <button
-                key={size}
-                type="button"
-                onClick={() => setSelectedSize(size)}
-                className={cn(
-                  "flex h-10 min-w-10 items-center justify-center rounded-full border px-3 text-sm font-medium transition-colors",
-                  selectedSize === size
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-surface text-text hover:bg-muted"
-                )}
-              >
-                {size}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {!isSoldOut && <SingleSizeSelector sizes={sizes} value={selectedSize} onChange={setSelectedSize} />}
 
-      {!isSoldOut && singleSize && (
-        <p className="text-sm text-text">
-          Tamanho: <span className="font-medium">{singleSize}</span>
-        </p>
-      )}
-
-      <Button
-        type="button"
-        disabled={needsSize}
-        onClick={() => setDrawerOpen(true)}
-        className="h-12"
-      >
+      <Button type="button" disabled={needsSize} onClick={() => setDrawerOpen(true)} className="h-12">
         {isSoldOut ? "Quero algo parecido" : "Quero essa peça"}
       </Button>
       {needsSize && <p className="text-xs text-text-muted">Escolha o tamanho que você procura.</p>}
 
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title="Com quem você quer falar?">
-        <div className="flex flex-col gap-2">
-          {error && <p className="text-sm text-red-600">{error}</p>}
-
-          <button
-            type="button"
-            disabled={submitting !== null}
-            onClick={() => handleSellerChoice(null)}
-            className="flex flex-col items-center justify-center gap-0.5 rounded-xl bg-primary px-4 py-2.5 text-center text-primary-foreground disabled:opacity-60"
-          >
-            <span className="text-sm font-medium">
-              {submitting === "any" ? "Abrindo..." : "Qualquer vendedora"}
-            </span>
-            {submitting !== "any" && (
-              <span className="text-xs opacity-80">Te encaminhamos para uma vendedora disponível.</span>
-            )}
-          </button>
-
-          {sellers.map((seller) => (
-            <button
-              key={seller.id}
-              type="button"
-              disabled={submitting !== null}
-              onClick={() => handleSellerChoice(seller.id)}
-              className="flex h-12 items-center justify-center rounded-xl border border-border text-sm font-medium text-text hover:bg-muted disabled:opacity-60"
-            >
-              {submitting === seller.id ? "Abrindo..." : seller.name}
-            </button>
-          ))}
-
-          {sellers.length === 0 && (
-            <p className="py-2 text-center text-sm text-text-muted">
-              Nenhuma vendedora cadastrada no momento.
-            </p>
-          )}
-        </div>
-      </Drawer>
+      <SellerSelectionDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        sellers={sellers}
+        onChoose={handleSellerChoice}
+        submitting={submitting}
+        error={error}
+      />
     </div>
   );
 }

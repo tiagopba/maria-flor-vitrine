@@ -67,21 +67,30 @@ export function buildLookWhatsAppMessage({ lookTitle, products }: LookMessageInp
   return lines.join("\n");
 }
 
-export interface FavoritesMessageInput {
-  products: { code: string; productName: string }[];
+export interface FavoritesSelectionItem {
+  productName: string;
+  code: string;
+  price: number;
+  size?: string;
 }
 
 /**
- * Mensagem para "Enviar meus favoritos para uma vendedora".
+ * Mensagem para "Enviar minha seleção" na página /favoritos — uma peça
+ * SOLD_OUT nunca chega aqui (quem chama já filtrou antes; ver
+ * favorites-click-action.ts), então todo item da lista é, por definição,
+ * uma peça disponível para consulta.
  */
-export function buildFavoritesWhatsAppMessage({ products }: FavoritesMessageInput): string {
+export function buildFavoritesWhatsAppMessage(products: FavoritesSelectionItem[]): string {
   const lines = [`Oi! Separei algumas peças na Vitrine Maria Flor ${HEART}`, ""];
 
-  products.forEach((product) => {
-    lines.push(`${product.code} — ${product.productName}`);
+  products.forEach((product, index) => {
+    lines.push(`${index + 1}. ${product.productName}`);
+    lines.push(product.size ? `Código: ${product.code} | Tam: ${product.size}` : `Código: ${product.code}`);
+    lines.push(formatPrice(product.price));
+    lines.push("");
   });
 
-  lines.push("", "Poderia verificar a disponibilidade para mim?");
+  lines.push("Pode verificar quais estão disponíveis pra mim?");
 
   return lines.join("\n");
 }

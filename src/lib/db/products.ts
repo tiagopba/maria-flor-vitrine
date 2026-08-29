@@ -210,6 +210,62 @@ export async function searchPublishedProducts(query: string, limit = 24): Promis
 }
 
 /**
+ * Busca vários produtos de uma vez pelos IDs salvos localmente em
+ * Favoritos — sempre em lote (produtos + imagens + tamanhos + categorias
+ * em só 4 consultas, nunca uma por produto) para não virar N+1 conforme a
+ * lista de favoritos cresce.
+ *
+ * Usa o client público (RLS `products_public_read`), então um id
+ * arquivado/despublicado simplesmente não volta no resultado — é assim que
+ * a página de Favoritos detecta "esse favorito não é mais válido" sem
+ * precisar duplicar a regra de visibilidade aqui.
+ */
+export async function getProductsByIdsPublic(ids: string[]): Promise<ProductDetail[]> {
+  if (ids.length === 0) return [];
+
+  const supabase = createPublicClient();
+
+  const { data: products, error } = await supabase.from("products").select("*").in("id", ids);
+  if (error) throw new Error(error.message);
+  if (!products || products.length === 0) return [];
+
+  const validIds = products.map((p) => p.id);
+  const categoryIds = [...new Set(products.map((p) => p.category_id))];
+
+  const [{ data: images }, { data: sizes }, { data: categories }] = await Promise.all([
+    supabase.from("product_images").select("*").in("product_id", validIds).order("position"),
+    supabase.from("product_sizes").select("*").in("product_id", validIds).order("position"),
+    supabase.from("categories").select("id, name").in("id", categoryIds),
+  ]);
+
+  const categoryNameById = new Map((categories ?? []).map((c) => [c.id, c.name]));
+
+  const imagesByProduct = new Map<string, ProductImage[]>();
+  for (const img of images ?? []) {
+    const list = imagesByProduct.get(img.product_id) ?? [];
+    list.push(img);
+    imagesByProduct.set(img.product_id, list);
+  }
+
+  const sizesByProduct = new Map<string, string[]>();
+  for (const s of sizes ?? []) {
+    const list = sizesByProduct.get(s.product_id) ?? [];
+    list.push(s.size);
+    sizesByProduct.set(s.product_id, list);
+  }
+
+  return products.map((product) => ({
+    ...product,
+    categoryName: categoryNameById.get(product.category_id) ?? null,
+    images: (imagesByProduct.get(product.id) ?? []).map((img) => ({
+      ...img,
+      url: publicImageUrl(PRODUCTS_BUCKET, img.storage_path),
+    })),
+    sizes: sizesByProduct.get(product.id) ?? [],
+  }));
+}
+
+/**
  * Grava as linhas de product_images a partir de paths já enviados ao
  * Storage (upload acontece direto do navegador — ver
  * lib/images/upload-client.ts — nunca passa pelo corpo de uma Server

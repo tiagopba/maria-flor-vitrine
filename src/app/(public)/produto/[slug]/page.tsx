@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { Price } from "@/components/ui/Price";
+import { FavoriteButton } from "@/components/catalog/FavoriteButton";
 import { ProductGallery } from "@/components/catalog/ProductGallery";
 import { ProductWhatsAppFlow } from "@/components/catalog/ProductWhatsAppFlow";
 import { PRODUCT_STATUS_LABELS, publicStatusBadge } from "@/lib/catalog/status";
@@ -53,7 +54,10 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
             <p className="text-xs uppercase tracking-wide text-text-muted">{product.categoryName}</p>
           )}
 
-          <h1 className="font-display text-2xl text-text sm:text-3xl">{product.name}</h1>
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="font-display text-2xl text-text sm:text-3xl">{product.name}</h1>
+            <FavoriteButton productId={product.id} className="shrink-0 bg-muted hover:bg-border" />
+          </div>
 
           <div className="flex items-center gap-2">
             <Price price={product.price} promotionalPrice={product.promotional_price} />
