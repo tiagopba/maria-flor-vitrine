@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSiteUrl } from "@/lib/site";
 import { buildProductWhatsAppMessage, buildSoldOutWhatsAppMessage, buildWhatsAppUrl } from "./message-builder";
+import { resolveSeller } from "./resolve-seller";
 
 export interface WhatsAppClickInput {
   productId: string;
@@ -41,42 +42,8 @@ export async function submitWhatsAppClick(input: WhatsAppClickInput): Promise<Wh
   if (productError) return { error: "Não foi possível carregar o produto." };
   if (!product || product.status === "ARCHIVED") return { error: "Produto não encontrado." };
 
-  let seller: { id: string | null; whatsapp_number: string } | null = null;
-  const selectionMode: "manual" | "round_robin" = input.sellerId ? "manual" : "round_robin";
-
-  if (input.sellerId) {
-    const { data } = await supabase
-      .from("sellers")
-      .select("id, whatsapp_number")
-      .eq("id", input.sellerId)
-      .eq("active", true)
-      .maybeSingle();
-
-    seller = data ?? null;
-  } else {
-    const { data: candidates } = await supabase
-      .from("sellers")
-      .select("id, whatsapp_number")
-      .eq("active", true)
-      .eq("round_robin", true)
-      .order("order_priority", { ascending: true });
-
-    if (candidates && candidates.length > 0) {
-      // Distribuição simples por tempo — suficiente para o volume do MVP;
-      // uma rotação mais precisa (contagem real de cliques) fica para depois.
-      const index = Math.floor(Date.now() / 1000) % candidates.length;
-      seller = candidates[index];
-    }
-  }
-
-  // Ninguém ativa, ninguém no rodízio, ou a vendedora escolhida manualmente
-  // não está mais ativa — cai no número padrão da loja em vez de deixar a
-  // cliente sem opção de atendimento (NEXT_PUBLIC_WHATSAPP_DEFAULT_NUMBER).
-  if (!seller) {
-    const fallbackNumber = process.env.NEXT_PUBLIC_WHATSAPP_DEFAULT_NUMBER;
-    if (!fallbackNumber) return { error: "Nenhuma vendedora disponível no momento." };
-    seller = { id: null, whatsapp_number: fallbackNumber };
-  }
+  const { seller, selectionMode } = await resolveSeller(supabase, input.sellerId);
+  if (!seller) return { error: "Nenhuma vendedora disponível no momento." };
 
   const price = product.promotional_price ?? product.price;
   const productUrl = `${getSiteUrl()}/produto/${product.slug}`;

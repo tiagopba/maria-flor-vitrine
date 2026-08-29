@@ -1,11 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
+import { CategoryMenuDrawer } from "@/components/layout/CategoryMenuDrawer";
+import { FavoritesHeaderLink } from "@/components/layout/FavoritesHeaderLink";
 
 /**
- * Header público — compacto (não come altura útil no celular), sem JS de
- * cliente (nada aqui precisa de interatividade além de navegação simples).
+ * Header público — compacto (não come altura útil no celular), o mesmo em
+ * toda página pública (Home/Novidades/Categoria/Busca/Produto/Favoritos/
+ * Seleção — todas ficam dentro de app/(public)/layout.tsx). Continua
+ * Server Component; só o contador de favoritos e o menu precisam ser
+ * client, por dependerem de localStorage/estado de abertura.
  */
-export function SiteHeader() {
+export function SiteHeader({ categories }: { categories: { name: string; slug: string }[] }) {
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-surface/95 px-4 backdrop-blur-sm sm:px-6">
       <Link href="/" aria-label="Maria Flor" className="flex items-center">
@@ -28,14 +33,9 @@ export function SiteHeader() {
           <SearchIcon />
         </Link>
 
-        {/* Favoritos: espaço preparado, sem interação ainda */}
-        <span
-          aria-hidden
-          title="Favoritos (em breve)"
-          className="flex h-9 w-9 items-center justify-center rounded-full text-text-muted/50"
-        >
-          <HeartIcon />
-        </span>
+        <CategoryMenuDrawer categories={categories} />
+
+        <FavoritesHeaderLink />
       </nav>
     </header>
   );
@@ -46,14 +46,6 @@ function SearchIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <circle cx="11" cy="11" r="7" />
       <path d="m21 21-4.35-4.35" />
-    </svg>
-  );
-}
-
-function HeartIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 21s-6.7-4.35-9.3-8.1C1 10.1 1.8 6.6 4.9 5.3c2.1-.9 4.2 0 5.6 1.9L12 8.7l1.5-1.5c1.4-1.9 3.5-2.8 5.6-1.9 3.1 1.3 3.9 4.8 2.2 7.6C18.7 16.65 12 21 12 21z" />
     </svg>
   );
 }

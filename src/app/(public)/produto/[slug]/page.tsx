@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { Price } from "@/components/ui/Price";
+import { BackButton } from "@/components/layout/BackButton";
+import { FavoriteButton } from "@/components/catalog/FavoriteButton";
 import { ProductGallery } from "@/components/catalog/ProductGallery";
+import { ProductGrid } from "@/components/catalog/ProductGrid";
 import { ProductWhatsAppFlow } from "@/components/catalog/ProductWhatsAppFlow";
 import { PRODUCT_STATUS_LABELS, publicStatusBadge } from "@/lib/catalog/status";
-import { getProductBySlugPublic } from "@/lib/db/products";
+import { getProductBySlugPublic, getRelatedProductsPublic } from "@/lib/db/products";
 import { getActiveSellersForModal } from "@/lib/db/sellers";
 
 export async function generateMetadata({
@@ -38,13 +42,18 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
 
   if (!product) notFound();
 
-  const sellers = await getActiveSellersForModal();
+  const [sellers, related] = await Promise.all([
+    getActiveSellersForModal(),
+    getRelatedProductsPublic(product.id, product.category_id),
+  ]);
 
   const badge = publicStatusBadge(product.status);
   const isSoldOut = product.status === "SOLD_OUT";
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6">
+      <BackButton fallbackHref="/novidades" className="mb-4" />
+
       <div className="grid gap-8 sm:grid-cols-2">
         <ProductGallery images={product.images} productName={product.name} />
 
@@ -53,7 +62,10 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
             <p className="text-xs uppercase tracking-wide text-text-muted">{product.categoryName}</p>
           )}
 
-          <h1 className="font-display text-2xl text-text sm:text-3xl">{product.name}</h1>
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="font-display text-2xl text-text sm:text-3xl">{product.name}</h1>
+            <FavoriteButton productId={product.id} className="shrink-0 bg-muted hover:bg-border" />
+          </div>
 
           <div className="flex items-center gap-2">
             <Price price={product.price} promotionalPrice={product.promotional_price} />
@@ -84,6 +96,24 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
           </div>
         </div>
       </div>
+
+      {related.length > 0 && (
+        <section className="mt-12">
+          <h2 className="mb-4 font-display text-lg text-text sm:text-xl">Você também pode gostar</h2>
+          <ProductGrid products={related} />
+        </section>
+      )}
+
+      {product.categoryName && product.categorySlug && (
+        <div className="mt-8 text-center">
+          <Link
+            href={`/categoria/${product.categorySlug}`}
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            Ver mais em {product.categoryName.toUpperCase()} →
+          </Link>
+        </div>
+      )}
     </main>
   );
 }
