@@ -114,7 +114,7 @@ export function CategoryMenuDrawer({ categories }: { categories: { name: string;
             href="/"
             onClick={close}
             tabIndex={open ? 0 : -1}
-            className="block rounded-lg px-3 py-2.5 text-sm text-text hover:bg-muted"
+            className="block rounded-lg px-3 py-2.5 text-base font-semibold text-text hover:bg-muted"
           >
             Início
           </Link>
@@ -122,14 +122,14 @@ export function CategoryMenuDrawer({ categories }: { categories: { name: string;
             href="/novidades"
             onClick={close}
             tabIndex={open ? 0 : -1}
-            className="block rounded-lg px-3 py-2.5 text-sm text-text hover:bg-muted"
+            className="block rounded-lg px-3 py-2.5 text-base font-semibold text-text hover:bg-muted"
           >
             Novidades
           </Link>
 
           {categories.length > 0 && (
             <>
-              <p className="mt-2 px-3 pb-1 text-xs font-medium uppercase tracking-wide text-text-muted">
+              <p className="mt-3 px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
                 Categorias
               </p>
               {categories.map((category) => (
@@ -138,7 +138,7 @@ export function CategoryMenuDrawer({ categories }: { categories: { name: string;
                   href={`/categoria/${category.slug}`}
                   onClick={close}
                   tabIndex={open ? 0 : -1}
-                  className="block rounded-lg px-3 py-2.5 text-sm text-text hover:bg-muted"
+                  className="block rounded-lg px-3 py-2 text-sm text-text hover:bg-muted"
                 >
                   {category.name}
                 </Link>
@@ -150,7 +150,7 @@ export function CategoryMenuDrawer({ categories }: { categories: { name: string;
             href="/favoritos"
             onClick={close}
             tabIndex={open ? 0 : -1}
-            className="mt-2 block rounded-lg px-3 py-2.5 text-sm text-text hover:bg-muted"
+            className="mt-3 block rounded-lg px-3 py-2.5 text-base font-semibold text-text hover:bg-muted"
           >
             ❤️ Favoritos
           </Link>
