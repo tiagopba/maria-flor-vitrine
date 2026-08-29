@@ -84,7 +84,7 @@ quiser que `staging` tenha suas próprias variáveis de ambiente
 *diferentes* do resto do Preview, isso exige o recurso pago "Custom
 Environments" da Vercel — não configurado agora por não ter sido pedido.
 
-### 4. Domínio de staging (preparar para o futuro)
+### Domínio de staging (preparar para o futuro)
 
 Ainda não configurado — quando quiser ativar:
 
@@ -140,13 +140,31 @@ escopadas por ambiente (Production / Preview). Confira sempre com
 
 Production e Preview usam o **mesmo projeto Supabase** (mesmo banco de
 dados real). Ou seja, testar em Preview/staging pode ler e escrever dados
-reais (produtos, vendedoras, analytics). Fluxos que gravam
-(`WHATSAPP_CLICK`, cadastro de produto/vendedora) devem ser testados com
-consciência disso — teste, mas evite poluir demais, e prefira reverter
-manualmente (como já vem sendo feito nesta sessão) quando alterar um
-registro real só para verificar algo.
+reais (produtos, vendedoras, analytics).
 
-## 4. Rollback
+## 4. Regras de segurança de dados (banco compartilhado)
+
+Enquanto Preview e Production compartilharem o mesmo Supabase, **o banco é
+tratado como produção o tempo todo** — inclusive durante teste em
+Preview/staging/local. Regras obrigatórias:
+
+- **Nunca** rodar `reset`, `truncate`, `drop` ou qualquer seed destrutivo
+  contra esse banco, por nenhum motivo.
+- Migrations continuam **só aditivas** (`add column if not exists`, tabela
+  nova, etc.) e passam por revisão antes de aplicar — nunca uma migration
+  destrutiva sem aprovação explícita antes.
+- Antes de qualquer migration ou operação com risco real de perda de
+  dados: **parar e pedir aprovação** antes de executar, mesmo que pareça
+  segura.
+- Quando um teste precisar alterar um registro real pra verificar algo
+  (ex: mudar o status de um produto pra conferir a tela de esgotado), o
+  registro usado deve ficar claramente identificável, e a alteração deve
+  ser **revertida imediatamente** depois de verificar — antes de seguir
+  pra qualquer outra coisa, não "no fim da sessão".
+- Preferir ler o valor atual antes de alterar (pra saber exatamente pra
+  onde reverter) em vez de supor qual era o valor original.
+
+## 5. Rollback
 
 ### Identificar o último deployment estável
 
@@ -191,7 +209,7 @@ continuam intactos. Depois de corrigir o bug:
 3. Se quiser reforçar manualmente sem esperar o merge, `npx vercel --prod`
    a partir da branch `main` local também promove um novo deployment.
 
-## 5. Checklist pós-deploy em produção
+## 6. Checklist pós-deploy em produção
 
 Repetir a cada merge em `main` (herdado do processo antigo, ainda válido):
 
@@ -204,7 +222,7 @@ Repetir a cada merge em `main` (herdado do processo antigo, ainda válido):
 - Testar em largura de celular real (375/393/430px) — Safari iOS
   especialmente, por já termos pego bugs que só aparecem lá.
 
-## 6. Histórico (do `docs/deploy.md` original)
+## 7. Histórico (do `docs/deploy.md` original)
 
 O guia original de configuração inicial (primeiro deploy do zero, quando
 o repositório ainda não existia no GitHub) foi incorporado a este
