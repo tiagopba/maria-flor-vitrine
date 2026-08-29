@@ -3,7 +3,12 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface RecordFavoriteEventInput {
-  eventType: "FAVORITE_ADDED" | "FAVORITE_REMOVED" | "FAVORITES_VIEW";
+  eventType:
+    | "FAVORITE_ADDED"
+    | "FAVORITE_REMOVED"
+    | "FAVORITES_VIEW"
+    | "PRODUCT_FLOW_STARTED"
+    | "PRODUCT_FLOW_SEE_MORE_CLICK";
   productId?: string | null;
   sessionId: string;
   utmSource: string | null;
@@ -12,6 +17,9 @@ export interface RecordFavoriteEventInput {
   utmContent: string | null;
   referrer: string | null;
   metadata?: Record<string, unknown>;
+  /** Default "favorites" (página /favoritos) — o fluxo guiado no produto
+   * passa "product_page" pra distinguir a origem no funil. */
+  source?: string;
 }
 
 /**
@@ -19,11 +27,11 @@ export interface RecordFavoriteEventInput {
  * "fire-and-forget" pelo client (não bloqueia o coração instantâneo nem o
  * carregamento da página) — falha aqui nunca deve impedir a ação real.
  *
- * FAVORITES_VIEW ainda não está na constraint de event_type do banco (só
- * FAVORITE_ADDED/FAVORITE_REMOVED existiam antes deste módulo) — enquanto
- * a migration aditiva não for aprovada e aplicada, chamadas com esse tipo
- * falham aqui e ficam só no log, sem quebrar nada. Ver docs/deployment.md
- * seção 4 e o aviso passado ao usuário nesta entrega.
+ * PRODUCT_FLOW_STARTED/PRODUCT_FLOW_SEE_MORE_CLICK ainda não estão na
+ * constraint de event_type do banco — enquanto a migration aditiva não for
+ * aprovada e aplicada, chamadas com esses tipos falham aqui e ficam só no
+ * log, sem quebrar nada (mesmo padrão já usado para todo o módulo de
+ * Favoritos/Seleção Compartilhável). Ver docs/deployment.md seção 4.
  */
 export async function recordFavoriteEvent(input: RecordFavoriteEventInput): Promise<void> {
   const supabase = createAdminClient();
@@ -32,7 +40,7 @@ export async function recordFavoriteEvent(input: RecordFavoriteEventInput): Prom
     event_type: input.eventType,
     session_id: input.sessionId,
     product_id: input.productId ?? null,
-    source: "favorites",
+    source: input.source ?? "favorites",
     utm_source: input.utmSource,
     utm_medium: input.utmMedium,
     utm_campaign: input.utmCampaign,
