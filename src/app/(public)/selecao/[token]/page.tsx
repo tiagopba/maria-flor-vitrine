@@ -63,6 +63,12 @@ export default async function SharedSelectionPage({ params }: { params: Promise<
         </p>
       ) : (
         <div className="mt-6 flex flex-col gap-3">
+          {products.length < selection.items.length && (
+            <p className="rounded-xl bg-muted px-3 py-2 text-xs text-text-muted">
+              Uma ou mais peças dessa seleção saíram do catálogo e não aparecem mais abaixo.
+            </p>
+          )}
+
           {products.map((product) => {
             const badge = publicStatusBadge(product.status);
             const mainImage = product.images[0]?.url ?? null;
@@ -74,9 +80,9 @@ export default async function SharedSelectionPage({ params }: { params: Promise<
                 href={`/produto/${product.slug}`}
                 className="flex gap-3 rounded-2xl border border-border bg-surface p-3"
               >
-                <div className="relative h-28 w-24 shrink-0 overflow-hidden rounded-xl bg-muted sm:h-32 sm:w-28">
+                <div className="relative h-32 w-28 shrink-0 overflow-hidden rounded-xl bg-muted sm:h-36 sm:w-32">
                   {mainImage ? (
-                    <Image src={mainImage} alt={product.name} fill sizes="120px" className="object-cover" />
+                    <Image src={mainImage} alt={product.name} fill sizes="144px" className="object-cover" />
                   ) : (
                     <div className="flex h-full items-center justify-center text-xs text-text-muted">Sem foto</div>
                   )}

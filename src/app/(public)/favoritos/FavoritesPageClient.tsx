@@ -30,6 +30,8 @@ export function FavoritesPageClient({ sellers }: { sellers: { id: string; name: 
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [sellerError, setSellerError] = useState<string | null>(null);
+  const [selectionFailed, setSelectionFailed] = useState(false);
+  const [lastSellerId, setLastSellerId] = useState<string | null>(null);
   const [pendingProductId, setPendingProductId] = useState<string | null>(null);
   const viewedRef = useRef(false);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
@@ -109,12 +111,15 @@ export function FavoritesPageClient({ sellers }: { sellers: { id: string; name: 
     }
 
     setSellerError(null);
+    setSelectionFailed(false);
     setDrawerOpen(true);
   }
 
-  async function handleSellerChoice(sellerId: string | null) {
+  async function handleSellerChoice(sellerId: string | null, skipSelectionLink = false) {
     if (!products) return;
     setSellerError(null);
+    setSelectionFailed(false);
+    setLastSellerId(sellerId);
     setSubmitting(sellerId ?? "any");
 
     const entryByProductId = new Map(entries.map((e) => [e.product_id, e]));
@@ -135,10 +140,12 @@ export function FavoritesPageClient({ sellers }: { sellers: { id: string; name: 
         utmCampaign: utm.utm_campaign ?? null,
         utmContent: utm.utm_content ?? null,
         referrer: utm.referrer ?? null,
+        skipSelectionLink,
       });
 
       if ("error" in result) {
         setSellerError(result.error);
+        setSelectionFailed(result.code === "selection_failed");
         setSubmitting(null);
         return;
       }
@@ -146,6 +153,7 @@ export function FavoritesPageClient({ sellers }: { sellers: { id: string; name: 
       window.location.href = result.url;
     } catch {
       setSellerError("Não foi possível abrir o WhatsApp. Tente novamente.");
+      setSelectionFailed(false);
       setSubmitting(null);
     }
   }
@@ -212,9 +220,20 @@ export function FavoritesPageClient({ sellers }: { sellers: { id: string; name: 
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         sellers={sellers}
-        onChoose={handleSellerChoice}
+        onChoose={(sellerId) => handleSellerChoice(sellerId)}
         submitting={submitting}
         error={sellerError}
+        errorActions={
+          selectionFailed
+            ? [
+                { label: "Tentar novamente", onClick: () => handleSellerChoice(lastSellerId) },
+                {
+                  label: "Enviar somente a lista",
+                  onClick: () => handleSellerChoice(lastSellerId, true),
+                },
+              ]
+            : undefined
+        }
       />
     </div>
   );

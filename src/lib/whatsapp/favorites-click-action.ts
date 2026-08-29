@@ -24,9 +24,18 @@ export interface FavoritesWhatsAppInput {
   utmCampaign: string | null;
   utmContent: string | null;
   referrer: string | null;
+  /**
+   * true = pula a criação da seleção compartilhável e manda só a lista de
+   * texto — usado exclusivamente quando a cliente escolhe explicitamente
+   * "Enviar somente a lista" depois de um erro em `selection_failed`.
+   * Nunca acionado automaticamente.
+   */
+  skipSelectionLink?: boolean;
 }
 
-export type FavoritesWhatsAppResult = { url: string } | { error: string };
+export type FavoritesWhatsAppResult =
+  | { url: string }
+  | { error: string; code?: "selection_failed" };
 
 /**
  * Mesmo espírito de submitWhatsAppClick (click-action.ts), mas para a
@@ -72,14 +81,25 @@ export async function submitFavoritesWhatsAppClick(
   if (!seller) return { error: "Nenhuma vendedora disponível no momento." };
 
   // Seleção Compartilhável: só product_id + tamanho (nunca nome/preço/foto
-  // — isso a página /selecao/[token] busca ao vivo). Se a tabela ainda não
-  // existir (migration pendente de aprovação) ou a gravação falhar por
-  // qualquer motivo, createSharedSelection devolve null e a mensagem sai
-  // sem o link de fotos — nunca bloqueia o envio por causa disso.
-  const token = await createSharedSelection(
-    available.map((p) => ({ product_id: p.id, selected_size: sizeByProductId.get(p.id) ?? null })),
-    input.sessionId
-  );
+  // — isso a página /selecao/[token] busca ao vivo). O link de fotos é
+  // parte essencial do fluxo, então uma falha aqui NÃO abre o WhatsApp
+  // silenciosamente sem ele — a cliente decide explicitamente (via
+  // "Tentar novamente" ou "Enviar somente a lista", skipSelectionLink)
+  // como seguir. Só pulamos a criação quando ela mesma pediu isso.
+  let token: string | null = null;
+  if (!input.skipSelectionLink) {
+    token = await createSharedSelection(
+      available.map((p) => ({ product_id: p.id, selected_size: sizeByProductId.get(p.id) ?? null })),
+      input.sessionId
+    );
+
+    if (!token) {
+      return {
+        error: "Não conseguimos preparar sua seleção agora. Tente novamente.",
+        code: "selection_failed",
+      };
+    }
+  }
   const selectionUrl = token ? `${getSiteUrl()}/selecao/${token}` : undefined;
 
   const message = buildFavoritesWhatsAppMessage(

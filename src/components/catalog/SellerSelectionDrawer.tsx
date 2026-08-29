@@ -15,6 +15,7 @@ export function SellerSelectionDrawer({
   onChoose,
   submitting,
   error,
+  errorActions,
 }: {
   open: boolean;
   onClose: () => void;
@@ -23,11 +24,36 @@ export function SellerSelectionDrawer({
   /** sellerId sendo processado, "any" para round-robin, ou null se nada em andamento */
   submitting: string | null;
   error: string | null;
+  /**
+   * Ações extras mostradas junto do erro (ex: "Tentar novamente" /
+   * "Enviar somente a lista" quando a seleção compartilhável falha ao
+   * criar) — opcional, a maioria dos erros não precisa disso.
+   */
+  errorActions?: { label: string; onClick: () => void }[];
 }) {
   return (
     <Drawer open={open} onClose={onClose} title="Com quem você quer falar?">
       <div className="flex flex-col gap-2">
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && (
+          <div className="flex flex-col gap-2 rounded-xl bg-red-50 p-3">
+            <p className="text-sm text-red-600">{error}</p>
+            {errorActions && errorActions.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {errorActions.map((action) => (
+                  <button
+                    key={action.label}
+                    type="button"
+                    onClick={action.onClick}
+                    disabled={submitting !== null}
+                    className="rounded-lg border border-red-200 bg-surface px-3 py-1.5 text-xs font-medium text-red-700 disabled:opacity-60"
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <button
           type="button"

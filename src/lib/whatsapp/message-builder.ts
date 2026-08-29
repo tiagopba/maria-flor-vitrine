@@ -99,7 +99,7 @@ export function buildFavoritesWhatsAppMessage(products: FavoritesSelectionItem[]
   lines.push("", "Pode verificar quais estão disponíveis pra mim?");
 
   if (selectionUrl) {
-    lines.push("", `${CAMERA} Veja as fotos da minha seleção:`, selectionUrl);
+    lines.push("", `${CAMERA} Fotos das peças:`, selectionUrl);
   }
 
   return lines.join("\n");
