@@ -165,9 +165,9 @@ export function FavoritesPageClient({ sellers }: { sellers: { id: string; name: 
   if (products.length === 0) {
     return (
       <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-border px-4 py-16 text-center">
-        <p className="font-display text-lg text-text">Você ainda não salvou nenhuma peça ❤️</p>
+        <p className="font-display text-lg text-text">Seu provador começa aqui ❤️</p>
         <p className="max-w-xs text-sm text-text-muted">
-          Explore nossas novidades e toque no coração para guardar seus looks favoritos.
+          Salve as peças que você gostou e, quando quiser, envie toda a sua seleção para uma vendedora.
         </p>
         <Link href="/novidades">
           <Button className="mt-2">Ver novidades</Button>
