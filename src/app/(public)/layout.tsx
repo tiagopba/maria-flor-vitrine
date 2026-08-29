@@ -1,5 +1,6 @@
 import { NavigationTracker } from "@/components/layout/NavigationTracker";
 import { SiteHeader } from "@/components/layout/SiteHeader";
+import { FavoritesDiscoveryTip } from "@/components/catalog/FavoritesDiscoveryTip";
 import { getActiveCategoriesPublic } from "@/lib/db/categories";
 
 export default async function PublicLayout({ children }: { children: React.ReactNode }) {
@@ -9,6 +10,7 @@ export default async function PublicLayout({ children }: { children: React.React
     <>
       <NavigationTracker />
       <SiteHeader categories={categories} />
+      <FavoritesDiscoveryTip />
       {children}
     </>
   );
