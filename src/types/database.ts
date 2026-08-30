@@ -247,6 +247,9 @@ export interface Database {
           whatsapp_verified_at: string | null;
           email_verified_at: string | null;
           auth_user_id: string | null;
+          auth_user_id_conflict_at: string | null;
+          resume_token_hash: string | null;
+          resume_token_expires_at: string | null;
           otp_email_send_count: number;
           otp_email_last_sent_at: string | null;
         },
@@ -324,6 +327,18 @@ export interface Database {
       >;
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      // ATENÇÃO: função ainda NÃO existe no banco — mesma migration
+      // pendente das colunas de verificação de leads (não aplicada).
+      try_claim_email_otp_send: {
+        Args: {
+          p_lead_id: string;
+          p_cooldown_seconds: number;
+          p_window_seconds: number;
+          p_max_per_window: number;
+        };
+        Returns: boolean;
+      };
+    };
   };
 }

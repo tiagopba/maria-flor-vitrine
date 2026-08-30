@@ -5,45 +5,43 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { recordInstitutionalEvent } from "@/lib/institutional/analytics";
-import { confirmEmailOtp, getLeadVerificationStatus, startEmailOtp } from "@/lib/leads/email-otp";
+import { confirmEmailOtp, resumeLeadByToken, startEmailOtp } from "@/lib/leads/email-otp";
 import { submitOfferLead, type OfferLeadFieldErrors } from "@/lib/leads/actions";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
 
 const RESEND_COOLDOWN_SECONDS = 30;
-const PENDING_LEAD_STORAGE_KEY = "mf_ofertas_pending_email";
-const PENDING_LEAD_TTL_MS = 48 * 60 * 60_000; // 48h
+const RESUME_TOKEN_STORAGE_KEY = "mf_ofertas_resume_token";
+const RESUME_TOKEN_TTL_MS = 48 * 60 * 60_000; // 48h — espelha o TTL gravado no servidor
 
 /**
- * Guarda o e-mail em andamento por um tempo curto, não indefinidamente:
- * grava junto um `expiresAt` e qualquer leitura depois desse prazo trata
- * como se nunca tivesse existido (e limpa a chave). Uso `localStorage` em
- * vez de `sessionStorage` de propósito — é o único jeito de a recuperação
- * sobreviver a fechar a aba/o Safari, que é exatamente o cenário que esse
- * recurso existe para cobrir. Ver explicação completa dos alcances e
- * limites no relatório entregue com essa mudança.
+ * O navegador guarda só um token opaco (nunca e-mail/WhatsApp/nome) por um
+ * tempo curto: grava junto um `expiresAt` local e qualquer leitura depois
+ * desse prazo trata como se nunca tivesse existido. O TTL de verdade é
+ * sempre reforçado pelo servidor (resume_token_expires_at) — esta checagem
+ * client-side é só pra não nem tentar mandar um token visivelmente vencido.
  */
-function readPendingLeadEmail(): string | null {
+function readResumeToken(): string | null {
   try {
-    const raw = window.localStorage.getItem(PENDING_LEAD_STORAGE_KEY);
+    const raw = window.localStorage.getItem(RESUME_TOKEN_STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { email: string; expiresAt: number };
-    if (!parsed.email || Date.now() > parsed.expiresAt) {
-      window.localStorage.removeItem(PENDING_LEAD_STORAGE_KEY);
+    const parsed = JSON.parse(raw) as { token: string; expiresAt: number };
+    if (!parsed.token || Date.now() > parsed.expiresAt) {
+      window.localStorage.removeItem(RESUME_TOKEN_STORAGE_KEY);
       return null;
     }
-    return parsed.email;
+    return parsed.token;
   } catch {
-    window.localStorage.removeItem(PENDING_LEAD_STORAGE_KEY);
+    window.localStorage.removeItem(RESUME_TOKEN_STORAGE_KEY);
     return null;
   }
 }
 
-function writePendingLeadEmail(email: string) {
+function writeResumeToken(token: string) {
   try {
     window.localStorage.setItem(
-      PENDING_LEAD_STORAGE_KEY,
-      JSON.stringify({ email, expiresAt: Date.now() + PENDING_LEAD_TTL_MS }),
+      RESUME_TOKEN_STORAGE_KEY,
+      JSON.stringify({ token, expiresAt: Date.now() + RESUME_TOKEN_TTL_MS }),
     );
   } catch {
     // localStorage indisponível (modo privado etc.) — recuperação de
@@ -51,9 +49,9 @@ function writePendingLeadEmail(email: string) {
   }
 }
 
-function clearPendingLeadEmail() {
+function clearResumeToken() {
   try {
-    window.localStorage.removeItem(PENDING_LEAD_STORAGE_KEY);
+    window.localStorage.removeItem(RESUME_TOKEN_STORAGE_KEY);
   } catch {
     // ignore
   }
@@ -73,6 +71,7 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
   const [name, setName] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [email, setEmail] = useState("");
+  const [resumeToken, setResumeToken] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const [errors, setErrors] = useState<OfferLeadFieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
@@ -86,23 +85,24 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
 
   // Recuperação de progresso: se a cliente já tinha cadastro em andamento
   // (fechou a página no meio da verificação), continua de onde parou em vez
-  // de pedir pra preencher tudo de novo — só quando dá pra confirmar com
-  // segurança (mesmo e-mail + mesmo navegador/sessão que geraram o lead).
+  // de pedir pra preencher tudo de novo — o navegador manda só o token
+  // opaco guardado; quem resolve pra qual lead ele pertence e devolve o
+  // e-mail (só pra exibir na tela, nunca persistido de novo) é o servidor.
   useEffect(() => {
     if (resumeCheckedRef.current) return;
     resumeCheckedRef.current = true;
 
-    const pendingEmail = readPendingLeadEmail();
-    if (!pendingEmail) return;
+    const token = readResumeToken();
+    if (!token) return;
 
-    const sessionId = getVisitorSessionId();
-    getLeadVerificationStatus(pendingEmail, sessionId)
+    resumeLeadByToken(token)
       .then((status) => {
         if (!status.found) {
-          clearPendingLeadEmail();
+          clearResumeToken();
           return;
         }
-        setEmail(pendingEmail);
+        setResumeToken(token);
+        if (status.email) setEmail(status.email);
         if (status.emailVerified) {
           setStep("done");
         } else {
@@ -159,32 +159,35 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
       return;
     }
 
-    writePendingLeadEmail(email);
+    writeResumeToken(result.resumeToken);
+    setResumeToken(result.resumeToken);
     setStep("whatsappStep");
   }
 
   async function handleStartEmailVerification() {
+    if (!resumeToken) return;
     setStep("emailStep");
     setOtpError(null);
     setResendCooldown(RESEND_COOLDOWN_SECONDS);
-    const result = await startEmailOtp(email, getVisitorSessionId());
+    const result = await startEmailOtp(resumeToken);
     if ("error" in result) setOtpError(result.error);
   }
 
   async function handleResendCode() {
-    if (resendCooldown > 0) return;
+    if (resendCooldown > 0 || !resumeToken) return;
     setOtpError(null);
     setResendCooldown(RESEND_COOLDOWN_SECONDS);
-    const result = await startEmailOtp(email, getVisitorSessionId());
+    const result = await startEmailOtp(resumeToken);
     if ("error" in result) setOtpError(result.error);
   }
 
   async function handleConfirmCode(e: React.FormEvent) {
     e.preventDefault();
+    if (!resumeToken) return;
     setOtpError(null);
     setOtpSubmitting(true);
 
-    const result = await confirmEmailOtp(email, otpCode, getVisitorSessionId());
+    const result = await confirmEmailOtp(resumeToken, otpCode);
 
     setOtpSubmitting(false);
 
@@ -193,7 +196,7 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
       return;
     }
 
-    clearPendingLeadEmail();
+    clearResumeToken();
     setStep("done");
   }
 

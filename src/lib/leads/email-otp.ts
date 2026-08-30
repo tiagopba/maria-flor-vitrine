@@ -1,5 +1,6 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import { headers } from "next/headers";
 import { createPublicClient } from "@/lib/supabase/public";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -22,28 +23,34 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * Project Settings → Auth → SMTP Settings do Supabase (o padrão do
  * Supabase tem limite de envio baixo, pensado só para desenvolvimento).
  *
- * Toda operação aqui exige `email` + `sessionId` batendo com o lead já
- * cadastrado (mesmo `session_id` gravado por `submitOfferLead`). Isso
- * fecha duas coisas de uma vez: (1) ninguém consegue disparar OTP pra um
- * e-mail que não é seu (precisaria adivinhar o UUID de sessão daquele
- * navegador) e (2) vira a base do rate limit por e-mail abaixo.
+ * Toda operação aqui identifica o lead só pelo TOKEN opaco de retomada
+ * (ver `generateResumeToken` em lib/leads/actions.ts) — nunca por e-mail
+ * vindo do cliente. O navegador não precisa saber nem guardar o e-mail; o
+ * servidor resolve o lead a partir do hash do token e usa o e-mail que já
+ * tem gravado. Isso fecha, de graça, "disparar OTP pra e-mail alheio":
+ * seria preciso possuir um token de 256 bits que nunca foi exposto.
  */
 
-const OTP_RESEND_COOLDOWN_MS = 30_000;
-const OTP_SEND_WINDOW_MS = 60 * 60_000; // 1h
+const OTP_RESEND_COOLDOWN_SECONDS = 30;
+const OTP_SEND_WINDOW_SECONDS = 60 * 60; // 1h
 const OTP_SEND_MAX_PER_WINDOW = 5;
 
 const GENERIC_SEND_ERROR = "Não foi possível enviar o código agora. Tente novamente.";
 const GENERIC_COOLDOWN_ERROR = "Aguarde um instante antes de pedir um novo código.";
+const GENERIC_INVALID_TOKEN_ERROR = "Sua sessão de cadastro expirou. Preencha o formulário novamente.";
 
-async function logAbuseSignal(action: "send" | "verify", email: string) {
+function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+async function logAbuseSignal(action: "send" | "verify", leadId: string) {
   // Sinal auxiliar só pra investigação manual em caso de abuso — nunca usado
-  // pra bloquear ou identificar "quem é a cliente" (isso é feito por
-  // email+sessionId, não por IP, que é falível: NAT, rede móvel, VPN).
+  // pra bloquear ou identificar "quem é a cliente" (isso é feito pelo
+  // token, não por IP, que é falível: NAT, rede móvel, VPN).
   try {
     const h = await headers();
     const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? h.get("x-real-ip") ?? "unknown";
-    console.log(`[email-otp] ${action} email=${email} ip=${ip}`);
+    console.log(`[email-otp] ${action} lead=${leadId} ip=${ip}`);
   } catch {
     // headers() pode falhar fora de um request real (ex: script de teste) — não é crítico.
   }
@@ -51,70 +58,76 @@ async function logAbuseSignal(action: "send" | "verify", email: string) {
 
 type LeadOtpRow = {
   id: string;
-  session_id: string;
+  email: string | null;
   auth_user_id: string | null;
-  otp_email_send_count: number | null;
-  otp_email_last_sent_at: string | null;
+  whatsapp_verified_at: string | null;
+  email_verified_at: string | null;
 };
 
-async function findLeadForOtp(email: string, sessionId: string): Promise<LeadOtpRow | null> {
+async function resolveLead(token: string): Promise<LeadOtpRow | null> {
+  if (!token) return null;
+
   const admin = createAdminClient();
   const { data } = await admin
     .from("leads")
-    .select("id, session_id, auth_user_id, otp_email_send_count, otp_email_last_sent_at")
-    .eq("email", email)
+    .select("id, email, auth_user_id, whatsapp_verified_at, email_verified_at")
+    .eq("resume_token_hash", hashToken(token))
+    .gt("resume_token_expires_at", new Date().toISOString())
     .maybeSingle();
 
-  if (!data || data.session_id !== sessionId) return null;
   return data;
 }
 
-export type StartEmailOtpResult = { success: true } | { error: string };
+export type StartEmailOtpResult = { success: true; email: string } | { error: string };
 
-export async function startEmailOtp(email: string, sessionId: string): Promise<StartEmailOtpResult> {
-  if (!email || !sessionId) return { error: GENERIC_SEND_ERROR };
+export async function startEmailOtp(token: string): Promise<StartEmailOtpResult> {
+  const lead = await resolveLead(token);
+  if (!lead || !lead.email) return { error: GENERIC_INVALID_TOKEN_ERROR };
 
-  const lead = await findLeadForOtp(email, sessionId);
-  if (!lead) {
-    // Não revela se o e-mail existe ou não, nem se foi o sessionId que não bateu.
+  const admin = createAdminClient();
+
+  // Checagem + incremento atômicos numa única instrução UPDATE no banco
+  // (função try_claim_email_otp_send) — evita a race condition de "ler
+  // contador em JS, decidir, gravar depois", onde duas requisições
+  // concorrentes poderiam ambas passar pelo limite antes de qualquer
+  // uma delas gravar. A linha do lead fica travada durante o UPDATE, então
+  // a segunda chamada só é avaliada depois que a primeira já commitou.
+  const { data: claimed, error: claimError } = await admin.rpc("try_claim_email_otp_send", {
+    p_lead_id: lead.id,
+    p_cooldown_seconds: OTP_RESEND_COOLDOWN_SECONDS,
+    p_window_seconds: OTP_SEND_WINDOW_SECONDS,
+    p_max_per_window: OTP_SEND_MAX_PER_WINDOW,
+  });
+
+  if (claimError) {
+    console.error("[startEmailOtp] falha ao checar rate limit:", claimError.message);
     return { error: GENERIC_SEND_ERROR };
   }
 
-  const now = Date.now();
-  const lastSentAt = lead.otp_email_last_sent_at ? new Date(lead.otp_email_last_sent_at).getTime() : null;
+  if (!claimed) {
+    // Não é crítico pra segurança (a decisão já foi tomada de forma atômica
+    // acima) — só uma leitura extra pra escolher a mensagem mais adequada.
+    const { data: current } = await admin
+      .from("leads")
+      .select("otp_email_last_sent_at")
+      .eq("id", lead.id)
+      .maybeSingle();
 
-  if (lastSentAt !== null && now - lastSentAt < OTP_RESEND_COOLDOWN_MS) {
-    return { error: GENERIC_COOLDOWN_ERROR };
+    const lastSentAt = current?.otp_email_last_sent_at ? new Date(current.otp_email_last_sent_at).getTime() : null;
+    const withinCooldown = lastSentAt !== null && Date.now() - lastSentAt < OTP_RESEND_COOLDOWN_SECONDS * 1000;
+
+    return {
+      error: withinCooldown
+        ? GENERIC_COOLDOWN_ERROR
+        : "Você atingiu o limite de códigos por hora. Tente novamente mais tarde.",
+    };
   }
 
-  const withinWindow = lastSentAt !== null && now - lastSentAt < OTP_SEND_WINDOW_MS;
-  const currentCount = withinWindow ? (lead.otp_email_send_count ?? 0) : 0;
-
-  if (withinWindow && currentCount >= OTP_SEND_MAX_PER_WINDOW) {
-    return { error: "Você atingiu o limite de códigos por hora. Tente novamente mais tarde." };
-  }
-
-  await logAbuseSignal("send", email);
-
-  // Grava a tentativa ANTES de chamar o Supabase — assim um erro do lado do
-  // Supabase (ou alguém batendo a action em paralelo) não permite passar do
-  // limite só porque o envio em si falhou depois de contado.
-  const admin = createAdminClient();
-  const { error: counterError } = await admin
-    .from("leads")
-    .update({
-      otp_email_send_count: currentCount + 1,
-      otp_email_last_sent_at: new Date(now).toISOString(),
-    })
-    .eq("id", lead.id);
-
-  if (counterError) {
-    console.error("[startEmailOtp] falha ao atualizar contador de envio:", counterError.message);
-  }
+  await logAbuseSignal("send", lead.id);
 
   const supabase = createPublicClient();
   const { error } = await supabase.auth.signInWithOtp({
-    email,
+    email: lead.email,
     options: { shouldCreateUser: true },
   });
 
@@ -126,30 +139,21 @@ export async function startEmailOtp(email: string, sessionId: string): Promise<S
     return { error: GENERIC_SEND_ERROR };
   }
 
-  return { success: true };
+  return { success: true, email: lead.email };
 }
 
 export type ConfirmEmailOtpResult = { success: true } | { error: string };
 
-export async function confirmEmailOtp(
-  email: string,
-  code: string,
-  sessionId: string,
-): Promise<ConfirmEmailOtpResult> {
+export async function confirmEmailOtp(token: string, code: string): Promise<ConfirmEmailOtpResult> {
   const trimmedCode = code.trim();
   if (!/^\d{6}$/.test(trimmedCode)) {
     return { error: "Digite o código de 6 dígitos que enviamos." };
   }
-  if (!email || !sessionId) {
-    return { error: "Código inválido ou expirado. Confira e tente de novo." };
-  }
 
-  const lead = await findLeadForOtp(email, sessionId);
-  if (!lead) {
-    return { error: "Código inválido ou expirado. Confira e tente de novo." };
-  }
+  const lead = await resolveLead(token);
+  if (!lead || !lead.email) return { error: GENERIC_INVALID_TOKEN_ERROR };
 
-  await logAbuseSignal("verify", email);
+  await logAbuseSignal("verify", lead.id);
 
   const supabase = createPublicClient();
 
@@ -157,7 +161,7 @@ export async function confirmEmailOtp(
   // qualquer código errado ou vencido cai aqui como erro genérico, sem
   // vazar qual dos dois motivos foi (evita dar pista útil pra tentativa
   // de força bruta).
-  const { data, error } = await supabase.auth.verifyOtp({ email, token: trimmedCode, type: "email" });
+  const { data, error } = await supabase.auth.verifyOtp({ email: lead.email, token: trimmedCode, type: "email" });
 
   if (error) {
     return { error: "Código inválido ou expirado. Confira e tente de novo." };
@@ -171,15 +175,22 @@ export async function confirmEmailOtp(
 
   if (lead.auth_user_id && authUserId && lead.auth_user_id !== authUserId) {
     // Não deveria acontecer (o mesmo e-mail normalmente aponta pro mesmo
-    // auth.users), mas se acontecer não sobrescrevo silenciosamente: registro
-    // pra investigar e só gravo email_verified_at, que já é verdade — o
-    // e-mail foi de fato confirmado agora, independente do vínculo antigo.
+    // auth.users), mas se acontecer não sobrescrevo silenciosamente: fica
+    // registrado em auth_user_id_conflict_at pra qualquer conversão futura
+    // desse lead em conta de cliente exigir investigação manual antes. A
+    // posse do e-mail foi comprovada agora mesmo, então email_verified_at
+    // é gravado normalmente — só o vínculo de conta que fica em aberto.
     console.error(
       `[confirmEmailOtp] auth_user_id inconsistente para lead ${lead.id}: já tinha ${lead.auth_user_id}, verifyOtp devolveu ${authUserId}`,
     );
     const { error: updateError } = await admin
       .from("leads")
-      .update({ email_verified_at: new Date().toISOString() })
+      .update({
+        email_verified_at: new Date().toISOString(),
+        auth_user_id_conflict_at: new Date().toISOString(),
+        resume_token_hash: null,
+        resume_token_expires_at: null,
+      })
       .eq("id", lead.id);
     if (updateError) {
       console.error("[confirmEmailOtp] falha ao marcar email_verified_at:", updateError.message);
@@ -187,11 +198,15 @@ export async function confirmEmailOtp(
     return { success: true };
   }
 
+  // Job do token está feito (e-mail confirmado) — invalida pra não sobrar
+  // um capability token ativo além do necessário.
   const { error: updateError } = await admin
     .from("leads")
     .update({
       email_verified_at: new Date().toISOString(),
       auth_user_id: lead.auth_user_id ?? authUserId,
+      resume_token_hash: null,
+      resume_token_expires_at: null,
     })
     .eq("id", lead.id);
 
@@ -206,41 +221,33 @@ export interface LeadVerificationStatus {
   found: boolean;
   whatsappVerified: boolean;
   emailVerified: boolean;
+  email: string | null;
 }
 
 const NOT_FOUND_STATUS: LeadVerificationStatus = {
   found: false,
   whatsappVerified: false,
   emailVerified: false,
+  email: null,
 };
 
 /**
- * Recuperação de progresso — se a cliente fechar a página no meio da
- * verificação, ela não deve ser obrigada a recomeçar do zero. Só devolve
- * booleanos (nunca o registro completo do lead), e só quando quem pergunta
- * já sabe o e-mail E o session_id que geraram aquele cadastro (o mesmo
- * usado no rate limit de `submitOfferLead`) — reduz o risco de virar um
- * oráculo de enumeração de e-mails cadastrados.
+ * Recuperação de progresso via token opaco — se a cliente fechar a página
+ * no meio da verificação, ela não deve ser obrigada a recomeçar do zero.
+ * O navegador manda só o token que guardou; o servidor resolve o lead pelo
+ * hash e devolve o estado necessário pra continuar a UI (inclusive o
+ * e-mail, só pra exibir "enviamos pra fulana@..." — o navegador nunca
+ * persiste esse e-mail, só mantém em memória enquanto a aba estiver
+ * aberta).
  */
-export async function getLeadVerificationStatus(
-  email: string,
-  sessionId: string,
-): Promise<LeadVerificationStatus> {
-  if (!email || !sessionId) return NOT_FOUND_STATUS;
-
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("leads")
-    .select("whatsapp_verified_at, email_verified_at")
-    .eq("email", email)
-    .eq("session_id", sessionId)
-    .maybeSingle();
-
-  if (!data) return NOT_FOUND_STATUS;
+export async function resumeLeadByToken(token: string): Promise<LeadVerificationStatus> {
+  const lead = await resolveLead(token);
+  if (!lead) return NOT_FOUND_STATUS;
 
   return {
     found: true,
-    whatsappVerified: data.whatsapp_verified_at !== null,
-    emailVerified: data.email_verified_at !== null,
+    whatsappVerified: lead.whatsapp_verified_at !== null,
+    emailVerified: lead.email_verified_at !== null,
+    email: lead.email,
   };
 }

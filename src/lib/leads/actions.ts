@@ -1,5 +1,6 @@
 "use server";
 
+import { randomBytes, createHash } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPrivacyPolicyVersion } from "@/lib/site-settings/institutional";
 import { offerLeadSchema } from "@/lib/validation/lead";
@@ -29,10 +30,27 @@ export interface OfferLeadFieldErrors {
   form?: string;
 }
 
-export type SubmitOfferLeadResult = { success: true } | { errors: OfferLeadFieldErrors };
+export type SubmitOfferLeadResult =
+  | { success: true; resumeToken: string }
+  | { errors: OfferLeadFieldErrors };
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const CONSENT_SOURCE = "grupo_ofertas";
+const RESUME_TOKEN_TTL_MS = 48 * 60 * 60_000; // 48h
+
+/**
+ * Token opaco de retomada — o navegador guarda só ele (não e-mail/WhatsApp/
+ * nome). 32 bytes aleatórios (256 bits de entropia, bem acima dos 128 bits
+ * pedidos) em base64url. Gravamos no banco só o hash SHA-256; o valor em
+ * texto puro existe apenas nesta função e na resposta enviada uma vez ao
+ * navegador — nunca fica persistido em claro em lugar nenhum.
+ */
+function generateResumeToken(): { token: string; hash: string; expiresAt: string } {
+  const token = randomBytes(32).toString("base64url");
+  const hash = createHash("sha256").update(token).digest("hex");
+  const expiresAt = new Date(Date.now() + RESUME_TOKEN_TTL_MS).toISOString();
+  return { token, hash, expiresAt };
+}
 
 /**
  * Cadastro no Grupo de Ofertas — reaproveita a tabela `leads` já existente
@@ -93,6 +111,7 @@ export async function submitOfferLead(input: SubmitOfferLeadInput): Promise<Subm
 
   const privacyPolicyVersion = await getPrivacyPolicyVersion();
   const nowIso = new Date().toISOString();
+  const { token: resumeToken, hash: resumeTokenHash, expiresAt: resumeTokenExpiresAt } = generateResumeToken();
 
   const payload: LeadInsert = {
     name,
@@ -112,6 +131,8 @@ export async function submitOfferLead(input: SubmitOfferLeadInput): Promise<Subm
     utm_content: input.utmContent,
     referrer: input.referrer,
     updated_at: nowIso,
+    resume_token_hash: resumeTokenHash,
+    resume_token_expires_at: resumeTokenExpiresAt,
   };
 
   const { error: writeError } = existingId
@@ -134,5 +155,5 @@ export async function submitOfferLead(input: SubmitOfferLeadInput): Promise<Subm
     metadata: { updated_existing: existingId !== null },
   });
 
-  return { success: true };
+  return { success: true, resumeToken };
 }
