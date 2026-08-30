@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { CategoryCard } from "@/components/catalog/CategoryCard";
+import { HomeSearch } from "@/components/catalog/HomeSearch";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
-import { SearchForm } from "@/components/catalog/SearchForm";
 import { getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { listPublishedProducts } from "@/lib/db/products";
 
@@ -29,7 +29,7 @@ export default async function Home() {
         <h2 className="mb-4 text-center font-display text-lg text-text sm:text-xl">
           Viu no Instagram? Encontre aqui.
         </h2>
-        <SearchForm />
+        <HomeSearch />
       </section>
 
       {/* Acabaram de chegar */}
