@@ -40,6 +40,13 @@ export default async function ComoChegarPage() {
         )}
         {info.phone && <p className="text-text-muted">{info.phone}</p>}
         {info.hours && <p className="text-text-muted">{info.hours}</p>}
+        {info.publicContactEmail && (
+          <p className="text-text-muted">
+            <a href={`mailto:${info.publicContactEmail}`} className="underline hover:text-primary">
+              {info.publicContactEmail}
+            </a>
+          </p>
+        )}
       </div>
 
       <div className="mt-8">

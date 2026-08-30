@@ -3,13 +3,13 @@ import { Button } from "@/components/ui/Button";
 import { CategoryCard } from "@/components/catalog/CategoryCard";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
 import { SearchForm } from "@/components/catalog/SearchForm";
-import { getActiveCategoriesPublic } from "@/lib/db/categories";
+import { getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { listPublishedProducts } from "@/lib/db/products";
 
 export default async function Home() {
   const [novidades, categorias] = await Promise.all([
     listPublishedProducts(8),
-    getActiveCategoriesPublic(),
+    getVisibleCategoriesPublic(),
   ]);
 
   return (

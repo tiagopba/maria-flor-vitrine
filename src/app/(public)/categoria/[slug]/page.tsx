@@ -1,14 +1,24 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
 import { getCategoryBySlugPublic } from "@/lib/db/categories";
 import { listPublishedProductsByCategory } from "@/lib/db/products";
+
+// "novidades" é seção especial (rota própria /novidades), não uma
+// categoria de catálogo comum — ver lib/db/categories.ts. Continua
+// existindo no banco (não apagamos a categoria), só não tem página
+// própria em /categoria/novidades: qualquer link antigo pra cá redireciona.
+const SPECIAL_CATEGORY_REDIRECTS: Record<string, string> = {
+  novidades: "/novidades",
+};
 
 export async function generateMetadata({
   params,
 }: PageProps<"/categoria/[slug]">): Promise<Metadata> {
   const { slug } = await params;
+  if (SPECIAL_CATEGORY_REDIRECTS[slug]) redirect(SPECIAL_CATEGORY_REDIRECTS[slug]);
+
   const category = await getCategoryBySlugPublic(slug);
 
   if (!category) return {};
@@ -30,6 +40,8 @@ export async function generateMetadata({
 
 export default async function CategoryPage({ params }: PageProps<"/categoria/[slug]">) {
   const { slug } = await params;
+  if (SPECIAL_CATEGORY_REDIRECTS[slug]) redirect(SPECIAL_CATEGORY_REDIRECTS[slug]);
+
   const category = await getCategoryBySlugPublic(slug);
 
   if (!category) notFound();

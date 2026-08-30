@@ -46,7 +46,12 @@ export async function getCategoryByIdAdmin(id: string): Promise<Category | null>
   return data;
 }
 
-/** Categorias ativas, ordenadas — para Home/navegação pública. */
+/**
+ * Categorias ativas, ordenadas — todas, mesmo vazias. Usado onde uma
+ * categoria vazia/nova precisa aparecer de propósito (ex: dropdown do
+ * admin de produtos, pra dar pra escolher uma categoria que ainda não tem
+ * nenhum produto).
+ */
 export async function getActiveCategoriesPublic(): Promise<Category[]> {
   const supabase = createPublicClient();
   const { data, error } = await supabase
@@ -57,6 +62,46 @@ export async function getActiveCategoriesPublic(): Promise<Category[]> {
 
   if (error) throw new Error(error.message);
   return data ?? [];
+}
+
+// "novidades" é uma seção especial fixa (rota /novidades, produtos mais
+// recentes de qualquer categoria) — não uma categoria de catálogo. Se
+// existir uma categoria com esse slug, ela fica escondida das listas
+// públicas (Home/menu) para não duplicar/confundir com a seção especial;
+// continua existindo normalmente no banco e no admin.
+const HIDDEN_PUBLIC_CATEGORY_SLUGS = ["novidades"];
+
+/**
+ * Categorias ativas, ordenadas, só as que têm pelo menos 1 produto
+ * público (mesma regra de "público" usada em listPublishedProducts*:
+ * status != ARCHIVED e published_at preenchido) — para Home/menu público.
+ * Categoria vazia ou só com produtos arquivados/rascunho não aparece pra
+ * cliente, mas continua normal no admin (ver getActiveCategoriesPublic).
+ *
+ * Duas consultas (categorias + ids de produto com categoria), não uma por
+ * categoria — evita N+1 mesmo com dezenas de categorias.
+ */
+export async function getVisibleCategoriesPublic(): Promise<Category[]> {
+  const supabase = createPublicClient();
+
+  const [{ data: categories, error: categoriesError }, { data: products, error: productsError }] =
+    await Promise.all([
+      supabase
+        .from("categories")
+        .select("*")
+        .eq("active", true)
+        .order("position", { ascending: true }),
+      supabase.from("products").select("category_id").neq("status", "ARCHIVED").not("published_at", "is", null),
+    ]);
+
+  if (categoriesError) throw new Error(categoriesError.message);
+  if (productsError) throw new Error(productsError.message);
+
+  const categoryIdsWithProducts = new Set((products ?? []).map((p) => p.category_id));
+
+  return (categories ?? []).filter(
+    (category) => !HIDDEN_PUBLIC_CATEGORY_SLUGS.includes(category.slug) && categoryIdsWithProducts.has(category.id),
+  );
 }
 
 export async function getCategoryBySlugPublic(slug: string): Promise<Category | null> {
