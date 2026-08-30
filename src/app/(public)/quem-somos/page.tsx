@@ -15,11 +15,10 @@ export const metadata: Metadata = {
 // no Supabase.
 export const dynamic = "force-dynamic";
 
-const DEFAULT_STORY = [
-  "A Maria Flor nasceu com o propósito de aproximar moda, estilo e atendimento de verdade.",
-  "Há anos fazemos parte da rotina de mulheres da nossa cidade, sempre com novidades, atendimento próximo e uma seleção de peças pensada para diferentes momentos e estilos.",
-  "Nossa loja física é o coração da Maria Flor, e agora nossa Vitrine Online nasceu para deixar essa experiência ainda mais fácil: você acompanha as novidades, salva suas peças favoritas e fala diretamente com nossas vendedoras.",
-].join("\n");
+const DEFAULT_STORY =
+  "Nossa loja física, em Paranaíba, no interior de Mato Grosso do Sul, é o coração da Maria Flor. " +
+  "Agora, nossa Vitrine Online nasceu para tornar essa experiência ainda mais fácil: você acompanha " +
+  "as novidades, salva suas peças favoritas e fala diretamente com nossas vendedoras.";
 
 export default async function QuemSomosPage() {
   const info = await getInstitutionalInfo();

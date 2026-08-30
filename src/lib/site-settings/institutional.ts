@@ -47,6 +47,12 @@ export interface InstitutionalInfo {
   ofertasText: string | null;
   ofertasCtaLabel: string | null;
   ofertasEnabled: boolean;
+  // Contato institucional — deliberadamente separado do e-mail técnico
+  // que o Supabase Auth usa pra mandar OTP (lib/leads/email-otp.ts não lê
+  // nada daqui, e este arquivo nunca referencia aquele fluxo). Nenhum dos
+  // dois é assumido a partir do remetente do OTP.
+  publicContactEmail: string | null;
+  privacyContactEmail: string | null;
 }
 
 const DEFAULTS: InstitutionalInfo = {
@@ -74,6 +80,8 @@ const DEFAULTS: InstitutionalInfo = {
   ofertasText: null,
   ofertasCtaLabel: null,
   ofertasEnabled: true,
+  publicContactEmail: null,
+  privacyContactEmail: null,
 };
 
 function readString(value: Record<string, unknown>, key: string): string | null {
@@ -138,6 +146,8 @@ export async function getInstitutionalInfo(): Promise<InstitutionalInfo> {
     ofertasText: readString(value, "ofertas_text"),
     ofertasCtaLabel: readString(value, "ofertas_cta_label"),
     ofertasEnabled: readBoolean(value, "ofertas_enabled", true),
+    publicContactEmail: readString(value, "public_contact_email"),
+    privacyContactEmail: readString(value, "privacy_contact_email"),
   };
 }
 
@@ -178,6 +188,8 @@ export async function updateInstitutionalInfo(info: InstitutionalInfo): Promise<
     ofertas_text: info.ofertasText,
     ofertas_cta_label: info.ofertasCtaLabel,
     ofertas_enabled: info.ofertasEnabled,
+    public_contact_email: info.publicContactEmail,
+    privacy_contact_email: info.privacyContactEmail,
   };
 
   const { error } = await supabase.from("site_settings").upsert({ key: "INSTITUTIONAL_INFO", value });

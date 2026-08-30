@@ -16,6 +16,13 @@ export const dynamic = "force-dynamic";
 export default async function PoliticaDePrivacidadePage() {
   const [info, version] = await Promise.all([getInstitutionalInfo(), getPrivacyPolicyVersion()]);
 
+  // Ordem de fallback pedida: e-mail de privacidade -> e-mail de
+  // atendimento -> telefone/WhatsApp institucional -> nada (sem inventar
+  // contato). Nunca usa o remetente do OTP — email-otp.ts nem sabe que
+  // essa página existe.
+  const privacyEmail = info.privacyContactEmail ?? info.publicContactEmail;
+  const hasAnyContact = Boolean(privacyEmail || info.phone || info.whatsapp);
+
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-10 sm:px-6">
       <h1 className="font-display text-2xl text-text sm:text-3xl">Política de Privacidade</h1>
@@ -83,9 +90,8 @@ export default async function PoliticaDePrivacidadePage() {
         <section>
           <h2 className="font-display text-lg text-text">Seus direitos</h2>
           <p className="mt-2">
-            Você pode pedir para ver, corrigir ou excluir seus dados a qualquer momento, falando
-            diretamente com a gente pelo WhatsApp da loja
-            {info.whatsapp ? "" : " (em breve disponível nesta página)"}.
+            Você pode pedir para ver, corrigir ou excluir seus dados a qualquer momento, usando um
+            dos contatos abaixo.
           </p>
         </section>
 
@@ -99,11 +105,32 @@ export default async function PoliticaDePrivacidadePage() {
 
         <section>
           <h2 className="font-display text-lg text-text">Contato</h2>
-          <p className="mt-2">
-            Dúvidas sobre esta política? Fale com a gente pelo WhatsApp da loja
-            {info.legalName ? ` ou procure por ${info.legalName}` : ""}
-            {info.cnpj ? ` (CNPJ ${info.cnpj})` : ""}.
-          </p>
+          {hasAnyContact ? (
+            <div className="mt-2 flex flex-col gap-1">
+              <p>Dúvidas sobre esta política ou sobre seus dados? Fale com a gente:</p>
+              {privacyEmail && (
+                <p>
+                  E-mail:{" "}
+                  <a href={`mailto:${privacyEmail}`} className="underline hover:text-primary">
+                    {privacyEmail}
+                  </a>
+                </p>
+              )}
+              {info.whatsapp && <p>WhatsApp: {info.whatsapp}</p>}
+              {info.phone && <p>Telefone: {info.phone}</p>}
+              {(info.legalName || info.cnpj) && (
+                <p className="text-text-muted">
+                  {info.legalName ? info.legalName : ""}
+                  {info.cnpj ? ` (CNPJ ${info.cnpj})` : ""}
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="mt-2 text-text-muted">
+              Nossos canais de contato para dúvidas sobre privacidade estarão disponíveis nesta
+              página em breve.
+            </p>
+          )}
         </section>
       </div>
     </main>

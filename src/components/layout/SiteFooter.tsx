@@ -65,6 +65,13 @@ export async function SiteFooter() {
             {info.legalName ? ` – ${info.legalName}` : ""}
           </p>
           {info.cnpj && <p className="break-words">CNPJ: {info.cnpj}</p>}
+          {info.publicContactEmail && (
+            <p className="break-words">
+              <a href={`mailto:${info.publicContactEmail}`} className="hover:text-primary hover:underline">
+                {info.publicContactEmail}
+              </a>
+            </p>
+          )}
           <p>Todos os direitos reservados</p>
         </div>
       </div>

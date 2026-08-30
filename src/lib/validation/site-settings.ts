@@ -30,6 +30,22 @@ const optionalUrlWithPrefix = (max: number, prefixes: string[], hint: string) =>
     .refine((v) => !v || prefixes.some((prefix) => v.toLowerCase().startsWith(prefix)), hint)
     .transform((v) => (v ? v : null));
 
+/**
+ * Trim + lowercase pra armazenar sempre no mesmo formato; vazio vira
+ * null; qualquer coisa não-vazia precisa ser um e-mail válido de verdade
+ * (não aceita string qualquer).
+ */
+const optionalEmail = (max: number) =>
+  z
+    .string()
+    .trim()
+    .toLowerCase()
+    .max(max)
+    .optional()
+    .or(z.literal(""))
+    .refine((v) => !v || z.string().email().safeParse(v).success, "Digite um e-mail válido.")
+    .transform((v) => (v ? v : null));
+
 const socialLinkSchema = z.object({
   label: z.string().trim().min(1).max(40),
   url: z.string().trim().url(),
@@ -74,6 +90,8 @@ export const siteSettingsSchema = z.object({
   ofertasText: optionalText(300),
   ofertasCtaLabel: optionalText(40),
   ofertasEnabled: z.boolean(),
+  publicContactEmail: optionalEmail(160),
+  privacyContactEmail: optionalEmail(160),
 });
 
 export type SiteSettingsInput = z.infer<typeof siteSettingsSchema>;
