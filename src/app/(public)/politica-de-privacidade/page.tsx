@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getInstitutionalInfo, getPrivacyPolicyVersion } from "@/lib/site-settings/institutional";
+import { EMAIL_OTP_LENGTH } from "@/lib/leads/otp-constants";
 
 export const metadata: Metadata = {
   title: "Política de Privacidade",
@@ -43,9 +44,9 @@ export default async function PoliticaDePrivacidadePage() {
         <section>
           <h2 className="font-display text-lg text-text">Confirmação de e-mail</h2>
           <p className="mt-2">
-            Para garantir que o e-mail informado é realmente seu, enviamos um código de
-            confirmação numérico antes de concluir seu cadastro no Grupo de Ofertas. Esse código
-            expira em poucos minutos e nunca é compartilhado com terceiros.
+            Para garantir que o e-mail informado é realmente seu, enviamos um código de {EMAIL_OTP_LENGTH}{" "}
+            dígitos antes de concluir seu cadastro no Grupo de Ofertas. Esse código expira em
+            poucos minutos e nunca é compartilhado com terceiros.
           </p>
         </section>
 
