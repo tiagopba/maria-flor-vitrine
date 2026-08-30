@@ -79,3 +79,46 @@ export async function confirmEmailOtp(email: string, code: string): Promise<Conf
 
   return { success: true };
 }
+
+export interface LeadVerificationStatus {
+  found: boolean;
+  whatsappVerified: boolean;
+  emailVerified: boolean;
+}
+
+const NOT_FOUND_STATUS: LeadVerificationStatus = {
+  found: false,
+  whatsappVerified: false,
+  emailVerified: false,
+};
+
+/**
+ * Recuperação de progresso — se a cliente fechar a página no meio da
+ * verificação, ela não deve ser obrigada a recomeçar do zero. Só devolve
+ * booleanos (nunca o registro completo do lead), e só quando quem pergunta
+ * já sabe o e-mail E o session_id que geraram aquele cadastro (o mesmo
+ * usado no rate limit de `submitOfferLead`) — reduz o risco de virar um
+ * oráculo de enumeração de e-mails cadastrados.
+ */
+export async function getLeadVerificationStatus(
+  email: string,
+  sessionId: string,
+): Promise<LeadVerificationStatus> {
+  if (!email || !sessionId) return NOT_FOUND_STATUS;
+
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("leads")
+    .select("whatsapp_verified_at, email_verified_at")
+    .eq("email", email)
+    .eq("session_id", sessionId)
+    .maybeSingle();
+
+  if (!data) return NOT_FOUND_STATUS;
+
+  return {
+    found: true,
+    whatsappVerified: data.whatsapp_verified_at !== null,
+    emailVerified: data.email_verified_at !== null,
+  };
+}

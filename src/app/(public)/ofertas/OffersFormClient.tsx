@@ -5,12 +5,13 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { recordInstitutionalEvent } from "@/lib/institutional/analytics";
-import { confirmEmailOtp, startEmailOtp } from "@/lib/leads/email-otp";
+import { confirmEmailOtp, getLeadVerificationStatus, startEmailOtp } from "@/lib/leads/email-otp";
 import { submitOfferLead, type OfferLeadFieldErrors } from "@/lib/leads/actions";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
 
 const RESEND_COOLDOWN_SECONDS = 30;
+const PENDING_LEAD_STORAGE_KEY = "mf_ofertas_pending_email";
 
 /**
  * Cadastro → confirmar WhatsApp → confirmar e-mail → liberado. A etapa de
@@ -30,11 +31,40 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
   const [errors, setErrors] = useState<OfferLeadFieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const viewedRef = useRef(false);
+  const resumeCheckedRef = useRef(false);
 
   const [otpCode, setOtpCode] = useState("");
   const [otpError, setOtpError] = useState<string | null>(null);
   const [otpSubmitting, setOtpSubmitting] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Recuperação de progresso: se a cliente já tinha cadastro em andamento
+  // (fechou a página no meio da verificação), continua de onde parou em vez
+  // de pedir pra preencher tudo de novo — só quando dá pra confirmar com
+  // segurança (mesmo e-mail + mesmo navegador/sessão que geraram o lead).
+  useEffect(() => {
+    if (resumeCheckedRef.current) return;
+    resumeCheckedRef.current = true;
+
+    const pendingEmail = window.localStorage.getItem(PENDING_LEAD_STORAGE_KEY);
+    if (!pendingEmail) return;
+
+    const sessionId = getVisitorSessionId();
+    getLeadVerificationStatus(pendingEmail, sessionId)
+      .then((status) => {
+        if (!status.found) {
+          window.localStorage.removeItem(PENDING_LEAD_STORAGE_KEY);
+          return;
+        }
+        setEmail(pendingEmail);
+        if (status.emailVerified) {
+          setStep("done");
+        } else {
+          setStep("whatsappStep");
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (viewedRef.current) return;
@@ -83,6 +113,7 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
       return;
     }
 
+    window.localStorage.setItem(PENDING_LEAD_STORAGE_KEY, email);
     setStep("whatsappStep");
   }
 
@@ -116,6 +147,7 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
       return;
     }
 
+    window.localStorage.removeItem(PENDING_LEAD_STORAGE_KEY);
     setStep("done");
   }
 
@@ -156,6 +188,7 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
       <div className="flex flex-col gap-4">
         <div className="text-center">
           <p className="font-display text-lg text-text">Quase pronto para entrar no grupo ❤️</p>
+          <p className="mt-1 text-xs font-medium uppercase tracking-wide text-primary">2 de 2</p>
           <p className="mt-1 text-sm text-text-muted">Confirme seu e-mail</p>
         </div>
 
@@ -199,6 +232,7 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
       <div className="flex flex-col items-center gap-4 text-center">
         <div>
           <p className="font-display text-lg text-text">Quase pronto para entrar no grupo ❤️</p>
+          <p className="mt-1 text-xs font-medium uppercase tracking-wide text-primary">1 de 2</p>
           <p className="mt-1 text-sm text-text-muted">Confirme seu WhatsApp</p>
         </div>
 
