@@ -15,12 +15,25 @@ export const metadata: Metadata = {
 // no Supabase.
 export const dynamic = "force-dynamic";
 
+const DEFAULT_STORY = [
+  "A Maria Flor nasceu com o propósito de aproximar moda, estilo e atendimento de verdade.",
+  "Há anos fazemos parte da rotina de mulheres da nossa cidade, sempre com novidades, atendimento próximo e uma seleção de peças pensada para diferentes momentos e estilos.",
+  "Nossa loja física é o coração da Maria Flor, e agora nossa Vitrine Online nasceu para deixar essa experiência ainda mais fácil: você acompanha as novidades, salva suas peças favoritas e fala diretamente com nossas vendedoras.",
+].join("\n");
+
 export default async function QuemSomosPage() {
   const info = await getInstitutionalInfo();
 
+  const title = info.quemSomosTitle ?? "Nossa história";
+  const storyParagraphs = (info.quemSomosText ?? DEFAULT_STORY).split("\n").filter((p) => p.trim());
+  const ctaLabel = info.quemSomosCtaLabel ?? "Ver novidades";
+
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-10 sm:px-6">
-      <h1 className="font-display text-2xl text-text sm:text-3xl">Nossa história</h1>
+      <h1 className="font-display text-2xl text-text sm:text-3xl">{title}</h1>
+      {info.quemSomosSubtitle && (
+        <p className="mt-1 text-sm text-text-muted sm:text-base">{info.quemSomosSubtitle}</p>
+      )}
 
       <div className="mt-6 overflow-hidden rounded-2xl bg-muted">
         {info.facadePhotoUrl ? (
@@ -41,18 +54,9 @@ export default async function QuemSomosPage() {
       </div>
 
       <div className="mt-8 flex flex-col gap-4 text-sm leading-relaxed text-text sm:text-base">
-        <p>
-          A Maria Flor nasceu com o propósito de aproximar moda, estilo e atendimento de verdade.
-        </p>
-        <p>
-          Há anos fazemos parte da rotina de mulheres da nossa cidade, sempre com novidades,
-          atendimento próximo e uma seleção de peças pensada para diferentes momentos e estilos.
-        </p>
-        <p>
-          Nossa loja física é o coração da Maria Flor, e agora nossa Vitrine Online nasceu para
-          deixar essa experiência ainda mais fácil: você acompanha as novidades, salva suas peças
-          favoritas e fala diretamente com nossas vendedoras.
-        </p>
+        {storyParagraphs.map((paragraph, index) => (
+          <p key={index}>{paragraph}</p>
+        ))}
       </div>
 
       <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -62,7 +66,7 @@ export default async function QuemSomosPage() {
           </Button>
         </Link>
         <Link href="/novidades" className="sm:flex-1">
-          <Button className="h-12 w-full">Ver novidades</Button>
+          <Button className="h-12 w-full">{ctaLabel}</Button>
         </Link>
       </div>
     </main>
