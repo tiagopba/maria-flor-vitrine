@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { recordInstitutionalEvent } from "@/lib/institutional/analytics";
 import { confirmEmailOtp, resumeLeadByToken, startEmailOtp } from "@/lib/leads/email-otp";
+import { EMAIL_OTP_LENGTH } from "@/lib/leads/otp-constants";
 import { submitOfferLead, type OfferLeadFieldErrors } from "@/lib/leads/actions";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
@@ -242,24 +243,25 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
         </div>
 
         <p className="text-center text-sm text-text-muted">
-          Enviamos um código de 6 dígitos para <span className="font-medium text-text">{email}</span>.
+          Enviamos um código de {EMAIL_OTP_LENGTH} dígitos para{" "}
+          <span className="font-medium text-text">{email}</span>.
         </p>
 
         <form onSubmit={handleConfirmCode} className="flex flex-col gap-4">
           <Input
             label="Código de confirmação"
             inputMode="numeric"
-            maxLength={6}
-            placeholder="000000"
+            maxLength={EMAIL_OTP_LENGTH}
+            placeholder={"0".repeat(EMAIL_OTP_LENGTH)}
             value={otpCode}
-            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, EMAIL_OTP_LENGTH))}
             error={otpError ?? undefined}
             className="text-center text-lg tracking-[0.3em]"
             autoComplete="one-time-code"
             required
           />
 
-          <Button type="submit" disabled={otpSubmitting || otpCode.length !== 6} className="h-12">
+          <Button type="submit" disabled={otpSubmitting || otpCode.length !== EMAIL_OTP_LENGTH} className="h-12">
             {otpSubmitting ? "Confirmando..." : "Confirmar código"}
           </Button>
 

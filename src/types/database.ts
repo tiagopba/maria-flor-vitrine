@@ -42,12 +42,7 @@ export type AnalyticsEventType =
   | "SELECTION_VIEWED"
   | "PRODUCT_FLOW_STARTED"
   | "PRODUCT_FLOW_SEE_MORE_CLICK"
-  // ATENÇÃO: os quatro abaixo ainda NÃO existem na constraint do banco —
-  // migration preparada em supabase/migrations/, mas não aplicada (ver
-  // aviso na entrega do módulo institucional). Até ser aprovada e
-  // aplicada, inserts com esses valores falham (silenciosamente, sem
-  // quebrar a UI — mesmo padrão de toda gravação em analytics_events
-  // deste projeto).
+  // Módulo institucional (Grupo de Ofertas) — já aplicados na constraint do banco.
   | "OFFERS_PAGE_VIEW"
   | "OFFER_LEAD_SUBMITTED"
   | "OFFERS_GROUP_CLICK"
@@ -232,9 +227,7 @@ export interface Database {
           consent_source: string | null;
           session_id: string;
           created_at: string;
-          // ATENÇÃO: colunas abaixo ainda NÃO existem no banco — migration
-          // preparada em supabase/migrations/, mas não aplicada (ver
-          // aviso na entrega do módulo institucional).
+          // Módulo institucional (Grupo de Ofertas) — já aplicadas no banco.
           whatsapp_normalized: string | null;
           email_marketing_consent: boolean;
           privacy_policy_version: string | null;
@@ -328,8 +321,6 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
-      // ATENÇÃO: função ainda NÃO existe no banco — mesma migration
-      // pendente das colunas de verificação de leads (não aplicada).
       try_claim_email_otp_send: {
         Args: {
           p_lead_id: string;

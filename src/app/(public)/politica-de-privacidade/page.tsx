@@ -44,7 +44,7 @@ export default async function PoliticaDePrivacidadePage() {
           <h2 className="font-display text-lg text-text">Confirmação de WhatsApp e e-mail</h2>
           <p className="mt-2">
             Para garantir que o WhatsApp e o e-mail informados são realmente seus, enviamos um
-            código de confirmação de 6 dígitos para cada um deles antes de concluir seu cadastro
+            código de confirmação numérico para cada um deles antes de concluir seu cadastro
             no Grupo de Ofertas. Esse código expira em poucos minutos e nunca é compartilhado com
             terceiros.
           </p>

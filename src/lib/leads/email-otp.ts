@@ -4,10 +4,11 @@ import { createHash } from "node:crypto";
 import { headers } from "next/headers";
 import { createPublicClient } from "@/lib/supabase/public";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { EMAIL_OTP_LENGTH } from "./otp-constants";
 
 /**
  * Confirmação real de propriedade do e-mail — usa o próprio OTP de e-mail
- * do Supabase Auth (código de 6 dígitos por padrão, expira sozinho, já
+ * do Supabase Auth (código numérico — ver EMAIL_OTP_LENGTH — expira sozinho, já
  * tem limite de reenvio embutido) em vez de reinventar geração, hash e
  * expiração de código na mão. Nunca guardamos o código em lugar nenhum do
  * nosso banco — quem guarda e confere é o próprio Supabase Auth; só
@@ -146,8 +147,8 @@ export type ConfirmEmailOtpResult = { success: true } | { error: string };
 
 export async function confirmEmailOtp(token: string, code: string): Promise<ConfirmEmailOtpResult> {
   const trimmedCode = code.trim();
-  if (!/^\d{6}$/.test(trimmedCode)) {
-    return { error: "Digite o código de 6 dígitos que enviamos." };
+  if (!new RegExp(`^\\d{${EMAIL_OTP_LENGTH}}$`).test(trimmedCode)) {
+    return { error: `Digite o código de ${EMAIL_OTP_LENGTH} dígitos que enviamos.` };
   }
 
   const lead = await resolveLead(token);
@@ -164,6 +165,7 @@ export async function confirmEmailOtp(token: string, code: string): Promise<Conf
   const { data, error } = await supabase.auth.verifyOtp({ email: lead.email, token: trimmedCode, type: "email" });
 
   if (error) {
+    console.error(`[confirmEmailOtp] verifyOtp falhou: code=${error.code} status=${error.status} msg=${error.message}`);
     return { error: "Código inválido ou expirado. Confira e tente de novo." };
   }
 
