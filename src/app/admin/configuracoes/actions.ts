@@ -51,6 +51,8 @@ export async function updateSiteSettingsAction(
     ofertasText: formData.get("ofertasText"),
     ofertasCtaLabel: formData.get("ofertasCtaLabel"),
     ofertasEnabled: formData.get("ofertasEnabled") === "on",
+    publicContactEmail: formData.get("publicContactEmail"),
+    privacyContactEmail: formData.get("privacyContactEmail"),
   });
 
   if (!parsed.success) {

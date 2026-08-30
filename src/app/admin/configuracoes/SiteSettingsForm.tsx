@@ -116,6 +116,63 @@ function UrlFieldWithTest({
   );
 }
 
+/**
+ * Igual UrlFieldWithTest, mas pra e-mail: "Testar e-mail" abre o cliente
+ * de e-mail padrão via mailto: com o valor atualmente digitado — nunca
+ * envia nada sozinho, só confere se o endereço abre certo.
+ */
+function EmailFieldWithTest({
+  label,
+  name,
+  description,
+  defaultValue,
+  error,
+  placeholder,
+}: {
+  label: string;
+  name: string;
+  description?: string;
+  defaultValue?: string | null;
+  error?: string;
+  placeholder?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function handleTest() {
+    const value = inputRef.current?.value.trim();
+    if (!value) return;
+    window.open(`mailto:${value}`, "_blank", "noopener,noreferrer");
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={name} className="text-sm font-medium text-text">
+        {label}
+      </label>
+      {description && <p className="-mt-0.5 text-xs text-text-muted">{description}</p>}
+      <div className="flex gap-2">
+        <input
+          ref={inputRef}
+          id={name}
+          name={name}
+          type="email"
+          placeholder={placeholder}
+          defaultValue={defaultValue ?? ""}
+          className="h-11 flex-1 rounded-lg border border-border bg-surface px-3.5 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+        />
+        <button
+          type="button"
+          onClick={handleTest}
+          className="shrink-0 rounded-lg border border-border px-3 text-sm font-medium text-text-muted transition-colors hover:bg-muted hover:text-text"
+        >
+          Testar e-mail
+        </button>
+      </div>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
 export function SiteSettingsForm({
   action,
   defaultValues,
@@ -351,6 +408,31 @@ export function SiteSettingsForm({
           defaultValue={defaultValues.wazeUrl}
           error={errors.wazeUrl}
         />
+      </Section>
+
+      <Section
+        title="Contato e Privacidade"
+        description="Separado do e-mail técnico que envia o código de confirmação (OTP) do Grupo de Ofertas — esse é infraestrutura do Supabase Auth, não contato de atendimento."
+      >
+        <EmailFieldWithTest
+          name="publicContactEmail"
+          label="E-mail de atendimento"
+          description="E-mail que as clientes podem usar para falar com a Maria Flor."
+          placeholder="contato@modamariaflor.com.br"
+          defaultValue={defaultValues.publicContactEmail}
+          error={errors.publicContactEmail}
+        />
+        <EmailFieldWithTest
+          name="privacyContactEmail"
+          label="E-mail para privacidade (opcional)"
+          description="E-mail para solicitações relacionadas a dados pessoais e privacidade. Se ficar vazio, a Política de Privacidade usa o e-mail de atendimento."
+          placeholder="privacidade@modamariaflor.com.br"
+          defaultValue={defaultValues.privacyContactEmail}
+          error={errors.privacyContactEmail}
+        />
+        <p className="text-xs text-text-muted">
+          Telefone e WhatsApp da loja já são os campos da seção Como Chegar, acima.
+        </p>
       </Section>
 
       <Section title="Redes sociais" description="Aparecem no rodapé, quando preenchidas.">
