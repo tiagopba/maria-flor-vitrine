@@ -4,11 +4,13 @@ import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { Price } from "@/components/ui/Price";
 import { BackButton } from "@/components/layout/BackButton";
+import { CategoryCarousel, type CategoryCarouselItem } from "@/components/catalog/CategoryCarousel";
 import { FavoriteButton } from "@/components/catalog/FavoriteButton";
 import { ProductGallery } from "@/components/catalog/ProductGallery";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
 import { ProductWhatsAppFlow } from "@/components/catalog/ProductWhatsAppFlow";
 import { PRODUCT_STATUS_LABELS, publicStatusBadge } from "@/lib/catalog/status";
+import { getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { getProductBySlugPublic, getRelatedProductsPublic } from "@/lib/db/products";
 import { getActiveSellersForModal } from "@/lib/db/sellers";
 
@@ -42,13 +44,26 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
 
   if (!product) notFound();
 
-  const [sellers, related] = await Promise.all([
+  const [sellers, related, categories] = await Promise.all([
     getActiveSellersForModal(),
     getRelatedProductsPublic(product.id, product.category_id),
+    getVisibleCategoriesPublic(),
   ]);
 
   const badge = publicStatusBadge(product.status);
   const isSoldOut = product.status === "SOLD_OUT";
+
+  // "Novidades" primeiro por ser o acesso mais amplo (peças recentes de
+  // qualquer categoria); não é uma Category de catálogo de verdade, então
+  // entra à mão em vez de vir de getVisibleCategoriesPublic.
+  const exploreCategories: CategoryCarouselItem[] = [
+    { key: "novidades", name: "Novidades", href: "/novidades" },
+    ...categories.map((category) => ({
+      key: category.id,
+      name: category.name,
+      href: `/categoria/${category.slug}`,
+    })),
+  ];
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6">
@@ -103,6 +118,12 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
           <ProductGrid products={related} />
         </section>
       )}
+
+      <section className="mt-12 min-w-0">
+        <h2 className="mb-1 font-display text-lg text-text sm:text-xl">Explorar categorias</h2>
+        <p className="mb-4 text-sm text-text-muted">Acesse outras categorias</p>
+        <CategoryCarousel items={exploreCategories} />
+      </section>
 
       {product.categoryName && product.categorySlug && (
         <div className="mt-8 text-center">

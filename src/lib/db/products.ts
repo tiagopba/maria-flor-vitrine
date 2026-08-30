@@ -237,6 +237,105 @@ export async function searchPublishedProducts(query: string, limit = 24): Promis
   return attachCategoryAndMainImage(supabase, data ?? []);
 }
 
+export type PublicProductStatusFilter = "available" | "last_units";
+
+export interface PublicProductFilters {
+  categoryId?: string;
+  size?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  /**
+   * "available" = ACTIVE + CHECK_AVAILABILITY (giro normal, sem alarde).
+   * "last_units" = só LAST_UNITS. SOLD_OUT nunca aparece em nenhum dos
+   * dois — quem quiser ver esgotados usa a listagem sem filtro de status.
+   */
+  status?: PublicProductStatusFilter;
+  q?: string;
+}
+
+/**
+ * Listagem pública com filtros combináveis (preço, tamanho, categoria,
+ * status, busca por texto) — usada por /busca, /novidades e
+ * /categoria/[slug]. Mesmas regras de visibilidade das outras listagens
+ * públicas (status != ARCHIVED, published_at preenchido, o resto fica
+ * para a RLS). O filtro de preço compara contra o preço EFETIVO (o
+ * promocional quando existir, senão o cheio — a mesma regra que o
+ * componente Price usa pra exibir), resolvido num único OR no banco, sem
+ * trazer tudo pra filtrar em memória. O filtro de tamanho é uma segunda
+ * consulta (product_sizes é tabela separada, não coluna) — nunca uma
+ * consulta por produto.
+ */
+export async function listPublishedProductsFiltered(
+  filters: PublicProductFilters = {},
+  limit?: number
+): Promise<ProductListItem[]> {
+  const supabase = createPublicClient();
+
+  let query = supabase.from("products").select("*").neq("status", "ARCHIVED").not("published_at", "is", null);
+
+  if (filters.categoryId) {
+    query = query.eq("category_id", filters.categoryId);
+  }
+
+  if (filters.status === "last_units") {
+    query = query.eq("status", "LAST_UNITS");
+  } else if (filters.status === "available") {
+    query = query.in("status", ["ACTIVE", "CHECK_AVAILABILITY"]);
+  }
+
+  if (filters.minPrice != null || filters.maxPrice != null) {
+    const min = filters.minPrice ?? 0;
+    const max = filters.maxPrice ?? 999999;
+    query = query.or(
+      `and(promotional_price.gte.${min},promotional_price.lte.${max}),and(promotional_price.is.null,price.gte.${min},price.lte.${max})`
+    );
+  }
+
+  if (filters.q) {
+    const term = filters.q.trim();
+    const escaped = term.replace(/[%_]/g, "\\$&");
+    query = query.or(`code.ilike.%${escaped}%,name.ilike.%${escaped}%,description.ilike.%${escaped}%`);
+  }
+
+  if (filters.size) {
+    const { data: sizeRows, error: sizeError } = await supabase
+      .from("product_sizes")
+      .select("product_id")
+      .eq("size", filters.size);
+    if (sizeError) throw new Error(sizeError.message);
+
+    const ids = [...new Set((sizeRows ?? []).map((r) => r.product_id))];
+    if (ids.length === 0) return [];
+    query = query.in("id", ids);
+  }
+
+  query = query.order("published_at", { ascending: false });
+  if (limit) query = query.limit(limit);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  return attachCategoryAndMainImage(supabase, data ?? []);
+}
+
+/**
+ * Tamanhos distintos entre produtos públicos, para o filtro de tamanho só
+ * oferecer valores que existem de verdade no catálogo (nunca uma lista
+ * fixa). Uma única consulta em product_sizes, sem juntar products aqui —
+ * a policy de RLS "product_sizes_public_read" já restringe as linhas
+ * devolvidas às de produtos publicados/não arquivados, então o filtro de
+ * visibilidade não precisa ser repetido em código.
+ */
+export async function getAvailableSizesPublic(): Promise<string[]> {
+  const supabase = createPublicClient();
+  const { data, error } = await supabase.from("product_sizes").select("size");
+  if (error) throw new Error(error.message);
+
+  return [...new Set((data ?? []).map((row) => row.size))].sort((a, b) =>
+    a.localeCompare(b, "pt-BR", { numeric: true })
+  );
+}
+
 /**
  * Busca vários produtos de uma vez pelos IDs salvos localmente em
  * Favoritos — sempre em lote (produtos + imagens + tamanhos + categorias
