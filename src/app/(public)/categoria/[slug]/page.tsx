@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
+import { FilteredEmptyState } from "@/components/catalog/FilteredEmptyState";
+import { ProductFilters } from "@/components/catalog/ProductFilters";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
+import { buildFilterQueryString, hasActiveFilters, parsePublicFilters } from "@/lib/catalog/filters";
 import { getCategoryBySlugPublic } from "@/lib/db/categories";
-import { listPublishedProductsByCategory } from "@/lib/db/products";
+import { getAvailableSizesPublic, listPublishedProductsFiltered } from "@/lib/db/products";
 
 // "novidades" é seção especial (rota própria /novidades), não uma
 // categoria de catálogo comum — ver lib/db/categories.ts. Continua
@@ -38,7 +41,7 @@ export async function generateMetadata({
   };
 }
 
-export default async function CategoryPage({ params }: PageProps<"/categoria/[slug]">) {
+export default async function CategoryPage({ params, searchParams }: PageProps<"/categoria/[slug]">) {
   const { slug } = await params;
   if (SPECIAL_CATEGORY_REDIRECTS[slug]) redirect(SPECIAL_CATEGORY_REDIRECTS[slug]);
 
@@ -46,7 +49,20 @@ export default async function CategoryPage({ params }: PageProps<"/categoria/[sl
 
   if (!category) notFound();
 
-  const products = await listPublishedProductsByCategory(category.id);
+  const rawParams = await searchParams;
+  const filters = parsePublicFilters(rawParams);
+  const filtersActive = hasActiveFilters(filters);
+
+  const [products, sizeOptions] = await Promise.all([
+    listPublishedProductsFiltered({
+      categoryId: category.id,
+      size: filters.size ?? undefined,
+      minPrice: filters.minPrice ?? undefined,
+      maxPrice: filters.maxPrice ?? undefined,
+      status: filters.status ?? undefined,
+    }),
+    getAvailableSizesPublic(),
+  ]);
 
   const emptyMessage =
     category.description ??
@@ -70,10 +86,18 @@ export default async function CategoryPage({ params }: PageProps<"/categoria/[sl
       <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
         <h1 className="mb-6 font-display text-2xl text-text sm:text-3xl">{category.name}</h1>
 
+        <div className="mb-6">
+          <ProductFilters basePath={`/categoria/${slug}`} initial={filters} sizeOptions={sizeOptions} />
+        </div>
+
         {products.length === 0 ? (
-          <div className="mt-10 flex flex-col items-center gap-2 py-10 text-center text-text-muted">
-            <p className="max-w-sm">{emptyMessage}</p>
-          </div>
+          filtersActive ? (
+            <FilteredEmptyState clearHref={`/categoria/${slug}${buildFilterQueryString({})}`} />
+          ) : (
+            <div className="mt-10 flex flex-col items-center gap-2 py-10 text-center text-text-muted">
+              <p className="max-w-sm">{emptyMessage}</p>
+            </div>
+          )
         ) : (
           <ProductGrid products={products} />
         )}

@@ -1,15 +1,37 @@
 import type { Metadata } from "next";
+import { FilteredEmptyState } from "@/components/catalog/FilteredEmptyState";
+import { ProductFilters } from "@/components/catalog/ProductFilters";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
 import { SearchForm } from "@/components/catalog/SearchForm";
-import { searchPublishedProducts } from "@/lib/db/products";
+import { buildFilterQueryString, hasActiveFilters, parsePublicFilters } from "@/lib/catalog/filters";
+import { getCategoryBySlugPublic, getVisibleCategoriesPublic } from "@/lib/db/categories";
+import { getAvailableSizesPublic, listPublishedProductsFiltered } from "@/lib/db/products";
 
 export const metadata: Metadata = { title: "Busca" };
 
 export default async function SearchPage({ searchParams }: PageProps<"/busca">) {
   const params = await searchParams;
   const query = typeof params.q === "string" ? params.q : "";
+  const filters = parsePublicFilters(params);
+  const filtersActive = hasActiveFilters(filters);
+  const shouldSearch = Boolean(query) || filtersActive;
 
-  const products = query ? await searchPublishedProducts(query) : [];
+  const [category, sizeOptions, categoryOptions] = await Promise.all([
+    filters.category ? getCategoryBySlugPublic(filters.category) : Promise.resolve(null),
+    getAvailableSizesPublic(),
+    getVisibleCategoriesPublic(),
+  ]);
+
+  const products = shouldSearch
+    ? await listPublishedProductsFiltered({
+        q: query || undefined,
+        categoryId: category?.id,
+        size: filters.size ?? undefined,
+        minPrice: filters.minPrice ?? undefined,
+        maxPrice: filters.maxPrice ?? undefined,
+        status: filters.status ?? undefined,
+      })
+    : [];
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
@@ -22,15 +44,29 @@ export default async function SearchPage({ searchParams }: PageProps<"/busca">) 
 
       <SearchForm defaultValue={query} />
 
+      <div className="mt-5">
+        <ProductFilters
+          basePath="/busca"
+          initial={filters}
+          sizeOptions={sizeOptions}
+          categoryOptions={categoryOptions.map((c) => ({ slug: c.slug, name: c.name }))}
+          preserveParams={{ q: query || undefined }}
+        />
+      </div>
+
       <div className="mt-8">
-        {!query ? (
+        {!shouldSearch ? (
           <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-text-muted">
-            Digite um nome ou código para buscar.
+            Digite um nome ou código para buscar, ou use os filtros acima.
           </div>
         ) : products.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-text-muted">
-            Nenhuma peça encontrada para &quot;{query}&quot;. Tente outro nome ou código.
-          </div>
+          filtersActive ? (
+            <FilteredEmptyState clearHref={`/busca${buildFilterQueryString({}, { q: query || undefined })}`} />
+          ) : (
+            <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-text-muted">
+              Nenhuma peça encontrada para &quot;{query}&quot;. Tente outro nome ou código.
+            </div>
+          )
         ) : (
           <ProductGrid products={products} />
         )}
