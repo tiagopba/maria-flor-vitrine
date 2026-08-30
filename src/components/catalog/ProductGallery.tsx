@@ -74,9 +74,9 @@ export function ProductGallery({
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex min-w-0 flex-col gap-2">
       <div
-        className="group relative aspect-[3/4] w-full overflow-hidden rounded-xl bg-muted"
+        className="group relative aspect-[3/4] w-full min-w-0 overflow-hidden rounded-xl bg-muted"
         role="group"
         aria-label={`Galeria de fotos — ${productName}`}
         aria-roledescription="carrossel"
