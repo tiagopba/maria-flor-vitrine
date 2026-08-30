@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { CategoryCarousel } from "@/components/catalog/CategoryCarousel";
 import { FilteredEmptyState } from "@/components/catalog/FilteredEmptyState";
 import { ProductFilters } from "@/components/catalog/ProductFilters";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
 import { SearchForm } from "@/components/catalog/SearchForm";
+import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
 import { buildFilterQueryString, hasActiveFilters, parsePublicFilters } from "@/lib/catalog/filters";
 import { getCategoryBySlugPublic, getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { getAvailableSizesPublic, listPublishedProductsFiltered } from "@/lib/db/products";
@@ -16,7 +18,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/busca">) 
   const filtersActive = hasActiveFilters(filters);
   const shouldSearch = Boolean(query) || filtersActive;
 
-  const [category, sizeOptions, categoryOptions] = await Promise.all([
+  const [category, sizeOptions, categories] = await Promise.all([
     filters.category ? getCategoryBySlugPublic(filters.category) : Promise.resolve(null),
     getAvailableSizesPublic(),
     getVisibleCategoriesPublic(),
@@ -29,9 +31,10 @@ export default async function SearchPage({ searchParams }: PageProps<"/busca">) 
         size: filters.size ?? undefined,
         minPrice: filters.minPrice ?? undefined,
         maxPrice: filters.maxPrice ?? undefined,
-        status: filters.status ?? undefined,
       })
     : [];
+
+  const exploreCategories = buildExploreCategoriesItems(categories);
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
@@ -49,7 +52,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/busca">) 
           basePath="/busca"
           initial={filters}
           sizeOptions={sizeOptions}
-          categoryOptions={categoryOptions.map((c) => ({ slug: c.slug, name: c.name }))}
+          categoryOptions={categories.map((c) => ({ slug: c.slug, name: c.name }))}
           preserveParams={{ q: query || undefined }}
         />
       </div>
@@ -71,6 +74,12 @@ export default async function SearchPage({ searchParams }: PageProps<"/busca">) 
           <ProductGrid products={products} />
         )}
       </div>
+
+      <section className="mt-12 min-w-0">
+        <h2 className="mb-1 font-display text-lg text-text sm:text-xl">Explore por categoria</h2>
+        <p className="mb-4 text-sm text-text-muted">Encontre o que combina com você</p>
+        <CategoryCarousel items={exploreCategories} />
+      </section>
     </main>
   );
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Camera, Mail } from "lucide-react";
 import { getInstitutionalInfo } from "@/lib/site-settings/institutional";
 
 /**
@@ -51,8 +52,9 @@ export async function SiteFooter() {
                 href={link.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-primary"
+                className="flex items-center gap-1.5 hover:text-primary"
               >
+                {link.label === "Instagram" && <Camera className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />}
                 {link.label}
               </a>
             ))}
@@ -66,7 +68,8 @@ export async function SiteFooter() {
           </p>
           {info.cnpj && <p className="break-words">CNPJ: {info.cnpj}</p>}
           {info.publicContactEmail && (
-            <p className="break-words">
+            <p className="flex items-center gap-1.5 break-words">
+              <Mail className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
               <a href={`mailto:${info.publicContactEmail}`} className="hover:text-primary hover:underline">
                 {info.publicContactEmail}
               </a>

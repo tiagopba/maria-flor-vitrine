@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
+import { CategoryCarousel } from "@/components/catalog/CategoryCarousel";
 import { FilteredEmptyState } from "@/components/catalog/FilteredEmptyState";
 import { ProductFilters } from "@/components/catalog/ProductFilters";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
+import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
 import { buildFilterQueryString, hasActiveFilters, parsePublicFilters } from "@/lib/catalog/filters";
-import { getCategoryBySlugPublic } from "@/lib/db/categories";
+import { getCategoryBySlugPublic, getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { getAvailableSizesPublic, listPublishedProductsFiltered } from "@/lib/db/products";
 
 // "novidades" é seção especial (rota própria /novidades), não uma
@@ -53,20 +55,21 @@ export default async function CategoryPage({ params, searchParams }: PageProps<"
   const filters = parsePublicFilters(rawParams);
   const filtersActive = hasActiveFilters(filters);
 
-  const [products, sizeOptions] = await Promise.all([
+  const [products, sizeOptions, categories] = await Promise.all([
     listPublishedProductsFiltered({
       categoryId: category.id,
       size: filters.size ?? undefined,
       minPrice: filters.minPrice ?? undefined,
       maxPrice: filters.maxPrice ?? undefined,
-      status: filters.status ?? undefined,
     }),
     getAvailableSizesPublic(),
+    getVisibleCategoriesPublic(),
   ]);
 
   const emptyMessage =
     category.description ??
     `As novidades em ${category.name.toLowerCase()} da Maria Flor aparecem aqui.`;
+  const exploreCategories = buildExploreCategoriesItems(categories);
 
   return (
     <main className="flex flex-1 flex-col">
@@ -101,6 +104,12 @@ export default async function CategoryPage({ params, searchParams }: PageProps<"
         ) : (
           <ProductGrid products={products} />
         )}
+
+        <section className="mt-12 min-w-0">
+          <h2 className="mb-1 font-display text-lg text-text sm:text-xl">Explore por categoria</h2>
+          <p className="mb-4 text-sm text-text-muted">Encontre o que combina com você</p>
+          <CategoryCarousel items={exploreCategories} />
+        </section>
       </div>
     </main>
   );
