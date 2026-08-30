@@ -41,7 +41,17 @@ export type AnalyticsEventType =
   | "SELECTION_CREATED"
   | "SELECTION_VIEWED"
   | "PRODUCT_FLOW_STARTED"
-  | "PRODUCT_FLOW_SEE_MORE_CLICK";
+  | "PRODUCT_FLOW_SEE_MORE_CLICK"
+  // ATENÇÃO: os quatro abaixo ainda NÃO existem na constraint do banco —
+  // migration preparada em supabase/migrations/, mas não aplicada (ver
+  // aviso na entrega do módulo institucional). Até ser aprovada e
+  // aplicada, inserts com esses valores falham (silenciosamente, sem
+  // quebrar a UI — mesmo padrão de toda gravação em analytics_events
+  // deste projeto).
+  | "OFFERS_PAGE_VIEW"
+  | "OFFER_LEAD_SUBMITTED"
+  | "OFFERS_GROUP_CLICK"
+  | "STORE_DIRECTIONS_CLICK";
 
 type Table<Row, RequiredInsertKeys extends keyof Row> = {
   Row: Row;
@@ -222,6 +232,18 @@ export interface Database {
           consent_source: string | null;
           session_id: string;
           created_at: string;
+          // ATENÇÃO: colunas abaixo ainda NÃO existem no banco — migration
+          // preparada em supabase/migrations/, mas não aplicada (ver
+          // aviso na entrega do módulo institucional).
+          whatsapp_normalized: string | null;
+          email_marketing_consent: boolean;
+          privacy_policy_version: string | null;
+          utm_source: string | null;
+          utm_medium: string | null;
+          utm_campaign: string | null;
+          utm_content: string | null;
+          referrer: string | null;
+          updated_at: string;
         },
         "name" | "whatsapp" | "session_id"
       >;
