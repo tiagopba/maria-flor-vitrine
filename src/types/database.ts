@@ -244,6 +244,8 @@ export interface Database {
           utm_content: string | null;
           referrer: string | null;
           updated_at: string;
+          whatsapp_verified_at: string | null;
+          email_verified_at: string | null;
         },
         "name" | "whatsapp" | "session_id"
       >;

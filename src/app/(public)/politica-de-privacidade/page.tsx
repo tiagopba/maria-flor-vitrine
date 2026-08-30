@@ -8,6 +8,10 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
+// Página intencionalmente sem link no rodapé nem no menu público — só é
+// alcançada pelo texto de consentimento do formulário de Ofertas (onde o
+// dado pessoal é de fato coletado). Continua existindo e indexável por
+// quem tiver o link direto; só não faz parte da navegação principal.
 export default async function PoliticaDePrivacidadePage() {
   const [info, version] = await Promise.all([getInstitutionalInfo(), getPrivacyPolicyVersion()]);
 
@@ -33,6 +37,16 @@ export default async function PoliticaDePrivacidadePage() {
             promoções e o andamento do seu atendimento, e para melhorar a experiência da nossa
             Vitrine Online. Só enviamos comunicações de marketing (novidades e promoções) para
             quem autoriza expressamente, marcando o campo de consentimento no formulário.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="font-display text-lg text-text">Confirmação de WhatsApp e e-mail</h2>
+          <p className="mt-2">
+            Para garantir que o WhatsApp e o e-mail informados são realmente seus, enviamos um
+            código de confirmação de 6 dígitos para cada um deles antes de concluir seu cadastro
+            no Grupo de Ofertas. Esse código expira em poucos minutos e nunca é compartilhado com
+            terceiros.
           </p>
         </section>
 

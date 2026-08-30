@@ -24,6 +24,9 @@ export async function SiteFooter() {
         </div>
 
         <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-text">
+          <Link href="/" className="hover:text-primary">
+            Início
+          </Link>
           <Link href="/quem-somos" className="hover:text-primary">
             Quem Somos
           </Link>
@@ -32,9 +35,6 @@ export async function SiteFooter() {
           </Link>
           <Link href="/como-chegar" className="hover:text-primary">
             Como Chegar
-          </Link>
-          <Link href="/politica-de-privacidade" className="hover:text-primary">
-            Política de Privacidade
           </Link>
         </nav>
 

@@ -5,19 +5,36 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { recordInstitutionalEvent } from "@/lib/institutional/analytics";
+import { confirmEmailOtp, startEmailOtp } from "@/lib/leads/email-otp";
 import { submitOfferLead, type OfferLeadFieldErrors } from "@/lib/leads/actions";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
 
+const RESEND_COOLDOWN_SECONDS = 30;
+
+/**
+ * Cadastro → confirmar WhatsApp → confirmar e-mail → liberado. A etapa de
+ * WhatsApp ainda não tem um provedor de OTP aprovado (ver relatório
+ * entregue com esta mudança) — mostrada de forma honesta como "em
+ * preparação" em vez de fingir uma confirmação que não existe. A etapa de
+ * e-mail é real: usa o OTP do próprio Supabase Auth (lib/leads/email-otp.ts).
+ */
+type Step = "form" | "whatsappStep" | "emailStep" | "done";
+
 export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | null }) {
+  const [step, setStep] = useState<Step>("form");
   const [name, setName] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [email, setEmail] = useState("");
   const [consent, setConsent] = useState(false);
   const [errors, setErrors] = useState<OfferLeadFieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
   const viewedRef = useRef(false);
+
+  const [otpCode, setOtpCode] = useState("");
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpSubmitting, setOtpSubmitting] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   useEffect(() => {
     if (viewedRef.current) return;
@@ -33,6 +50,12 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
       referrer: utm.referrer ?? null,
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const id = setInterval(() => setResendCooldown((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(id);
+  }, [resendCooldown]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -60,7 +83,40 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
       return;
     }
 
-    setSuccess(true);
+    setStep("whatsappStep");
+  }
+
+  async function handleStartEmailVerification() {
+    setStep("emailStep");
+    setOtpError(null);
+    setResendCooldown(RESEND_COOLDOWN_SECONDS);
+    const result = await startEmailOtp(email);
+    if ("error" in result) setOtpError(result.error);
+  }
+
+  async function handleResendCode() {
+    if (resendCooldown > 0) return;
+    setOtpError(null);
+    setResendCooldown(RESEND_COOLDOWN_SECONDS);
+    const result = await startEmailOtp(email);
+    if ("error" in result) setOtpError(result.error);
+  }
+
+  async function handleConfirmCode(e: React.FormEvent) {
+    e.preventDefault();
+    setOtpError(null);
+    setOtpSubmitting(true);
+
+    const result = await confirmEmailOtp(email, otpCode);
+
+    setOtpSubmitting(false);
+
+    if ("error" in result) {
+      setOtpError(result.error);
+      return;
+    }
+
+    setStep("done");
   }
 
   function handleGroupClick() {
@@ -76,10 +132,10 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
     }).catch(() => {});
   }
 
-  if (success) {
+  if (step === "done") {
     return (
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border px-4 py-10 text-center">
-        <p className="font-display text-lg text-text">Cadastro realizado! ❤️</p>
+        <p className="font-display text-lg text-text">Cadastro confirmado! ❤️</p>
         <p className="text-sm text-text-muted">Agora você pode entrar no nosso grupo de ofertas.</p>
 
         {offersGroupUrl ? (
@@ -91,6 +147,69 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
             Em breve avisaremos você por aqui assim que o grupo estiver disponível.
           </p>
         )}
+      </div>
+    );
+  }
+
+  if (step === "emailStep") {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="text-center">
+          <p className="font-display text-lg text-text">Quase pronto para entrar no grupo ❤️</p>
+          <p className="mt-1 text-sm text-text-muted">Confirme seu e-mail</p>
+        </div>
+
+        <p className="text-center text-sm text-text-muted">
+          Enviamos um código de 6 dígitos para <span className="font-medium text-text">{email}</span>.
+        </p>
+
+        <form onSubmit={handleConfirmCode} className="flex flex-col gap-4">
+          <Input
+            label="Código de confirmação"
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="000000"
+            value={otpCode}
+            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            error={otpError ?? undefined}
+            className="text-center text-lg tracking-[0.3em]"
+            autoComplete="one-time-code"
+            required
+          />
+
+          <Button type="submit" disabled={otpSubmitting || otpCode.length !== 6} className="h-12">
+            {otpSubmitting ? "Confirmando..." : "Confirmar código"}
+          </Button>
+
+          <button
+            type="button"
+            onClick={handleResendCode}
+            disabled={resendCooldown > 0}
+            className="self-center text-xs text-text-muted underline disabled:no-underline disabled:opacity-60"
+          >
+            {resendCooldown > 0 ? `Reenviar código (${resendCooldown}s)` : "Reenviar código"}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  if (step === "whatsappStep") {
+    return (
+      <div className="flex flex-col items-center gap-4 text-center">
+        <div>
+          <p className="font-display text-lg text-text">Quase pronto para entrar no grupo ❤️</p>
+          <p className="mt-1 text-sm text-text-muted">Confirme seu WhatsApp</p>
+        </div>
+
+        <p className="max-w-xs text-sm text-text-muted">
+          A confirmação automática por WhatsApp ainda está em preparação. Por enquanto, vamos
+          seguir com a confirmação por e-mail.
+        </p>
+
+        <Button type="button" onClick={handleStartEmailVerification} className="h-12">
+          Continuar
+        </Button>
       </div>
     );
   }
