@@ -4,7 +4,7 @@ import { OffersFormClient } from "./OffersFormClient";
 
 export const metadata: Metadata = {
   title: "Grupo de Ofertas",
-  description: "Receba lançamentos, promoções e oportunidades especiais da Maria Flor direto no WhatsApp e e-mail.",
+  description: "Receba lançamentos, promoções e oportunidades especiais da Maria Flor por e-mail.",
   robots: { index: false, follow: true },
 };
 
@@ -21,7 +21,7 @@ export default async function OfertasPage() {
         Entre para o Grupo de Ofertas da Maria Flor ❤️
       </h1>
       <p className="mt-3 text-center text-sm text-text-muted">
-        Receba lançamentos, promoções e oportunidades especiais direto no seu WhatsApp e e-mail.
+        Cadastre seu e-mail e receba novidades, promoções e oportunidades especiais.
       </p>
 
       <div className="mt-8">

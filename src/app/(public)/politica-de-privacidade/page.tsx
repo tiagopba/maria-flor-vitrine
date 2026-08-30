@@ -24,39 +24,38 @@ export default async function PoliticaDePrivacidadePage() {
         <section>
           <h2 className="font-display text-lg text-text">Quais dados coletamos</h2>
           <p className="mt-2">
-            Coletamos os dados que você mesma nos informa — como nome, WhatsApp e e-mail ao se
-            cadastrar no nosso Grupo de Ofertas — e alguns dados de navegação anônimos, como
-            páginas visitadas e produtos favoritados, para entender melhor o que você gosta.
+            Coletamos os dados que você mesma nos informa — como nome e e-mail ao se cadastrar no
+            nosso Grupo de Ofertas — e alguns dados de navegação anônimos, como páginas visitadas
+            e produtos favoritados, para entender melhor o que você gosta.
           </p>
         </section>
 
         <section>
           <h2 className="font-display text-lg text-text">Para que usamos</h2>
           <p className="mt-2">
-            Usamos seus dados para falar com você pelo WhatsApp ou e-mail sobre novidades,
-            promoções e o andamento do seu atendimento, e para melhorar a experiência da nossa
-            Vitrine Online. Só enviamos comunicações de marketing (novidades e promoções) para
-            quem autoriza expressamente, marcando o campo de consentimento no formulário.
+            Usamos o e-mail cadastrado no Grupo de Ofertas para falar com você sobre novidades e
+            promoções, e para melhorar a experiência da nossa Vitrine Online. Só enviamos
+            comunicações de marketing para quem autoriza expressamente, marcando o campo de
+            consentimento no formulário.
           </p>
         </section>
 
         <section>
-          <h2 className="font-display text-lg text-text">Confirmação de WhatsApp e e-mail</h2>
+          <h2 className="font-display text-lg text-text">Confirmação de e-mail</h2>
           <p className="mt-2">
-            Para garantir que o WhatsApp e o e-mail informados são realmente seus, enviamos um
-            código de confirmação numérico para cada um deles antes de concluir seu cadastro
-            no Grupo de Ofertas. Esse código expira em poucos minutos e nunca é compartilhado com
-            terceiros.
+            Para garantir que o e-mail informado é realmente seu, enviamos um código de
+            confirmação numérico antes de concluir seu cadastro no Grupo de Ofertas. Esse código
+            expira em poucos minutos e nunca é compartilhado com terceiros.
           </p>
         </section>
 
         <section>
-          <h2 className="font-display text-lg text-text">WhatsApp e e-mail</h2>
+          <h2 className="font-display text-lg text-text">WhatsApp</h2>
           <p className="mt-2">
             Ao favoritar peças e enviar sua seleção, você escolhe conversar com uma das nossas
             vendedoras pelo WhatsApp — essa conversa acontece diretamente com ela, fora da nossa
-            Vitrine. Se você se cadastrar no Grupo de Ofertas, podemos usar seu WhatsApp e e-mail
-            para enviar novidades e promoções, sempre respeitando o consentimento dado.
+            Vitrine, e é independente do cadastro no Grupo de Ofertas (que hoje pede só nome e
+            e-mail).
           </p>
         </section>
 

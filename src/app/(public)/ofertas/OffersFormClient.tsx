@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { OtpInput } from "@/components/ui/OtpInput";
 import { recordInstitutionalEvent } from "@/lib/institutional/analytics";
 import { confirmEmailOtp, resumeLeadByToken, startEmailOtp } from "@/lib/leads/email-otp";
 import { EMAIL_OTP_LENGTH } from "@/lib/leads/otp-constants";
@@ -16,10 +17,10 @@ const RESUME_TOKEN_STORAGE_KEY = "mf_ofertas_resume_token";
 const RESUME_TOKEN_TTL_MS = 48 * 60 * 60_000; // 48h — espelha o TTL gravado no servidor
 
 /**
- * O navegador guarda só um token opaco (nunca e-mail/WhatsApp/nome) por um
- * tempo curto: grava junto um `expiresAt` local e qualquer leitura depois
- * desse prazo trata como se nunca tivesse existido. O TTL de verdade é
- * sempre reforçado pelo servidor (resume_token_expires_at) — esta checagem
+ * O navegador guarda só um token opaco (nunca e-mail/nome) por um tempo
+ * curto: grava junto um `expiresAt` local e qualquer leitura depois desse
+ * prazo trata como se nunca tivesse existido. O TTL de verdade é sempre
+ * reforçado pelo servidor (resume_token_expires_at) — esta checagem
  * client-side é só pra não nem tentar mandar um token visivelmente vencido.
  */
 function readResumeToken(): string | null {
@@ -59,18 +60,16 @@ function clearResumeToken() {
 }
 
 /**
- * Cadastro → confirmar WhatsApp → confirmar e-mail → liberado. A etapa de
- * WhatsApp ainda não tem um provedor de OTP aprovado (ver relatório
- * entregue com esta mudança) — mostrada de forma honesta como "em
- * preparação" em vez de fingir uma confirmação que não existe. A etapa de
- * e-mail é real: usa o OTP do próprio Supabase Auth (lib/leads/email-otp.ts).
+ * Cadastro (nome + e-mail) → confirmar e-mail por OTP → liberado. WhatsApp
+ * não faz parte deste fluxo (a coluna `leads.whatsapp` continua existindo
+ * no banco pros outros fluxos que a usam de verdade — "Quero essa peça" —
+ * só não é coletada nem exibida aqui).
  */
-type Step = "form" | "whatsappStep" | "emailStep" | "done";
+type Step = "form" | "emailStep" | "done";
 
 export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | null }) {
   const [step, setStep] = useState<Step>("form");
   const [name, setName] = useState("");
-  const [whatsapp, setWhatsapp] = useState("");
   const [email, setEmail] = useState("");
   const [resumeToken, setResumeToken] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
@@ -85,10 +84,10 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
   const [resendCooldown, setResendCooldown] = useState(0);
 
   // Recuperação de progresso: se a cliente já tinha cadastro em andamento
-  // (fechou a página no meio da verificação), continua de onde parou em vez
-  // de pedir pra preencher tudo de novo — o navegador manda só o token
-  // opaco guardado; quem resolve pra qual lead ele pertence e devolve o
-  // e-mail (só pra exibir na tela, nunca persistido de novo) é o servidor.
+  // (fechou a página antes de confirmar o e-mail), continua de onde parou
+  // em vez de pedir pra preencher tudo de novo — o navegador manda só o
+  // token opaco guardado; quem resolve pra qual lead ele pertence e devolve
+  // o e-mail (só pra exibir na tela, nunca persistido de novo) é o servidor.
   useEffect(() => {
     if (resumeCheckedRef.current) return;
     resumeCheckedRef.current = true;
@@ -104,11 +103,7 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
         }
         setResumeToken(token);
         if (status.email) setEmail(status.email);
-        if (status.emailVerified) {
-          setStep("done");
-        } else {
-          setStep("whatsappStep");
-        }
+        setStep(status.emailVerified ? "done" : "emailStep");
       })
       .catch(() => {});
   }, []);
@@ -142,7 +137,6 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
     const utm = captureAndPersistUtm();
     const result = await submitOfferLead({
       name,
-      whatsapp,
       email,
       marketingConsent: consent,
       sessionId: getVisitorSessionId(),
@@ -153,47 +147,44 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
       referrer: utm.referrer ?? null,
     });
 
-    setSubmitting(false);
-
     if ("errors" in result) {
+      setSubmitting(false);
       setErrors(result.errors);
       return;
     }
 
     writeResumeToken(result.resumeToken);
     setResumeToken(result.resumeToken);
-    setStep("whatsappStep");
-  }
-
-  async function handleStartEmailVerification() {
-    if (!resumeToken) return;
-    setStep("emailStep");
-    setOtpError(null);
+    setOtpCode("");
     setResendCooldown(RESEND_COOLDOWN_SECONDS);
-    const result = await startEmailOtp(resumeToken);
-    if ("error" in result) setOtpError(result.error);
+
+    const otpResult = await startEmailOtp(result.resumeToken);
+    setSubmitting(false);
+    if ("error" in otpResult) setOtpError(otpResult.error);
+    setStep("emailStep");
   }
 
   async function handleResendCode() {
     if (resendCooldown > 0 || !resumeToken) return;
     setOtpError(null);
+    setOtpCode("");
     setResendCooldown(RESEND_COOLDOWN_SECONDS);
     const result = await startEmailOtp(resumeToken);
     if ("error" in result) setOtpError(result.error);
   }
 
-  async function handleConfirmCode(e: React.FormEvent) {
-    e.preventDefault();
-    if (!resumeToken) return;
+  async function handleConfirmCode(code: string) {
+    if (!resumeToken || code.length !== EMAIL_OTP_LENGTH || otpSubmitting) return;
     setOtpError(null);
     setOtpSubmitting(true);
 
-    const result = await confirmEmailOtp(resumeToken, otpCode);
+    const result = await confirmEmailOtp(resumeToken, code);
 
     setOtpSubmitting(false);
 
     if ("error" in result) {
       setOtpError(result.error);
+      setOtpCode("");
       return;
     }
 
@@ -218,11 +209,13 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
     return (
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border px-4 py-10 text-center">
         <p className="font-display text-lg text-text">Cadastro confirmado! ❤️</p>
-        <p className="text-sm text-text-muted">Agora você pode entrar no nosso grupo de ofertas.</p>
+        <p className="text-sm text-text-muted">
+          Agora você já pode entrar no Grupo de Ofertas da Maria Flor.
+        </p>
 
         {offersGroupUrl ? (
           <a href={offersGroupUrl} target="_blank" rel="noopener noreferrer" onClick={handleGroupClick}>
-            <Button className="mt-2 h-12">Entrar no grupo de ofertas</Button>
+            <Button className="mt-2 h-12">Entrar no Grupo de Ofertas</Button>
           </a>
         ) : (
           <p className="mt-2 text-xs text-text-muted">
@@ -237,31 +230,39 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
     return (
       <div className="flex flex-col gap-4">
         <div className="text-center">
-          <p className="font-display text-lg text-text">Quase pronto para entrar no grupo ❤️</p>
-          <p className="mt-1 text-xs font-medium uppercase tracking-wide text-primary">2 de 2</p>
-          <p className="mt-1 text-sm text-text-muted">Confirme seu e-mail</p>
+          <p className="font-display text-lg text-text">Só falta confirmar seu e-mail ❤️</p>
+          <p className="mt-1 text-sm text-text-muted">
+            Enviamos um código de {EMAIL_OTP_LENGTH} dígitos para você
+            {email ? (
+              <>
+                {" "}
+                (<span className="font-medium text-text">{email}</span>)
+              </>
+            ) : null}
+            .
+          </p>
         </div>
 
-        <p className="text-center text-sm text-text-muted">
-          Enviamos um código de {EMAIL_OTP_LENGTH} dígitos para{" "}
-          <span className="font-medium text-text">{email}</span>.
-        </p>
-
-        <form onSubmit={handleConfirmCode} className="flex flex-col gap-4">
-          <Input
-            label="Código de confirmação"
-            inputMode="numeric"
-            maxLength={EMAIL_OTP_LENGTH}
-            placeholder={"0".repeat(EMAIL_OTP_LENGTH)}
+        <div className="flex flex-col gap-4">
+          <OtpInput
+            length={EMAIL_OTP_LENGTH}
             value={otpCode}
-            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, EMAIL_OTP_LENGTH))}
-            error={otpError ?? undefined}
-            className="text-center text-lg tracking-[0.3em]"
-            autoComplete="one-time-code"
-            required
+            onChange={(value) => {
+              setOtpCode(value);
+              if (otpError) setOtpError(null);
+              if (value.length === EMAIL_OTP_LENGTH) handleConfirmCode(value);
+            }}
+            disabled={otpSubmitting}
+            hasError={Boolean(otpError)}
           />
+          {otpError && <p className="text-center text-xs text-red-600">{otpError}</p>}
 
-          <Button type="submit" disabled={otpSubmitting || otpCode.length !== EMAIL_OTP_LENGTH} className="h-12">
+          <Button
+            type="button"
+            onClick={() => handleConfirmCode(otpCode)}
+            disabled={otpSubmitting || otpCode.length !== EMAIL_OTP_LENGTH}
+            className="h-12"
+          >
             {otpSubmitting ? "Confirmando..." : "Confirmar código"}
           </Button>
 
@@ -273,28 +274,7 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
           >
             {resendCooldown > 0 ? `Reenviar código (${resendCooldown}s)` : "Reenviar código"}
           </button>
-        </form>
-      </div>
-    );
-  }
-
-  if (step === "whatsappStep") {
-    return (
-      <div className="flex flex-col items-center gap-4 text-center">
-        <div>
-          <p className="font-display text-lg text-text">Quase pronto para entrar no grupo ❤️</p>
-          <p className="mt-1 text-xs font-medium uppercase tracking-wide text-primary">1 de 2</p>
-          <p className="mt-1 text-sm text-text-muted">Confirme seu WhatsApp</p>
         </div>
-
-        <p className="max-w-xs text-sm text-text-muted">
-          A confirmação automática por WhatsApp ainda está em preparação. Por enquanto, vamos
-          seguir com a confirmação por e-mail.
-        </p>
-
-        <Button type="button" onClick={handleStartEmailVerification} className="h-12">
-          Continuar
-        </Button>
       </div>
     );
   }
@@ -307,17 +287,6 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
         onChange={(e) => setName(e.target.value)}
         error={errors.name}
         autoComplete="name"
-        required
-      />
-      <Input
-        label="WhatsApp"
-        type="tel"
-        inputMode="tel"
-        placeholder="(67) 99999-9999"
-        value={whatsapp}
-        onChange={(e) => setWhatsapp(e.target.value)}
-        error={errors.whatsapp}
-        autoComplete="tel"
         required
       />
       <Input
@@ -336,6 +305,7 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
           checked={consent}
           onChange={(e) => setConsent(e.target.checked)}
           className="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-primary/40"
+          required
         />
         <span>
           Quero participar do Grupo de Ofertas da Maria Flor e autorizo o uso dos meus dados para

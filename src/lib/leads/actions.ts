@@ -11,7 +11,6 @@ type LeadInsert = Database["public"]["Tables"]["leads"]["Insert"];
 
 export interface SubmitOfferLeadInput {
   name: string;
-  whatsapp: string;
   email: string;
   marketingConsent: boolean;
   sessionId: string;
@@ -24,7 +23,6 @@ export interface SubmitOfferLeadInput {
 
 export interface OfferLeadFieldErrors {
   name?: string;
-  whatsapp?: string;
   email?: string;
   marketingConsent?: string;
   form?: string;
@@ -63,7 +61,6 @@ function generateResumeToken(): { token: string; hash: string; expiresAt: string
 export async function submitOfferLead(input: SubmitOfferLeadInput): Promise<SubmitOfferLeadResult> {
   const parsed = offerLeadSchema.safeParse({
     name: input.name,
-    whatsapp: input.whatsapp,
     email: input.email,
     marketingConsent: input.marketingConsent,
   });
@@ -73,14 +70,13 @@ export async function submitOfferLead(input: SubmitOfferLeadInput): Promise<Subm
     return {
       errors: {
         name: fieldErrors.name?.[0],
-        whatsapp: fieldErrors.whatsapp?.[0],
         email: fieldErrors.email?.[0],
         marketingConsent: fieldErrors.marketingConsent?.[0],
       },
     };
   }
 
-  const { name, whatsapp, email, whatsappNormalized } = parsed.data;
+  const { name, email } = parsed.data;
   const supabase = createAdminClient();
 
   // Rate limit simples — sem depender de infraestrutura nova: bloqueia
@@ -98,28 +94,20 @@ export async function submitOfferLead(input: SubmitOfferLeadInput): Promise<Subm
     return { errors: { form: "Você já enviou seu cadastro há pouco. Aguarde um instante e tente de novo." } };
   }
 
-  // Deduplicação: mesmo WhatsApp OU e-mail já cadastrado -> atualiza esse
-  // registro (histórico preservado, consentimento/UTMs atualizados) em vez
-  // de criar uma linha nova. Duas consultas indexadas simples em vez de um
-  // filtro OR com string interpolada (evita qualquer risco de injeção no
-  // filtro do PostgREST).
-  const [byWhatsapp, byEmail] = await Promise.all([
-    supabase.from("leads").select("id").eq("whatsapp_normalized", whatsappNormalized).limit(1).maybeSingle(),
-    supabase.from("leads").select("id").eq("email", email).limit(1).maybeSingle(),
-  ]);
-  const existingId = byWhatsapp.data?.id ?? byEmail.data?.id ?? null;
+  // Deduplicação só por e-mail agora (não coletamos mais WhatsApp aqui) ->
+  // atualiza o registro existente (histórico preservado, consentimento/UTMs
+  // atualizados) em vez de criar uma linha nova.
+  const { data: existing } = await supabase.from("leads").select("id").eq("email", email).limit(1).maybeSingle();
+  const existingId = existing?.id ?? null;
 
   const privacyPolicyVersion = await getPrivacyPolicyVersion();
   const nowIso = new Date().toISOString();
   const { token: resumeToken, hash: resumeTokenHash, expiresAt: resumeTokenExpiresAt } = generateResumeToken();
 
-  const payload: LeadInsert = {
+  const sharedFields = {
     name,
-    whatsapp,
-    whatsapp_normalized: whatsappNormalized,
     email,
     marketing_consent: true,
-    whatsapp_consent: true,
     email_marketing_consent: true,
     consent_timestamp: nowIso,
     consent_source: CONSENT_SOURCE,
@@ -135,9 +123,20 @@ export async function submitOfferLead(input: SubmitOfferLeadInput): Promise<Subm
     resume_token_expires_at: resumeTokenExpiresAt,
   };
 
+  // No update, não toca em whatsapp/whatsapp_normalized/whatsapp_consent —
+  // se esse lead já existia com WhatsApp real de outro fluxo (ex: "Quero
+  // essa peça"), essa informação continua intacta. No insert (lead novo,
+  // só por este formulário), `whatsapp` precisa de algum valor porque a
+  // coluna é NOT NULL no banco — '' deixa claro "não coletado aqui" sem
+  // inventar um número.
   const { error: writeError } = existingId
-    ? await supabase.from("leads").update(payload).eq("id", existingId)
-    : await supabase.from("leads").insert(payload);
+    ? await supabase.from("leads").update(sharedFields).eq("id", existingId)
+    : await supabase.from("leads").insert({
+        ...sharedFields,
+        whatsapp: "",
+        whatsapp_normalized: null,
+        whatsapp_consent: false,
+      } satisfies LeadInsert);
 
   if (writeError) {
     console.error("[submitOfferLead] falha ao gravar lead:", writeError.message);
