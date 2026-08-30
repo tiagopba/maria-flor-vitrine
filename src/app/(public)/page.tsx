@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
-import { CategoryCard } from "@/components/catalog/CategoryCard";
+import { CategoryCarousel } from "@/components/catalog/CategoryCarousel";
 import { HomeSearch } from "@/components/catalog/HomeSearch";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
+import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
 import { getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { listPublishedProducts } from "@/lib/db/products";
 
@@ -11,6 +12,8 @@ export default async function Home() {
     listPublishedProducts(8),
     getVisibleCategoriesPublic(),
   ]);
+
+  const exploreCategories = buildExploreCategoriesItems(categorias);
 
   return (
     <main className="flex flex-1 flex-col">
@@ -50,17 +53,12 @@ export default async function Home() {
         )}
       </section>
 
-      {/* Categorias */}
-      {categorias.length > 0 && (
-        <section className="px-4 py-8 sm:px-6">
-          <h2 className="mb-4 font-display text-lg text-text sm:text-xl">Categorias</h2>
-          <div className="grid grid-cols-3 gap-x-4 gap-y-5 sm:grid-cols-4 md:grid-cols-6">
-            {categorias.map((categoria) => (
-              <CategoryCard key={categoria.id} category={categoria} />
-            ))}
-          </div>
-        </section>
-      )}
+      {/* Explore por categoria */}
+      <section className="px-4 py-8 sm:px-6">
+        <h2 className="mb-1 font-display text-lg text-text sm:text-xl">Explore por categoria</h2>
+        <p className="mb-4 text-sm text-text-muted">Encontre o que combina com você</p>
+        <CategoryCarousel items={exploreCategories} />
+      </section>
 
       {/* Chamadas institucionais — discretas, sem popup nem virar página de banners */}
       <section className="grid gap-4 px-4 py-8 sm:grid-cols-2 sm:px-6">
