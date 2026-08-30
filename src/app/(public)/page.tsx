@@ -61,6 +61,31 @@ export default async function Home() {
           </div>
         </section>
       )}
+
+      {/* Chamadas institucionais — discretas, sem popup nem virar página de banners */}
+      <section className="grid gap-4 px-4 py-8 sm:grid-cols-2 sm:px-6">
+        <div className="flex flex-col items-start gap-2 rounded-2xl border border-border p-5">
+          <h2 className="font-display text-base text-text">Quer receber nossas ofertas?</h2>
+          <p className="text-sm text-text-muted">
+            Entre para nosso grupo e acompanhe promoções e novidades.
+          </p>
+          <Link href="/ofertas" className="mt-1">
+            <Button variant="secondary" className="h-11">
+              Quero entrar
+            </Button>
+          </Link>
+        </div>
+
+        <div className="flex flex-col items-start gap-2 rounded-2xl border border-border p-5">
+          <h2 className="font-display text-base text-text">Prefere visitar a loja?</h2>
+          <p className="text-sm text-text-muted">Venha nos conhecer pessoalmente em Paranaíba/MS.</p>
+          <Link href="/como-chegar" className="mt-1">
+            <Button variant="secondary" className="h-11">
+              Como chegar
+            </Button>
+          </Link>
+        </div>
+      </section>
     </main>
   );
 }

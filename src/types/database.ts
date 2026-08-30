@@ -41,7 +41,12 @@ export type AnalyticsEventType =
   | "SELECTION_CREATED"
   | "SELECTION_VIEWED"
   | "PRODUCT_FLOW_STARTED"
-  | "PRODUCT_FLOW_SEE_MORE_CLICK";
+  | "PRODUCT_FLOW_SEE_MORE_CLICK"
+  // Módulo institucional (Grupo de Ofertas) — já aplicados na constraint do banco.
+  | "OFFERS_PAGE_VIEW"
+  | "OFFER_LEAD_SUBMITTED"
+  | "OFFERS_GROUP_CLICK"
+  | "STORE_DIRECTIONS_CLICK";
 
 type Table<Row, RequiredInsertKeys extends keyof Row> = {
   Row: Row;
@@ -222,6 +227,24 @@ export interface Database {
           consent_source: string | null;
           session_id: string;
           created_at: string;
+          // Módulo institucional (Grupo de Ofertas) — já aplicadas no banco.
+          whatsapp_normalized: string | null;
+          email_marketing_consent: boolean;
+          privacy_policy_version: string | null;
+          utm_source: string | null;
+          utm_medium: string | null;
+          utm_campaign: string | null;
+          utm_content: string | null;
+          referrer: string | null;
+          updated_at: string;
+          whatsapp_verified_at: string | null;
+          email_verified_at: string | null;
+          auth_user_id: string | null;
+          auth_user_id_conflict_at: string | null;
+          resume_token_hash: string | null;
+          resume_token_expires_at: string | null;
+          otp_email_send_count: number;
+          otp_email_last_sent_at: string | null;
         },
         "name" | "whatsapp" | "session_id"
       >;
@@ -297,6 +320,16 @@ export interface Database {
       >;
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      try_claim_email_otp_send: {
+        Args: {
+          p_lead_id: string;
+          p_cooldown_seconds: number;
+          p_window_seconds: number;
+          p_max_per_window: number;
+        };
+        Returns: boolean;
+      };
+    };
   };
 }
