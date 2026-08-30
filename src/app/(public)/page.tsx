@@ -7,6 +7,16 @@ import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
 import { getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { listPublishedProducts } from "@/lib/db/products";
 
+// Sem isso, a Home (sem segmento dinâmico nem searchParams) é
+// estaticamente otimizada no build — "Acabaram de chegar" e "Explore por
+// categoria" ficariam congelados no HTML daquele deploy, sem refletir um
+// produto ou categoria novos cadastrados depois no admin (só apareceriam
+// no próximo deploy). Todas as outras páginas públicas já são dinâmicas
+// (searchParams força isso automaticamente nas que têm filtro; as
+// institucionais têm esse mesmo `force-dynamic` explícito) — só a Home
+// tinha ficado de fora.
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const [novidades, categorias] = await Promise.all([
     listPublishedProducts(8),
