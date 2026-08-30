@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Mail } from "lucide-react";
 import { getInstitutionalInfo, getPrivacyPolicyVersion } from "@/lib/site-settings/institutional";
 import { EMAIL_OTP_LENGTH } from "@/lib/leads/otp-constants";
 
@@ -109,7 +110,8 @@ export default async function PoliticaDePrivacidadePage() {
             <div className="mt-2 flex flex-col gap-1">
               <p>Dúvidas sobre esta política ou sobre seus dados? Fale com a gente:</p>
               {privacyEmail && (
-                <p>
+                <p className="flex items-center gap-1.5">
+                  <Mail className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
                   E-mail:{" "}
                   <a href={`mailto:${privacyEmail}`} className="underline hover:text-primary">
                     {privacyEmail}

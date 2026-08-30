@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { OtpInput } from "@/components/ui/OtpInput";
@@ -221,7 +222,10 @@ export function OffersFormClient({
 
         {offersGroupUrl ? (
           <a href={offersGroupUrl} target="_blank" rel="noopener noreferrer" onClick={handleGroupClick}>
-            <Button className="mt-2 h-12">Entrar no Grupo de Ofertas</Button>
+            <Button className="mt-2 h-12 gap-2">
+              <MessageCircle className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              ENTRAR NO GRUPO DE OFERTAS
+            </Button>
           </a>
         ) : (
           <p className="mt-2 text-xs text-text-muted">
