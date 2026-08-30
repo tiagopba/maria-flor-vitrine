@@ -2,15 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Filter } from "lucide-react";
 import { Drawer } from "@/components/ui/Drawer";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import {
-  buildFilterQueryString,
-  PRICE_QUICK_RANGES,
-  STATUS_FILTER_OPTIONS,
-  type ParsedPublicFilters,
-} from "@/lib/catalog/filters";
+import { buildFilterQueryString, PRICE_QUICK_RANGES, type ParsedPublicFilters } from "@/lib/catalog/filters";
 
 export interface ProductFiltersProps {
   /** Rota base para onde os filtros são aplicados (ex: "/busca", "/novidades", "/categoria/blusas"). */
@@ -29,7 +25,7 @@ export function ProductFilters({ basePath, initial, sizeOptions, categoryOptions
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<ParsedPublicFilters>(initial);
 
-  const activeCount = [initial.size, initial.minPrice != null || initial.maxPrice != null, initial.category, initial.status].filter(
+  const activeCount = [initial.size, initial.minPrice != null || initial.maxPrice != null, initial.category].filter(
     Boolean
   ).length;
 
@@ -55,7 +51,7 @@ export function ProductFilters({ basePath, initial, sizeOptions, categoryOptions
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="secondary" size="sm" onClick={openDrawer} className="gap-1.5">
-          <FilterIcon />
+          <Filter className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           Filtrar
           {activeCount > 0 && (
             <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
@@ -68,12 +64,6 @@ export function ProductFilters({ basePath, initial, sizeOptions, categoryOptions
           <ActiveChip label={categoryOptions?.find((c) => c.slug === initial.category)?.name ?? initial.category} onRemove={() => clearOne("category")} />
         )}
         {initial.size && <ActiveChip label={`Tamanho ${initial.size}`} onRemove={() => clearOne("size")} />}
-        {initial.status && (
-          <ActiveChip
-            label={STATUS_FILTER_OPTIONS.find((s) => s.value === initial.status)?.label ?? initial.status}
-            onRemove={() => clearOne("status")}
-          />
-        )}
         {(initial.minPrice != null || initial.maxPrice != null) && (
           <ActiveChip
             label={priceRangeLabel(initial.minPrice, initial.maxPrice)}
@@ -156,21 +146,8 @@ export function ProductFilters({ basePath, initial, sizeOptions, categoryOptions
             </FilterSection>
           )}
 
-          <FilterSection title="Status">
-            <div className="flex flex-wrap gap-1.5">
-              {STATUS_FILTER_OPTIONS.map((option) => (
-                <FilterChip
-                  key={option.value}
-                  label={option.label}
-                  selected={pending.status === option.value}
-                  onClick={() => setPending((p) => ({ ...p, status: p.status === option.value ? null : option.value }))}
-                />
-              ))}
-            </div>
-          </FilterSection>
-
           <div className="flex gap-2 pt-2">
-            <Button type="button" variant="secondary" className="flex-1" onClick={() => apply({ size: null, minPrice: null, maxPrice: null, category: null, status: null })}>
+            <Button type="button" variant="secondary" className="flex-1" onClick={() => apply({ size: null, minPrice: null, maxPrice: null, category: null })}>
               Limpar filtros
             </Button>
             <Button type="button" className="flex-1" onClick={() => apply(pending)}>
@@ -227,13 +204,5 @@ function ActiveChip({ label, onRemove }: { label: string; onRemove: () => void }
       </span>
       <span className="sr-only">Remover filtro {label}</span>
     </button>
-  );
-}
-
-function FilterIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <path d="M4 6h16M7 12h10M10 18h4" strokeLinecap="round" />
-    </svg>
   );
 }

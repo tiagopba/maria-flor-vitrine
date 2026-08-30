@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Mail, MapPin } from "lucide-react";
 import { DirectionsButtons } from "@/components/institutional/DirectionsButtons";
 import { buildWhatsAppUrl } from "@/lib/whatsapp/message-builder";
 import { getInstitutionalInfo } from "@/lib/site-settings/institutional";
@@ -25,7 +26,10 @@ export default async function ComoChegarPage() {
 
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-10 sm:px-6">
-      <h1 className="font-display text-2xl text-text sm:text-3xl">Venha conhecer a Maria Flor</h1>
+      <div className="flex items-center gap-2">
+        <MapPin className="h-6 w-6 shrink-0 text-primary" strokeWidth={1.75} aria-hidden="true" />
+        <h1 className="font-display text-2xl text-text sm:text-3xl">Venha conhecer a Maria Flor</h1>
+      </div>
 
       <div className="mt-6 flex flex-col gap-1.5 text-sm text-text sm:text-base">
         {info.address ? (
@@ -41,7 +45,8 @@ export default async function ComoChegarPage() {
         {info.phone && <p className="text-text-muted">{info.phone}</p>}
         {info.hours && <p className="text-text-muted">{info.hours}</p>}
         {info.publicContactEmail && (
-          <p className="text-text-muted">
+          <p className="flex items-center gap-1.5 text-text-muted">
+            <Mail className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
             <a href={`mailto:${info.publicContactEmail}`} className="underline hover:text-primary">
               {info.publicContactEmail}
             </a>

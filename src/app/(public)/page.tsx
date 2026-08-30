@@ -20,11 +20,8 @@ export default async function Home() {
       {/* Hero */}
       <section className="px-4 py-10 text-center sm:py-14">
         <h1 className="mx-auto max-w-md font-display text-xl text-text sm:text-3xl">
-          As novidades que você viu nos nossos Stories, agora em um só lugar.
+          Tudo o que você viu nos nossos Stories, agora em um só lugar.
         </h1>
-        <Link href="/novidades">
-          <Button className="mt-5">Ver novidades</Button>
-        </Link>
       </section>
 
       {/* Busca */}

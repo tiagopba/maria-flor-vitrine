@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { Price } from "@/components/ui/Price";
@@ -114,17 +113,6 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
         <p className="mb-4 text-sm text-text-muted">Acesse outras categorias</p>
         <CategoryCarousel items={exploreCategories} />
       </section>
-
-      {product.categoryName && product.categorySlug && (
-        <div className="mt-8 text-center">
-          <Link
-            href={`/categoria/${product.categorySlug}`}
-            className="text-sm font-medium text-primary hover:underline"
-          >
-            Ver mais em {product.categoryName.toUpperCase()} →
-          </Link>
-        </div>
-      )}
     </main>
   );
 }

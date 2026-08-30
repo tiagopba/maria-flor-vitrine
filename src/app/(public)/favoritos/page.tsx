@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { CategoryCarousel } from "@/components/catalog/CategoryCarousel";
+import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
+import { getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { getActiveSellersForModal } from "@/lib/db/sellers";
 import { FavoritesPageClient } from "./FavoritesPageClient";
 
@@ -15,7 +18,8 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function FavoritosPage() {
-  const sellers = await getActiveSellersForModal();
+  const [sellers, categories] = await Promise.all([getActiveSellersForModal(), getVisibleCategoriesPublic()]);
+  const exploreCategories = buildExploreCategoriesItems(categories);
 
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-8 sm:px-6">
@@ -25,6 +29,12 @@ export default async function FavoritosPage() {
       </p>
 
       <FavoritesPageClient sellers={sellers} />
+
+      <section className="mt-12 min-w-0">
+        <h2 className="mb-1 font-display text-lg text-text sm:text-xl">Explore por categoria</h2>
+        <p className="mb-4 text-sm text-text-muted">Encontre o que combina com você</p>
+        <CategoryCarousel items={exploreCategories} />
+      </section>
     </main>
   );
 }
