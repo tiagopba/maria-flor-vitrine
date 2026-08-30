@@ -12,6 +12,52 @@ import { captureAndPersistUtm } from "@/lib/utm/persist";
 
 const RESEND_COOLDOWN_SECONDS = 30;
 const PENDING_LEAD_STORAGE_KEY = "mf_ofertas_pending_email";
+const PENDING_LEAD_TTL_MS = 48 * 60 * 60_000; // 48h
+
+/**
+ * Guarda o e-mail em andamento por um tempo curto, não indefinidamente:
+ * grava junto um `expiresAt` e qualquer leitura depois desse prazo trata
+ * como se nunca tivesse existido (e limpa a chave). Uso `localStorage` em
+ * vez de `sessionStorage` de propósito — é o único jeito de a recuperação
+ * sobreviver a fechar a aba/o Safari, que é exatamente o cenário que esse
+ * recurso existe para cobrir. Ver explicação completa dos alcances e
+ * limites no relatório entregue com essa mudança.
+ */
+function readPendingLeadEmail(): string | null {
+  try {
+    const raw = window.localStorage.getItem(PENDING_LEAD_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { email: string; expiresAt: number };
+    if (!parsed.email || Date.now() > parsed.expiresAt) {
+      window.localStorage.removeItem(PENDING_LEAD_STORAGE_KEY);
+      return null;
+    }
+    return parsed.email;
+  } catch {
+    window.localStorage.removeItem(PENDING_LEAD_STORAGE_KEY);
+    return null;
+  }
+}
+
+function writePendingLeadEmail(email: string) {
+  try {
+    window.localStorage.setItem(
+      PENDING_LEAD_STORAGE_KEY,
+      JSON.stringify({ email, expiresAt: Date.now() + PENDING_LEAD_TTL_MS }),
+    );
+  } catch {
+    // localStorage indisponível (modo privado etc.) — recuperação de
+    // progresso só não funciona; o cadastro em si não depende disso.
+  }
+}
+
+function clearPendingLeadEmail() {
+  try {
+    window.localStorage.removeItem(PENDING_LEAD_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
 
 /**
  * Cadastro → confirmar WhatsApp → confirmar e-mail → liberado. A etapa de
@@ -46,14 +92,14 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
     if (resumeCheckedRef.current) return;
     resumeCheckedRef.current = true;
 
-    const pendingEmail = window.localStorage.getItem(PENDING_LEAD_STORAGE_KEY);
+    const pendingEmail = readPendingLeadEmail();
     if (!pendingEmail) return;
 
     const sessionId = getVisitorSessionId();
     getLeadVerificationStatus(pendingEmail, sessionId)
       .then((status) => {
         if (!status.found) {
-          window.localStorage.removeItem(PENDING_LEAD_STORAGE_KEY);
+          clearPendingLeadEmail();
           return;
         }
         setEmail(pendingEmail);
@@ -113,7 +159,7 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
       return;
     }
 
-    window.localStorage.setItem(PENDING_LEAD_STORAGE_KEY, email);
+    writePendingLeadEmail(email);
     setStep("whatsappStep");
   }
 
@@ -121,7 +167,7 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
     setStep("emailStep");
     setOtpError(null);
     setResendCooldown(RESEND_COOLDOWN_SECONDS);
-    const result = await startEmailOtp(email);
+    const result = await startEmailOtp(email, getVisitorSessionId());
     if ("error" in result) setOtpError(result.error);
   }
 
@@ -129,7 +175,7 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
     if (resendCooldown > 0) return;
     setOtpError(null);
     setResendCooldown(RESEND_COOLDOWN_SECONDS);
-    const result = await startEmailOtp(email);
+    const result = await startEmailOtp(email, getVisitorSessionId());
     if ("error" in result) setOtpError(result.error);
   }
 
@@ -138,7 +184,7 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
     setOtpError(null);
     setOtpSubmitting(true);
 
-    const result = await confirmEmailOtp(email, otpCode);
+    const result = await confirmEmailOtp(email, otpCode, getVisitorSessionId());
 
     setOtpSubmitting(false);
 
@@ -147,7 +193,7 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
       return;
     }
 
-    window.localStorage.removeItem(PENDING_LEAD_STORAGE_KEY);
+    clearPendingLeadEmail();
     setStep("done");
   }
 

@@ -246,6 +246,9 @@ export interface Database {
           updated_at: string;
           whatsapp_verified_at: string | null;
           email_verified_at: string | null;
+          auth_user_id: string | null;
+          otp_email_send_count: number;
+          otp_email_last_sent_at: string | null;
         },
         "name" | "whatsapp" | "session_id"
       >;
