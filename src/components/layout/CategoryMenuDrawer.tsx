@@ -6,9 +6,10 @@ import Link from "next/link";
 import { useDrawerBehavior } from "@/components/ui/Drawer";
 
 /**
- * Botão de menu (hamburger) + painel lateral com Início/Novidades/
- * categorias ativas/Favoritos — categorias vêm do banco (prop vinda do
- * Server Component do layout), nunca hardcoded.
+ * Botão de menu (hamburger) + painel lateral com Início/Novidades/Minha
+ * seleção, categorias ativas (vêm do banco, nunca hardcoded) e uma seção
+ * Institucional (Quem Somos/Grupo de Ofertas/Como Chegar) separada das
+ * categorias de produto — naturezas de link diferentes.
  *
  * CAUSA REAL do bug visto num iPhone físico (menu "quebrado", só
  * "Favoritos" aparecendo, sem botão de fechar visível): este componente é
@@ -126,6 +127,14 @@ export function CategoryMenuDrawer({ categories }: { categories: { name: string;
           >
             Novidades
           </Link>
+          <Link
+            href="/favoritos"
+            onClick={close}
+            tabIndex={open ? 0 : -1}
+            className="block rounded-lg px-3 py-2.5 text-base font-semibold text-text hover:bg-muted"
+          >
+            ❤️ Minha seleção
+          </Link>
 
           {categories.length > 0 && (
             <>
@@ -146,13 +155,35 @@ export function CategoryMenuDrawer({ categories }: { categories: { name: string;
             </>
           )}
 
+          {/* Seção institucional separada das categorias de produto de
+              propósito — são naturezas de link diferentes (a loja em si,
+              não uma vitrine de peças). */}
+          <p className="mt-3 px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
+            Institucional
+          </p>
           <Link
-            href="/favoritos"
+            href="/quem-somos"
             onClick={close}
             tabIndex={open ? 0 : -1}
-            className="mt-3 block rounded-lg px-3 py-2.5 text-base font-semibold text-text hover:bg-muted"
+            className="block rounded-lg px-3 py-2 text-sm text-text hover:bg-muted"
           >
-            ❤️ Minha seleção
+            Quem Somos
+          </Link>
+          <Link
+            href="/ofertas"
+            onClick={close}
+            tabIndex={open ? 0 : -1}
+            className="block rounded-lg px-3 py-2 text-sm text-text hover:bg-muted"
+          >
+            Grupo de Ofertas
+          </Link>
+          <Link
+            href="/como-chegar"
+            onClick={close}
+            tabIndex={open ? 0 : -1}
+            className="block rounded-lg px-3 py-2 text-sm text-text hover:bg-muted"
+          >
+            Como Chegar
           </Link>
         </nav>
       </div>
