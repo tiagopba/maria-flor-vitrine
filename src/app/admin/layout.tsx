@@ -27,7 +27,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
         <div className="hidden items-center justify-between px-4 py-4 sm:flex">
           <span className="font-display text-lg">Maria Flor</span>
         </div>
-        <AdminNav />
+        <AdminNav role={admin.role} />
         <div className="hidden px-4 py-3 sm:block">
           <p className="mb-2 truncate text-xs text-text-muted">{admin.name}</p>
           <form action={logout}>

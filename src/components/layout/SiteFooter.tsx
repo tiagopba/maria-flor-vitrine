@@ -15,6 +15,11 @@ export async function SiteFooter() {
     .filter(Boolean)
     .join(" • ");
 
+  const socialLinks = [
+    ...(info.instagramUrl ? [{ label: "Instagram", url: info.instagramUrl }] : []),
+    ...info.socialLinks,
+  ];
+
   return (
     <footer className="border-t border-border bg-surface">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-10 sm:px-6">
@@ -37,6 +42,22 @@ export async function SiteFooter() {
             Como Chegar
           </Link>
         </nav>
+
+        {socialLinks.length > 0 && (
+          <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-text-muted">
+            {socialLinks.map((link) => (
+              <a
+                key={link.url}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-primary"
+              >
+                {link.label}
+              </a>
+            ))}
+          </div>
+        )}
 
         <div className="border-t border-border pt-6 text-xs leading-relaxed text-text-muted">
           <p className="break-words">

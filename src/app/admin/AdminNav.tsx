@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import type { UserRole } from "@/types/database";
 
 interface NavItem {
   label: string;
   href: string;
   available: boolean;
+  adminOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -19,10 +21,10 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Clientes/Leads", href: "/admin/leads", available: false },
   { label: "Vendedoras", href: "/admin/vendedoras", available: true },
   { label: "Relatórios", href: "/admin/relatorios", available: false },
-  { label: "Configurações", href: "/admin/configuracoes", available: false },
+  { label: "Configurações", href: "/admin/configuracoes", available: true, adminOnly: true },
 ];
 
-export function AdminNav() {
+export function AdminNav({ role }: { role: UserRole }) {
   const pathname = usePathname();
 
   return (
@@ -31,11 +33,13 @@ export function AdminNav() {
         const isActive =
           item.href === "/admin" ? pathname === item.href : pathname.startsWith(item.href);
 
-        if (!item.available) {
+        const locked = item.adminOnly && role !== "admin";
+
+        if (!item.available || locked) {
           return (
             <span
               key={item.href}
-              title="Em breve"
+              title={locked ? "Só administradoras" : "Em breve"}
               className="shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-sm text-text-muted/50 sm:whitespace-normal"
             >
               {item.label}

@@ -67,7 +67,13 @@ function clearResumeToken() {
  */
 type Step = "form" | "emailStep" | "done";
 
-export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | null }) {
+export function OffersFormClient({
+  offersGroupUrl,
+  ctaLabel,
+}: {
+  offersGroupUrl: string | null;
+  ctaLabel?: string | null;
+}) {
   const [step, setStep] = useState<Step>("form");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -320,7 +326,7 @@ export function OffersFormClient({ offersGroupUrl }: { offersGroupUrl: string | 
       {errors.form && <p className="text-sm text-red-600">{errors.form}</p>}
 
       <Button type="submit" disabled={submitting} className="h-12">
-        {submitting ? "Enviando..." : "Quero entrar"}
+        {submitting ? "Enviando..." : ctaLabel || "Quero entrar"}
       </Button>
     </form>
   );
