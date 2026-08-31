@@ -54,7 +54,7 @@ export const productSchema = z
       .transform((v) => (v ? Number(v) : null))
       .refine((v) => v === null || (Number.isInteger(v) && v > 0), "Número de parcelas inválido."),
     category_id: z.string({ error: "Selecione uma categoria." }).uuid("Selecione uma categoria."),
-    status: z.enum(PRODUCT_STATUS_VALUES),
+    status: z.enum(PRODUCT_STATUS_VALUES, { error: "Selecione um status válido." }),
     featured: z.boolean(),
   })
   .refine((data) => data.promotional_price === null || data.promotional_price < data.price, {

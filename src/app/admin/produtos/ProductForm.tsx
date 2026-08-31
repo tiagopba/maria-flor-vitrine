@@ -188,19 +188,24 @@ export function ProductForm({
       <p className="-mt-2 text-xs text-text-muted">Aparece como /produto/{slug || "..."}</p>
 
       <div className="grid grid-cols-2 gap-4">
-        <Input
-          id="cash_price"
-          name="cash_price"
-          type="number"
-          step="0.01"
-          min="0"
-          label="Preço no Pix"
-          placeholder="179.90"
-          value={cashPrice}
-          onChange={(e) => setCashPrice(e.target.value)}
-          disabled={promotionalPriceHasValue}
-          error={state.fieldErrors?.cash_price}
-        />
+        <div className="flex flex-col gap-1.5">
+          <Input
+            id="cash_price"
+            name="cash_price"
+            type="number"
+            step="0.01"
+            min="0"
+            label="Preço no Pix"
+            placeholder="179.90"
+            value={cashPrice}
+            onChange={(e) => setCashPrice(e.target.value)}
+            disabled={promotionalPriceHasValue}
+            error={promotionalPriceHasValue ? undefined : state.fieldErrors?.cash_price}
+          />
+          {promotionalPriceHasValue && (
+            <p className="text-xs text-text-muted">Indisponível enquanto houver Preço promocional.</p>
+          )}
+        </div>
         <Input
           id="price"
           name="price"
@@ -228,12 +233,10 @@ export function ProductForm({
           value={promotionalPrice}
           onChange={(e) => setPromotionalPrice(e.target.value)}
           disabled={cashPriceHasValue}
-          error={state.fieldErrors?.promotional_price}
+          error={cashPriceHasValue ? undefined : state.fieldErrors?.promotional_price}
         />
         {cashPriceHasValue && (
-          <p className="text-xs text-text-muted">
-            Desativado enquanto houver Preço no Pix — os dois não podem coexistir nesta versão.
-          </p>
+          <p className="text-xs text-text-muted">Indisponível enquanto houver Preço no Pix.</p>
         )}
       </div>
 

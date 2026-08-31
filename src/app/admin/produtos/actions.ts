@@ -19,16 +19,32 @@ export interface ProductFormState {
   fieldErrors?: Record<string, string>;
 }
 
+/**
+ * Um campo opcional desabilitado (exclusão mútua Pix/promocional, ou
+ * "usar parcelamento padrão") não entra no FormData e formData.get()
+ * devolve `null` — mas z.string().optional() só aceita `undefined`, nunca
+ * `null`, e falha com uma mensagem técnica do Zod ("Invalid input:
+ * expected string, received null"). Normaliza null e string vazia pra
+ * undefined aqui, antes do Zod ver o valor, pros dois significarem a
+ * mesma coisa: "não informado".
+ */
+function optionalFormValue(formData: FormData, key: string): string | undefined {
+  const value = formData.get(key);
+  if (value === null) return undefined;
+  const str = String(value).trim();
+  return str === "" ? undefined : str;
+}
+
 function parseProductFormData(formData: FormData) {
   const parsed = productSchema.safeParse({
     code: formData.get("code"),
     name: formData.get("name"),
     slug: formData.get("slug"),
-    description: formData.get("description"),
+    description: optionalFormValue(formData, "description"),
     price: formData.get("price"),
-    promotional_price: formData.get("promotional_price"),
-    cash_price: formData.get("cash_price"),
-    max_installments_override: formData.get("max_installments_override"),
+    promotional_price: optionalFormValue(formData, "promotional_price"),
+    cash_price: optionalFormValue(formData, "cash_price"),
+    max_installments_override: optionalFormValue(formData, "max_installments_override"),
     category_id: formData.get("category_id"),
     status: formData.get("status"),
     featured: formData.get("featured") === "on",
@@ -47,9 +63,19 @@ function collectImagePaths(formData: FormData): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Última rede de segurança: se algum caminho ainda deixar passar uma
+ * mensagem padrão do Zod (ex: "Invalid input: expected string, received
+ * null") em vez da mensagem customizada do schema, troca por um texto
+ * genérico — a admin nunca deve ver jargão de validação técnica.
+ */
+function friendlyFieldMessage(message: string): string {
+  return /^invalid /i.test(message) ? "Valor inválido." : message;
+}
+
 function fieldErrorsFrom(parsed: { success: false; error: { flatten: () => { fieldErrors: Record<string, string[] | undefined> } } }) {
   return Object.fromEntries(
-    Object.entries(parsed.error.flatten().fieldErrors).map(([k, v]) => [k, v?.[0] ?? ""])
+    Object.entries(parsed.error.flatten().fieldErrors).map(([k, v]) => [k, friendlyFieldMessage(v?.[0] ?? "")])
   );
 }
 
