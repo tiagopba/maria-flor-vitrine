@@ -14,7 +14,10 @@ export function formatBRL(value: number): string {
  *
  * Hierarquia (mais forte → mais discreto): Pix > parcela > total no
  * cartão > texto auxiliar. Sem parcelamento aplicável, mostra só Pix +
- * "R$ Y no cartão" (nunca "1x").
+ * "R$ Y no cartão" (nunca "1x"). No card (lista/grade), o total do
+ * cartão fica de fora quando há parcela — a peça já tem preço de sobra
+ * pra card compacto; o total completo continua sempre visível na página
+ * do produto (variant="detail").
  */
 export function DualPriceBlock({
   pricing,
@@ -32,14 +35,9 @@ export function DualPriceBlock({
           {formatBRL(pricing.cashPrice)} no Pix
         </span>
         {hasInstallments ? (
-          <>
-            <span className="text-sm font-medium leading-tight text-primary/75">
-              ou {pricing.installmentCount}x de {formatBRL(pricing.installmentAmount!)} sem juros
-            </span>
-            <span className="text-xs font-normal leading-tight text-text-muted">
-              total {formatBRL(pricing.cardPrice)}
-            </span>
-          </>
+          <span className="text-sm font-medium leading-tight text-primary/75">
+            ou {pricing.installmentCount}x de {formatBRL(pricing.installmentAmount!)} sem juros
+          </span>
         ) : (
           <span className="text-xs font-normal leading-tight text-text-muted">
             {formatBRL(pricing.cardPrice)} no cartão
