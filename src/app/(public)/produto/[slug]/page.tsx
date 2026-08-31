@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
-import { Price, formatBRL } from "@/components/ui/Price";
+import { DualPriceBlock, Price } from "@/components/ui/Price";
 import { BackButton } from "@/components/layout/BackButton";
 import { CategoryCarousel } from "@/components/catalog/CategoryCarousel";
 import { FavoriteButton } from "@/components/catalog/FavoriteButton";
@@ -77,14 +77,7 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
 
           <div className="flex items-start gap-2">
             {pricing.model === "dual" ? (
-              <div className="flex flex-col gap-1">
-                <span className="font-display text-2xl text-text">{formatBRL(pricing.cashPrice)} no Pix</span>
-                <span className="text-xs text-text-muted">com desconto à vista</span>
-                <span className="mt-2 text-lg text-text">{formatBRL(pricing.cardPrice)} no cartão</span>
-                {pricing.installmentCount != null && (
-                  <span className="text-xs text-text-muted">em até {pricing.installmentCount}x sem juros</span>
-                )}
-              </div>
+              <DualPriceBlock pricing={pricing} variant="detail" />
             ) : (
               <Price product={product} paymentSettings={paymentSettings} />
             )}

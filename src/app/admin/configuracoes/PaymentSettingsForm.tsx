@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { formatBRL } from "@/components/ui/Price";
+import { DualPriceBlock, formatBRL } from "@/components/ui/Price";
 import { calculateInstallmentCount } from "@/lib/catalog/installments";
 import type { PaymentSettings } from "@/lib/site-settings/payments";
 import type { PaymentSettingsFormState } from "./actions";
@@ -41,6 +41,8 @@ export function PaymentSettingsForm({
     minInstallmentValue: Number(minInstallmentValue) || 0,
     installmentsEnabled,
   });
+  const previewInstallmentAmount =
+    previewInstallmentCount != null ? Math.round((PREVIEW_CARD_PRICE * 100) / previewInstallmentCount) / 100 : null;
 
   return (
     <form action={formAction} className="rounded-xl border border-border p-4 sm:p-5">
@@ -104,13 +106,16 @@ export function PaymentSettingsForm({
             Exemplo com Pix {formatBRL(PREVIEW_CASH_PRICE)} e cartão {formatBRL(PREVIEW_CARD_PRICE)}
           </p>
           {cashPriceEnabled ? (
-            <>
-              <p className="text-sm text-text">{formatBRL(PREVIEW_CASH_PRICE)} no Pix</p>
-              <p className="text-sm text-text-muted">
-                {formatBRL(PREVIEW_CARD_PRICE)} no cartão
-                {previewInstallmentCount != null && ` • até ${previewInstallmentCount}x sem juros`}
-              </p>
-            </>
+            <DualPriceBlock
+              pricing={{
+                model: "dual",
+                cashPrice: PREVIEW_CASH_PRICE,
+                cardPrice: PREVIEW_CARD_PRICE,
+                installmentCount: previewInstallmentCount,
+                installmentAmount: previewInstallmentAmount,
+              }}
+              variant="card"
+            />
           ) : (
             <p className="text-sm text-text-muted">{formatBRL(PREVIEW_CARD_PRICE)}</p>
           )}

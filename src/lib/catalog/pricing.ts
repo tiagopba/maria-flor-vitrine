@@ -20,6 +20,8 @@ export type ProductPricing =
       cardPrice: number;
       /** null = não mostrar parcelamento (desativado, ou nem 2x cabem). */
       installmentCount: number | null;
+      /** cardPrice / installmentCount, arredondado ao centavo. null junto com installmentCount. */
+      installmentAmount: number | null;
     };
 
 /**
@@ -54,10 +56,18 @@ export function resolveProductPricing(
     installmentsEnabled: paymentSettings.installmentsEnabled,
   });
 
+  // Arredondamento em centavos pra evitar erro de ponto flutuante — valor
+  // exibido por parcela, não uma divisão exata garantida (o valor real
+  // cobrado parcela a parcela é responsabilidade da maquininha/gateway;
+  // aqui é só o texto "Nx de R$Y" mostrado à cliente).
+  const installmentAmount =
+    installmentCount != null ? Math.round((product.price * 100) / installmentCount) / 100 : null;
+
   return {
     model: "dual",
     cashPrice: product.cash_price,
     cardPrice: product.price,
     installmentCount,
+    installmentAmount,
   };
 }

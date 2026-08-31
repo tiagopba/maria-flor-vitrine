@@ -3,7 +3,7 @@
 import { useActionState, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { formatBRL } from "@/components/ui/Price";
+import { DualPriceBlock } from "@/components/ui/Price";
 import { ImageUploadQueueList } from "@/components/admin/ImageUploadQueueList";
 import { SizeSelector } from "@/components/catalog/SizeSelector";
 import { calculateInstallmentCount } from "@/lib/catalog/installments";
@@ -100,6 +100,10 @@ export function ProductForm({
         installmentsEnabled: paymentSettings.installmentsEnabled,
       })
     : null;
+  // Mesmo arredondamento de lib/catalog/pricing.ts — a prévia precisa bater
+  // exatamente com o que a cliente vai ver no card/página de verdade.
+  const previewInstallmentAmount =
+    previewInstallmentCount != null ? Math.round((priceNum * 100) / previewInstallmentCount) / 100 : null;
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
@@ -269,13 +273,16 @@ export function ProductForm({
           <div className="mt-1 rounded-lg bg-muted/60 p-3">
             <p className="mb-1 text-xs font-medium text-text-muted">A cliente verá</p>
             {paymentSettings.cashPriceEnabled ? (
-              <>
-                <p className="text-sm text-text">{formatBRL(cashPriceNum)} no Pix</p>
-                <p className="text-sm text-text-muted">
-                  {formatBRL(priceNum)} no cartão
-                  {previewInstallmentCount != null && ` • até ${previewInstallmentCount}x sem juros`}
-                </p>
-              </>
+              <DualPriceBlock
+                pricing={{
+                  model: "dual",
+                  cashPrice: cashPriceNum,
+                  cardPrice: priceNum,
+                  installmentCount: previewInstallmentCount,
+                  installmentAmount: previewInstallmentAmount,
+                }}
+                variant="card"
+              />
             ) : (
               <p className="text-xs text-amber-700">
                 O preço no Pix está desativado nas configurações da loja — a cliente não verá isso até
