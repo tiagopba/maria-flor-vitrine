@@ -59,7 +59,7 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
 
   const [sellers, related, categories, paymentSettings, groupSiblings, colors] = await Promise.all([
     getActiveSellersForModal(),
-    getRelatedProductsPublic(product.id, product.category_id),
+    getRelatedProductsPublic(product.id, product.category_id, product.product_group_id),
     getVisibleCategoriesPublic(),
     getPaymentSettings(),
     product.product_group_id ? getPublishedGroupSiblings(product.product_group_id, product.id) : Promise.resolve([]),

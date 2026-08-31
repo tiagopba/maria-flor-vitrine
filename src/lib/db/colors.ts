@@ -1,10 +1,53 @@
 import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import { slugify } from "@/lib/utils";
 import type { Database } from "@/types/database";
 
 export type Color = Database["public"]["Tables"]["colors"]["Row"];
+
+/**
+ * Anexa nome/hex da cor a qualquer lista de linhas com `color_id` — usado
+ * por toda listagem pública/admin de produtos (ver attachCategoryAndMainImage
+ * em lib/db/products.ts). Uma única consulta em lote, nunca uma por linha.
+ * Como usa o `supabase` client de quem chama, a visibilidade de cor inativa
+ * segue a mesma RLS de sempre (client público só vê active=true — mesma
+ * regra já usada pelos swatches "Outras cores disponíveis"; client
+ * autenticado/admin vê todas).
+ */
+export async function attachColorInfo<T extends { color_id: string | null }>(
+  supabase: SupabaseClient<Database>,
+  rows: T[]
+): Promise<(T & { colorName: string | null; colorHex: string | null })[]> {
+  const colorIds = [...new Set(rows.map((r) => r.color_id).filter((id): id is string => id != null))];
+  if (colorIds.length === 0) return rows.map((r) => ({ ...r, colorName: null, colorHex: null }));
+
+  const { data, error } = await supabase.from("colors").select("id, name, hex_color").in("id", colorIds);
+  if (error) throw new Error(error.message);
+
+  const byId = new Map((data ?? []).map((c) => [c.id, c]));
+  return rows.map((r) => {
+    const color = r.color_id ? byId.get(r.color_id) : undefined;
+    return { ...r, colorName: color?.name ?? null, colorHex: color?.hex_color ?? null };
+  });
+}
+
+/**
+ * Mapa id -> nome, sem filtro de `active` (usa o client de quem chama —
+ * nas Server Actions de WhatsApp isso é sempre o client admin/service role,
+ * porque a mensagem precisa mostrar o nome da cor de verdade mesmo que ela
+ * tenha sido desativada depois da compra ter sido cogitada).
+ */
+export async function getColorNamesByIds(
+  supabase: SupabaseClient<Database>,
+  colorIds: string[]
+): Promise<Map<string, string>> {
+  if (colorIds.length === 0) return new Map();
+  const { data, error } = await supabase.from("colors").select("id, name").in("id", colorIds);
+  if (error) throw new Error(error.message);
+  return new Map((data ?? []).map((c) => [c.id, c.name]));
+}
 
 /** Todas as cores ativas, ordenadas por nome — usado no chip-select do admin. */
 export async function listActiveColorsAdmin(): Promise<Color[]> {

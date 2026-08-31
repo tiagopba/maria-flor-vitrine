@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
+import { attachColorInfo } from "@/lib/db/colors";
 import { publicImageUrl } from "@/lib/images/url";
 import type { Database } from "@/types/database";
 
@@ -12,6 +13,8 @@ export type ProductSize = Database["public"]["Tables"]["product_sizes"]["Row"];
 export interface ProductListItem extends Product {
   categoryName: string | null;
   mainImageUrl: string | null;
+  colorName: string | null;
+  colorHex: string | null;
 }
 
 export interface ProductDetail extends Product {
@@ -19,6 +22,8 @@ export interface ProductDetail extends Product {
   categorySlug: string | null;
   images: (ProductImage & { url: string })[];
   sizes: string[];
+  colorName: string | null;
+  colorHex: string | null;
 }
 
 const PRODUCTS_BUCKET = "products";
@@ -32,13 +37,14 @@ async function attachCategoryAndMainImage(
   const categoryIds = [...new Set(products.map((p) => p.category_id))];
   const productIds = products.map((p) => p.id);
 
-  const [{ data: categories }, { data: images }] = await Promise.all([
+  const [{ data: categories }, { data: images }, withColors] = await Promise.all([
     supabase.from("categories").select("id, name").in("id", categoryIds),
     supabase
       .from("product_images")
       .select("product_id, storage_path, position")
       .in("product_id", productIds)
       .eq("position", 0),
+    attachColorInfo(supabase, products),
   ]);
 
   const categoryNameById = new Map((categories ?? []).map((c) => [c.id, c.name]));
@@ -46,7 +52,7 @@ async function attachCategoryAndMainImage(
     (images ?? []).map((img) => [img.product_id, publicImageUrl(PRODUCTS_BUCKET, img.storage_path)])
   );
 
-  return products.map((product) => ({
+  return withColors.map((product) => ({
     ...product,
     categoryName: categoryNameById.get(product.category_id) ?? null,
     mainImageUrl: mainImageByProduct.get(product.id) ?? null,
@@ -100,14 +106,13 @@ export async function getProductByIdAdmin(id: string): Promise<ProductDetail | n
   if (error) throw new Error(error.message);
   if (!product) return null;
 
-  const { data: category } = await supabase
-    .from("categories")
-    .select("name, slug")
-    .eq("id", product.category_id)
-    .maybeSingle();
+  const [{ data: category }, [withColor]] = await Promise.all([
+    supabase.from("categories").select("name, slug").eq("id", product.category_id).maybeSingle(),
+    attachColorInfo(supabase, [product]),
+  ]);
 
   return {
-    ...product,
+    ...withColor,
     categoryName: category?.name ?? null,
     categorySlug: category?.slug ?? null,
     images: (images ?? []).map((img) => ({ ...img, url: publicImageUrl(PRODUCTS_BUCKET, img.storage_path) })),
@@ -137,14 +142,15 @@ export async function getProductBySlugPublic(slug: string): Promise<ProductDetai
   if (error) throw new Error(error.message);
   if (!product) return null;
 
-  const [{ data: images }, { data: sizes }, { data: category }] = await Promise.all([
+  const [{ data: images }, { data: sizes }, { data: category }, [withColor]] = await Promise.all([
     supabase.from("product_images").select("*").eq("product_id", product.id).order("position"),
     supabase.from("product_sizes").select("*").eq("product_id", product.id).order("position"),
     supabase.from("categories").select("name, slug").eq("id", product.category_id).maybeSingle(),
+    attachColorInfo(supabase, [product]),
   ]);
 
   return {
-    ...product,
+    ...withColor,
     categoryName: category?.name ?? null,
     categorySlug: category?.slug ?? null,
     images: (images ?? []).map((img) => ({ ...img, url: publicImageUrl(PRODUCTS_BUCKET, img.storage_path) })),
@@ -158,19 +164,33 @@ export async function getProductBySlugPublic(slug: string): Promise<ProductDetai
  * attachCategoryAndMainImage, sem N+1). Sem motor de recomendação: se a
  * categoria tiver menos que `limit` peças publicadas, mostra só o que
  * existe — não completa com outras categorias.
+ *
+ * `groupId`, quando o produto atual pertence a um conjunto de cores,
+ * também exclui as outras cores do MESMO modelo — sem isso, a peça que a
+ * cliente já está vendo (via uma cor irmã) reaparece como "recomendação",
+ * o que é exatamente o tipo de duplicação que o agrupamento existe para
+ * evitar (a troca de cor já tem seu próprio lugar: "Outras cores
+ * disponíveis").
  */
-export async function getRelatedProductsPublic(productId: string, categoryId: string, limit = 8): Promise<ProductListItem[]> {
+export async function getRelatedProductsPublic(
+  productId: string,
+  categoryId: string,
+  groupId: string | null,
+  limit = 8
+): Promise<ProductListItem[]> {
   const supabase = createPublicClient();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("products")
     .select("*")
     .eq("category_id", categoryId)
     .neq("id", productId)
     .neq("status", "ARCHIVED")
-    .not("published_at", "is", null)
-    .order("published_at", { ascending: false })
-    .limit(limit);
+    .not("published_at", "is", null);
+
+  if (groupId) query = query.or(`product_group_id.is.null,product_group_id.neq.${groupId}`);
+
+  const { data, error } = await query.order("published_at", { ascending: false }).limit(limit);
 
   if (error) throw new Error(error.message);
 
@@ -362,10 +382,11 @@ export async function getProductsByIdsPublic(ids: string[]): Promise<ProductDeta
   const validIds = products.map((p) => p.id);
   const categoryIds = [...new Set(products.map((p) => p.category_id))];
 
-  const [{ data: images }, { data: sizes }, { data: categories }] = await Promise.all([
+  const [{ data: images }, { data: sizes }, { data: categories }, withColors] = await Promise.all([
     supabase.from("product_images").select("*").in("product_id", validIds).order("position"),
     supabase.from("product_sizes").select("*").in("product_id", validIds).order("position"),
     supabase.from("categories").select("id, name, slug").in("id", categoryIds),
+    attachColorInfo(supabase, products),
   ]);
 
   const categoryNameById = new Map((categories ?? []).map((c) => [c.id, c.name]));
@@ -385,7 +406,7 @@ export async function getProductsByIdsPublic(ids: string[]): Promise<ProductDeta
     sizesByProduct.set(s.product_id, list);
   }
 
-  return products.map((product) => ({
+  return withColors.map((product) => ({
     ...product,
     categoryName: categoryNameById.get(product.category_id) ?? null,
     categorySlug: categorySlugById.get(product.category_id) ?? null,

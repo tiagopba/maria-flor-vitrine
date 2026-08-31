@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSiteUrl } from "@/lib/site";
 import { resolveProductPricing } from "@/lib/catalog/pricing";
+import { getColorNamesByIds } from "@/lib/db/colors";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { buildProductWhatsAppMessage, buildSoldOutWhatsAppMessage, buildWhatsAppUrl } from "./message-builder";
 import { resolveSeller } from "./resolve-seller";
@@ -37,7 +38,7 @@ export async function submitWhatsAppClick(input: WhatsAppClickInput): Promise<Wh
 
   const { data: product, error: productError } = await supabase
     .from("products")
-    .select("id, name, code, slug, price, promotional_price, cash_price, max_installments_override, status")
+    .select("id, name, code, slug, color_id, price, promotional_price, cash_price, max_installments_override, status")
     .eq("id", input.productId)
     .maybeSingle();
 
@@ -51,12 +52,17 @@ export async function submitWhatsAppClick(input: WhatsAppClickInput): Promise<Wh
   const pricing = resolveProductPricing(product, paymentSettings);
   const productUrl = `${getSiteUrl()}/produto/${product.slug}`;
 
+  const colorName = product.color_id
+    ? (await getColorNamesByIds(supabase, [product.color_id])).get(product.color_id)
+    : undefined;
+
   const message =
     product.status === "SOLD_OUT"
-      ? buildSoldOutWhatsAppMessage({ productName: product.name, code: product.code })
+      ? buildSoldOutWhatsAppMessage({ productName: product.name, code: product.code, colorName })
       : buildProductWhatsAppMessage({
           productName: product.name,
           code: product.code,
+          colorName,
           price: pricing.model === "legacy" ? (pricing.promotionalPrice ?? pricing.price) : pricing.cardPrice,
           dualPrice:
             pricing.model === "dual"
