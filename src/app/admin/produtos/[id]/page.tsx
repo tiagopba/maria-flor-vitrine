@@ -3,7 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SuccessToast } from "@/components/admin/SuccessToast";
 import { getActiveCategoriesPublic } from "@/lib/db/categories";
+import { listActiveColorsAdmin } from "@/lib/db/colors";
 import { getProductByIdAdmin } from "@/lib/db/products";
+import { listGroupSiblingsAdmin } from "@/lib/db/product-groups";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { updateProductAction } from "../actions";
 import { ProductForm } from "../ProductForm";
@@ -16,13 +18,18 @@ export default async function EditProductPage({
 }: PageProps<"/admin/produtos/[id]">) {
   const { id } = await params;
 
-  const [product, categories, paymentSettings] = await Promise.all([
+  const [product, categories, colors, paymentSettings] = await Promise.all([
     getProductByIdAdmin(id),
     getActiveCategoriesPublic(),
+    listActiveColorsAdmin(),
     getPaymentSettings(),
   ]);
 
   if (!product) notFound();
+
+  const groupSiblings = product.product_group_id
+    ? await listGroupSiblingsAdmin(product.product_group_id, product.id)
+    : [];
 
   const boundAction = updateProductAction.bind(null, product.id);
 
@@ -44,9 +51,12 @@ export default async function EditProductPage({
           <ProductForm
             action={boundAction}
             categories={categories}
+            colors={colors}
+            groupSiblings={groupSiblings}
             submitLabel="Salvar alterações"
             paymentSettings={paymentSettings}
             defaultValues={{
+              id: product.id,
               code: product.code,
               name: product.name,
               slug: product.slug,
@@ -59,6 +69,8 @@ export default async function EditProductPage({
               status: product.status,
               featured: product.featured,
               sizes: product.sizes,
+              color_id: product.color_id,
+              product_group_id: product.product_group_id,
             }}
           />
         </div>

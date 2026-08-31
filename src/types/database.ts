@@ -103,6 +103,12 @@ export interface Database {
           cash_price: number | null;
           max_installments_override: number | null;
           category_id: string;
+          // Cor principal da peça (opcional) e agrupamento "mesmo modelo,
+          // cores diferentes" (opcional) — ver lib/db/colors.ts e
+          // lib/db/product-groups.ts. NULL nos dois = comportamento
+          // idêntico ao de antes desta feature.
+          color_id: string | null;
+          product_group_id: string | null;
           status: ProductStatus;
           featured: boolean;
           published_at: string | null;
@@ -111,6 +117,37 @@ export interface Database {
           archived_at: string | null;
         },
         "code" | "name" | "slug" | "price" | "category_id"
+      >;
+
+      colors: Table<
+        {
+          id: string;
+          name: string;
+          slug: string;
+          hex_color: string | null;
+          active: boolean;
+          created_at: string;
+        },
+        "name" | "slug"
+      >;
+
+      product_groups: Table<
+        {
+          id: string;
+          name: string | null;
+          created_at: string;
+        },
+        never
+      >;
+
+      product_slug_redirects: Table<
+        {
+          id: string;
+          product_id: string;
+          old_slug: string;
+          created_at: string;
+        },
+        "product_id" | "old_slug"
       >;
 
       product_images: Table<

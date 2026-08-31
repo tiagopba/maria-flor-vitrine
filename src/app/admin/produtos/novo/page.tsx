@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getActiveCategoriesPublic } from "@/lib/db/categories";
+import { listActiveColorsAdmin } from "@/lib/db/colors";
 import { getProductByIdAdmin } from "@/lib/db/products";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { createProductAction } from "../actions";
@@ -13,9 +14,14 @@ export default async function NewProductPage({
 }: PageProps<"/admin/produtos/novo">) {
   const params = await searchParams;
   const duplicateId = typeof params.duplicar === "string" ? params.duplicar : undefined;
+  // Só presente quando vem do fluxo "cadastrar nova peça em outra cor"
+  // (ProductColorGroupSection) — o grupo já foi garantido/criado antes de
+  // navegar pra cá (ver ensureProductGroupAction).
+  const groupId = typeof params.group === "string" ? params.group : undefined;
 
-  const [categories, source, paymentSettings] = await Promise.all([
+  const [categories, colors, source, paymentSettings] = await Promise.all([
     getActiveCategoriesPublic(),
+    listActiveColorsAdmin(),
     duplicateId ? getProductByIdAdmin(duplicateId) : Promise.resolve(null),
     getPaymentSettings(),
   ]);
@@ -32,7 +38,10 @@ export default async function NewProductPage({
         status: source.status,
         featured: source.featured,
         sizes: source.sizes,
-        // code e slug ficam em branco de propósito — precisam ser novos
+        product_group_id: groupId ?? null,
+        // code, slug, color_id e fotos ficam em branco de propósito —
+        // são exatamente os dados que precisam ser informados de novo
+        // pra cada cor (item 10 da especificação).
       }
     : undefined;
 
@@ -42,7 +51,13 @@ export default async function NewProductPage({
         ← Produtos
       </Link>
       <h1 className="mb-1 mt-2 font-display text-2xl text-text">Novo produto</h1>
-      {source && (
+      {source && groupId && (
+        <p className="mb-4 text-sm text-text-muted">
+          Nova cor de <strong>{source.name}</strong>. Informe código, cor e fotos desta peça — o
+          resto já veio preenchido.
+        </p>
+      )}
+      {source && !groupId && (
         <p className="mb-4 text-sm text-text-muted">
           Duplicado de <strong>{source.name}</strong> ({source.code}). Defina um código e um slug
           novos antes de publicar.
@@ -52,6 +67,7 @@ export default async function NewProductPage({
       <ProductForm
         action={createProductAction}
         categories={categories}
+        colors={colors}
         defaultValues={defaultValues}
         submitLabel="Publicar produto"
         showImageUpload

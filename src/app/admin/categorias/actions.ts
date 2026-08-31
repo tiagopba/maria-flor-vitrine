@@ -9,6 +9,7 @@ import {
   moveCategory,
   setCategoryActive,
   updateCategory,
+  type Category,
 } from "@/lib/db/categories";
 import { categorySchema } from "@/lib/validation/category";
 
@@ -94,4 +95,36 @@ export async function moveCategoryAction(id: string, direction: "up" | "down") {
   await requireAdmin(["admin", "catalog_editor"]);
   await moveCategory(id, direction);
   revalidatePath("/admin/categorias");
+}
+
+/**
+ * Cria uma categoria sem sair do formulário de produto — usada pelo modal
+ * "+" ao lado do select de categoria. Reaproveita categorySchema/
+ * createCategory (mesma validação e gravação de /admin/categorias),
+ * só devolve a categoria criada em vez de redirecionar, já que quem
+ * chama é um modal dentro de outra página.
+ */
+export async function createCategoryQuickAction(
+  formData: FormData
+): Promise<{ category: Category } | { error: string; fieldErrors?: Record<string, string> }> {
+  await requireAdmin(["admin", "catalog_editor"]);
+
+  const parsed = parseCategoryFormData(formData);
+  if (!parsed.success) {
+    return {
+      error: "Dados inválidos.",
+      fieldErrors: Object.fromEntries(
+        Object.entries(parsed.error.flatten().fieldErrors).map(([k, v]) => [k, v?.[0] ?? ""])
+      ),
+    };
+  }
+
+  try {
+    const category = await createCategory(parsed.data);
+    revalidatePath("/admin/produtos/novo");
+    return { category };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Não foi possível criar a categoria.";
+    return { error: message.includes("categories_slug_key") ? "Já existe uma categoria com esse nome." : message };
+  }
 }

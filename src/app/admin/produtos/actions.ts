@@ -9,9 +9,20 @@ import {
   deleteProductImage,
   getProductByIdAdmin,
   moveProductImage,
+  searchProductsForRelate,
   setProductStatus,
   updateProduct,
+  type ProductSearchResult,
 } from "@/lib/db/products";
+import { createColor, type Color } from "@/lib/db/colors";
+import {
+  ensureProductGroup,
+  findDuplicateColorInGroup,
+  relateProductToGroup,
+  type DuplicateColorWarning,
+} from "@/lib/db/product-groups";
+import { isManualProductSlugAvailable, resolveAutoProductSlug } from "@/lib/db/product-slug";
+import { colorSchema } from "@/lib/validation/color";
 import { productSchema, productSizesSchema } from "@/lib/validation/product";
 
 export interface ProductFormState {
@@ -48,12 +59,57 @@ function parseProductFormData(formData: FormData) {
     category_id: formData.get("category_id"),
     status: formData.get("status"),
     featured: formData.get("featured") === "on",
+    color_id: optionalFormValue(formData, "color_id"),
+    product_group_id: optionalFormValue(formData, "product_group_id"),
   });
 
   const sizesRaw = formData.getAll("sizes").map(String);
   const sizesParsed = productSizesSchema.safeParse(sizesRaw);
 
-  return { parsed, sizes: sizesParsed.success ? sizesParsed.data : [] };
+  // "auto" = slug ainda vem do preview automático (nome+código+cor), o
+  // servidor recalcula e resolve colisão sozinho; "manual" = a admin
+  // editou o campo com a própria mão, então o valor digitado é respeitado
+  // (só verificado quanto a disponibilidade, nunca sobrescrito em
+  // silêncio). color_name só serve pra montar o slug automático — nunca é
+  // persistido (o banco só guarda color_id).
+  const slugSource: "auto" | "manual" = formData.get("slug_source") === "manual" ? "manual" : "auto";
+  const colorName = optionalFormValue(formData, "color_name") ?? null;
+
+  return { parsed, sizes: sizesParsed.success ? sizesParsed.data : [], slugSource, colorName };
+}
+
+/**
+ * Resolve o slug final antes de qualquer escrita: no modo automático,
+ * recalcula nome+código+cor no servidor e resolve colisão (-2, -3...)
+ * sozinho — o valor que veio do form é só a prévia visual, nunca a fonte
+ * da verdade. No modo manual, respeita o que a admin digitou, só
+ * verificando disponibilidade (nunca troca em silêncio o que ela decidiu
+ * escrever). Devolve `{ slug }` em caso de sucesso, ou `{ fieldError }`
+ * pronto pra devolver como ProductFormState.
+ */
+async function resolveFinalSlug(params: {
+  slugSource: "auto" | "manual";
+  submittedSlug: string;
+  name: string;
+  code: string;
+  colorName: string | null;
+  excludeProductId?: string;
+}): Promise<{ slug: string } | { fieldError: string }> {
+  if (params.slugSource === "manual") {
+    const available = await isManualProductSlugAvailable(params.submittedSlug, params.excludeProductId);
+    if (!available) {
+      return { fieldError: "Esse endereço já está em uso — tente outro." };
+    }
+    return { slug: params.submittedSlug };
+  }
+
+  const slug = await resolveAutoProductSlug({
+    name: params.name,
+    code: params.code,
+    colorName: params.colorName,
+    excludeProductId: params.excludeProductId,
+  });
+  return { slug };
 }
 
 function collectImagePaths(formData: FormData): string[] {
@@ -96,16 +152,27 @@ export async function createProductAction(
 ): Promise<ProductFormState> {
   await requireAdmin(["admin", "catalog_editor"]);
 
-  const { parsed, sizes } = parseProductFormData(formData);
+  const { parsed, sizes, slugSource, colorName } = parseProductFormData(formData);
   if (!parsed.success) {
     return { fieldErrors: fieldErrorsFrom(parsed) };
+  }
+
+  const slugResult = await resolveFinalSlug({
+    slugSource,
+    submittedSlug: parsed.data.slug,
+    name: parsed.data.name,
+    code: parsed.data.code,
+    colorName,
+  });
+  if ("fieldError" in slugResult) {
+    return { fieldErrors: { slug: slugResult.fieldError } };
   }
 
   const imagePaths = collectImagePaths(formData);
 
   let productId: string;
   try {
-    const product = await createProduct(parsed.data, sizes, imagePaths);
+    const product = await createProduct({ ...parsed.data, slug: slugResult.slug }, sizes, imagePaths);
     productId = product.id;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Não foi possível publicar o produto.";
@@ -127,13 +194,26 @@ export async function updateProductAction(
   const existing = await getProductByIdAdmin(id);
   if (!existing) return { error: "Produto não encontrado." };
 
-  const { parsed, sizes } = parseProductFormData(formData);
+  const { parsed, sizes, slugSource, colorName } = parseProductFormData(formData);
   if (!parsed.success) {
     return { fieldErrors: fieldErrorsFrom(parsed) };
   }
 
+  const slugResult = await resolveFinalSlug({
+    slugSource,
+    submittedSlug: parsed.data.slug,
+    name: parsed.data.name,
+    code: parsed.data.code,
+    colorName,
+    excludeProductId: id,
+  });
+  if ("fieldError" in slugResult) {
+    return { fieldErrors: { slug: slugResult.fieldError } };
+  }
+  const finalData = { ...parsed.data, slug: slugResult.slug };
+
   try {
-    await updateProduct(id, parsed.data, sizes);
+    await updateProduct(id, finalData, sizes, existing.slug);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Não foi possível salvar o produto.";
     return duplicateKeyFieldError(message) ?? { error: message };
@@ -142,9 +222,98 @@ export async function updateProductAction(
   revalidatePath("/admin/produtos");
   revalidatePath("/novidades");
   revalidatePath(`/produto/${existing.slug}`);
-  if (existing.slug !== parsed.data.slug) revalidatePath(`/produto/${parsed.data.slug}`);
+  if (existing.slug !== finalData.slug) revalidatePath(`/produto/${finalData.slug}`);
   revalidatePath(`/categoria`);
   redirect(`/admin/produtos/${id}?sucesso=${encodeURIComponent("Alterações salvas com sucesso.")}`);
+}
+
+/**
+ * Cria uma cor nova sem sair do formulário de produto — usada pelo drawer
+ * "+ Nova cor". Reaproveita colorSchema/createColor (mesma validação e
+ * gravação de qualquer outro fluxo de cor), só devolve a cor criada em
+ * vez de redirecionar, já que quem chama é um modal dentro de outra
+ * página.
+ */
+export async function createColorQuickAction(
+  name: string,
+  hexColor: string | null
+): Promise<{ color: Color } | { error: string }> {
+  await requireAdmin(["admin", "catalog_editor"]);
+
+  const parsed = colorSchema.safeParse({ name, hex_color: hexColor ?? undefined });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  try {
+    const color = await createColor(parsed.data);
+    return { color };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Não foi possível criar a cor.";
+    return { error: message.includes("colors_slug_key") ? "Já existe uma cor com esse nome." : message };
+  }
+}
+
+/**
+ * Garante que o produto atual tem um product_group_id (criando um grupo
+ * novo se ainda não tiver) — chamado antes de navegar pro cadastro de
+ * "nova peça em outra cor", pra o novo produto já nascer vinculado ao
+ * mesmo conjunto.
+ */
+export async function ensureProductGroupAction(productId: string): Promise<{ groupId: string } | { error: string }> {
+  await requireAdmin(["admin", "catalog_editor"]);
+  try {
+    const groupId = await ensureProductGroup(productId);
+    revalidatePath(`/admin/produtos/${productId}`);
+    return { groupId };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Não foi possível preparar o vínculo de cores." };
+  }
+}
+
+/** Busca por nome/código pro modal "relacionar peça já cadastrada". */
+export async function searchProductsForRelateAction(
+  query: string,
+  excludeProductId: string
+): Promise<ProductSearchResult[]> {
+  await requireAdmin(["admin", "catalog_editor"]);
+  return searchProductsForRelate(query, excludeProductId);
+}
+
+/**
+ * Relaciona uma peça já cadastrada como "outra cor do mesmo modelo" do
+ * produto atual. Idempotente se já estiver no mesmo grupo; erro amigável
+ * (nunca técnico) se já pertencer a outro grupo.
+ */
+export async function relateProductToGroupAction(
+  currentProductId: string,
+  targetProductId: string
+): Promise<{ ok: true } | { error: string }> {
+  await requireAdmin(["admin", "catalog_editor"]);
+
+  try {
+    await relateProductToGroup(currentProductId, targetProductId);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Não foi possível relacionar as peças." };
+  }
+
+  revalidatePath(`/admin/produtos/${currentProductId}`);
+  revalidatePath(`/admin/produtos/${targetProductId}`);
+  return { ok: true };
+}
+
+/**
+ * Aviso não-bloqueante: existe outra peça do mesmo grupo já com essa
+ * cor? A admin decide se é intencional e continua — nunca bloqueia o
+ * salvamento (ver decisão do item 7, sem constraint de banco pra isso).
+ */
+export async function checkDuplicateColorInGroupAction(
+  groupId: string,
+  colorId: string,
+  excludeProductId?: string
+): Promise<DuplicateColorWarning | null> {
+  await requireAdmin(["admin", "catalog_editor"]);
+  return findDuplicateColorInGroup(groupId, colorId, excludeProductId);
 }
 
 export async function toggleArchiveProductAction(id: string, archive: boolean) {

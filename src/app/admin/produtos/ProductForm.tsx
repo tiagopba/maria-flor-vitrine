@@ -1,21 +1,30 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { DualPriceBlock } from "@/components/ui/Price";
 import { ImageUploadQueueList } from "@/components/admin/ImageUploadQueueList";
 import { SizeSelector } from "@/components/catalog/SizeSelector";
 import { calculateInstallmentCount } from "@/lib/catalog/installments";
+import { buildProductSlugBase } from "@/lib/catalog/product-slug";
 import { PRODUCT_STATUS_LABELS } from "@/lib/catalog/status";
+import type { Color } from "@/lib/db/colors";
+import type { GroupSibling } from "@/lib/db/product-groups";
 import { useImageUploadQueue } from "@/lib/images/use-image-upload-queue";
 import type { PaymentSettings } from "@/lib/site-settings/payments";
 import { slugify } from "@/lib/utils";
+import { checkDuplicateColorInGroupAction } from "./actions";
+import type { Category } from "@/lib/db/categories";
+import { CategoryQuickAddModal } from "./CategoryQuickAddModal";
+import { ColorQuickAddDrawer } from "./ColorQuickAddDrawer";
+import { ProductColorGroupSection } from "./ProductColorGroupSection";
 import type { ProductFormState } from "./actions";
 
 type ProductFormAction = (state: ProductFormState, formData: FormData) => Promise<ProductFormState>;
 
 export interface ProductFormDefaults {
+  id: string;
   code: string;
   name: string;
   slug: string;
@@ -28,6 +37,8 @@ export interface ProductFormDefaults {
   status: string;
   featured: boolean;
   sizes: string[];
+  color_id: string | null;
+  product_group_id: string | null;
 }
 
 const STATUS_OPTIONS = Object.entries(PRODUCT_STATUS_LABELS).filter(([value]) => value !== "ARCHIVED");
@@ -36,14 +47,18 @@ const initialState: ProductFormState = {};
 
 export function ProductForm({
   action,
-  categories,
+  categories: initialCategories,
+  colors: initialColors,
+  groupSiblings = [],
   defaultValues,
   submitLabel,
   showImageUpload = false,
   paymentSettings,
 }: {
   action: ProductFormAction;
-  categories: { id: string; name: string }[];
+  categories: Category[];
+  colors: Color[];
+  groupSiblings?: GroupSibling[];
   defaultValues?: Partial<ProductFormDefaults>;
   submitLabel: string;
   showImageUpload?: boolean;
@@ -51,12 +66,69 @@ export function ProductForm({
 }) {
   const [state, formAction, pending] = useActionState(action, initialState);
 
+  const [categories, setCategories] = useState<Category[]>(initialCategories);
+  const [categoryId, setCategoryId] = useState(defaultValues?.category_id ?? "");
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+
+  const [colors, setColors] = useState<Color[]>(initialColors);
+  const [hasColor, setHasColor] = useState(Boolean(defaultValues?.color_id));
+  const [colorId, setColorId] = useState<string | null>(defaultValues?.color_id ?? null);
+  const [colorModalOpen, setColorModalOpen] = useState(false);
+  const [duplicateColorWarning, setDuplicateColorWarning] = useState<{ name: string; code: string } | null>(null);
+
+  const [code, setCode] = useState(defaultValues?.code ?? "");
   const [name, setName] = useState(defaultValues?.name ?? "");
-  const [slug, setSlug] = useState(defaultValues?.slug ?? "");
-  const slugTouched = useRef(Boolean(defaultValues?.slug));
+  // Slug: derivado durante a renderização, não guardado em estado próprio
+  // enquanto for automático — recalcula sozinho a cada render a partir de
+  // nome+código+cor, sem precisar de efeito. Só vira controlado por
+  // manualSlugValue depois que a admin edita o campo com a própria mão
+  // nesta sessão (regra aprovada: aí ela assume o controle, e o
+  // formulário para de sobrescrever). O valor final de verdade é sempre
+  // recalculado e resolvido contra colisão no servidor (ver actions.ts
+  // resolveFinalSlug) — isto aqui é só a prévia visual.
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
+  const [manualSlugValue, setManualSlugValue] = useState("");
 
   const [sizes, setSizes] = useState<string[]>(defaultValues?.sizes ?? []);
   const imageQueue = useImageUploadQueue("products");
+
+  const colorName = colorId ? (colors.find((c) => c.id === colorId)?.name ?? null) : null;
+  const autoSlug = name && code ? buildProductSlugBase(name, code, hasColor ? colorName : null) : "";
+  // Editando um produto existente, o slug mostrado é o atual de verdade
+  // até nome/código/cor mudarem de propósito — não recalcula do zero só
+  // por abrir a página (o slug salvo pode nem seguir mais o padrão
+  // nome-código-cor, ex: produto antigo). Assim que algum desses três
+  // campos muda, passa a acompanhar ao vivo (o bug do item 3: hoje o
+  // slug antigo fica parado quando o nome muda).
+  const fieldsChangedFromInitial =
+    name !== (defaultValues?.name ?? "") ||
+    code !== (defaultValues?.code ?? "") ||
+    (hasColor ? colorId : null) !== (defaultValues?.color_id ?? null);
+  const slug = slugManuallyEdited
+    ? manualSlugValue
+    : defaultValues?.slug && !fieldsChangedFromInitial
+      ? defaultValues.slug
+      : autoSlug;
+
+  // Aviso não-bloqueante (nunca impede salvar): já existe outra peça
+  // deste mesmo conjunto de cores com a cor escolhida? Só faz sentido
+  // checar quando o produto já pertence a um conjunto (product_group_id
+  // existente) — produto novo/avulso não tem o que comparar ainda. A
+  // limpeza pro caso "sem grupo/sem cor" também passa pelo .then() (nunca
+  // setState direto no corpo do efeito).
+  useEffect(() => {
+    let cancelled = false;
+    const groupId = defaultValues?.product_group_id;
+    const check = groupId && colorId
+      ? checkDuplicateColorInGroupAction(groupId, colorId, defaultValues?.id)
+      : Promise.resolve(null);
+    check.then((warning) => {
+      if (!cancelled) setDuplicateColorWarning(warning);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [colorId, defaultValues?.product_group_id, defaultValues?.id]);
 
   // Preço no Pix e Preço promocional são mutuamente exclusivos nesta
   // versão (regra de promoção + Pix ainda não definida) — desabilitar um
@@ -134,7 +206,8 @@ export function ProductForm({
           name="code"
           label="Código"
           placeholder="MF-7284"
-          defaultValue={defaultValues?.code}
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
           error={state.fieldErrors?.code}
           required
         />
@@ -142,20 +215,32 @@ export function ProductForm({
           <label htmlFor="category_id" className="text-sm font-medium text-text">
             Categoria
           </label>
-          <select
-            id="category_id"
-            name="category_id"
-            defaultValue={defaultValues?.category_id ?? ""}
-            className="h-11 rounded-lg border border-border bg-surface px-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
-            required
-          >
-            <option value="">Selecione...</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <div className="flex gap-2">
+            <select
+              id="category_id"
+              name="category_id"
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="h-11 flex-1 rounded-lg border border-border bg-surface px-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+              required
+            >
+              <option value="">Selecione...</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => setCategoryModalOpen(true)}
+              aria-label="Nova categoria"
+              title="Nova categoria"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border text-lg text-text hover:bg-muted"
+            >
+              +
+            </button>
+          </div>
           {state.fieldErrors?.category_id && (
             <p className="text-xs text-red-600">{state.fieldErrors.category_id}</p>
           )}
@@ -168,11 +253,7 @@ export function ProductForm({
         label="Nome"
         placeholder="Ex: Calça Balloon Poá"
         value={name}
-        onChange={(e) => {
-          const v = e.target.value;
-          setName(v);
-          if (!slugTouched.current) setSlug(slugify(v));
-        }}
+        onChange={(e) => setName(e.target.value)}
         error={state.fieldErrors?.name}
         required
       />
@@ -183,13 +264,14 @@ export function ProductForm({
         label="Slug (URL)"
         value={slug}
         onChange={(e) => {
-          slugTouched.current = true;
-          setSlug(slugify(e.target.value));
+          setSlugManuallyEdited(true);
+          setManualSlugValue(slugify(e.target.value));
         }}
         error={state.fieldErrors?.slug}
         required
       />
-      <p className="-mt-2 text-xs text-text-muted">Aparece como /produto/{slug || "..."}</p>
+      <p className="-mt-2 text-xs text-text-muted">A peça será encontrada em /produto/{slug || "..."}</p>
+      <input type="hidden" name="slug_source" value={slugManuallyEdited ? "manual" : "auto"} />
 
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-1.5">
@@ -298,6 +380,82 @@ export function ProductForm({
         <SizeSelector name="sizes" value={sizes} onChange={setSizes} />
       </div>
 
+      <div className="flex flex-col gap-2 rounded-xl border border-border p-3.5">
+        <span className="text-sm font-medium text-text">Esta peça tem cor definida?</span>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setHasColor(false);
+              setColorId(null);
+            }}
+            className={`h-9 rounded-full border px-4 text-sm transition-colors ${
+              !hasColor ? "border-primary bg-primary/10 text-primary" : "border-border text-text-muted"
+            }`}
+          >
+            Não
+          </button>
+          <button
+            type="button"
+            onClick={() => setHasColor(true)}
+            className={`h-9 rounded-full border px-4 text-sm transition-colors ${
+              hasColor ? "border-primary bg-primary/10 text-primary" : "border-border text-text-muted"
+            }`}
+          >
+            Sim
+          </button>
+        </div>
+
+        {hasColor && (
+          <div className="mt-1 flex flex-col gap-2">
+            <span className="text-sm font-medium text-text">Qual é a cor desta peça?</span>
+            <div className="flex flex-wrap gap-2">
+              {colors.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setColorId(c.id)}
+                  className={`flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm transition-colors ${
+                    colorId === c.id ? "border-primary bg-primary/10 text-primary" : "border-border text-text"
+                  }`}
+                >
+                  {c.hex_color && (
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full border border-border/60"
+                      style={{ backgroundColor: c.hex_color }}
+                    />
+                  )}
+                  {c.name}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setColorModalOpen(true)}
+                className="flex h-9 items-center rounded-full border border-dashed border-border px-3.5 text-sm text-text-muted hover:border-primary/40 hover:text-text"
+              >
+                + Nova cor
+              </button>
+            </div>
+            {state.fieldErrors?.color_id && <p className="text-xs text-red-600">{state.fieldErrors.color_id}</p>}
+            {duplicateColorWarning && (
+              <p className="text-xs text-amber-700">
+                Já existe outra peça desta cor neste modelo: {duplicateColorWarning.name} (código{" "}
+                {duplicateColorWarning.code}). Você pode continuar se for intencional.
+              </p>
+            )}
+          </div>
+        )}
+
+        <input type="hidden" name="color_id" value={hasColor && colorId ? colorId : ""} />
+        <input type="hidden" name="color_name" value={hasColor ? (colorName ?? "") : ""} />
+      </div>
+
+      <input type="hidden" name="product_group_id" value={defaultValues?.product_group_id ?? ""} />
+
+      {defaultValues?.id && hasColor && (
+        <ProductColorGroupSection productId={defaultValues.id} siblings={groupSiblings} colors={colors} />
+      )}
+
       <div className="flex flex-col gap-1.5">
         <label htmlFor="status" className="text-sm font-medium text-text">
           Status
@@ -345,6 +503,26 @@ export function ProductForm({
       <Button type="submit" disabled={pending || imageQueue.isUploading} className="mt-2">
         {pending ? "Salvando..." : submitLabel}
       </Button>
+
+      <CategoryQuickAddModal
+        open={categoryModalOpen}
+        onClose={() => setCategoryModalOpen(false)}
+        onCreated={(category) => {
+          setCategories((prev) => [...prev, category]);
+          setCategoryId(category.id);
+          setCategoryModalOpen(false);
+        }}
+      />
+
+      <ColorQuickAddDrawer
+        open={colorModalOpen}
+        onClose={() => setColorModalOpen(false)}
+        onCreated={(color) => {
+          setColors((prev) => [...prev, color]);
+          setColorId(color.id);
+          setColorModalOpen(false);
+        }}
+      />
     </form>
   );
 }

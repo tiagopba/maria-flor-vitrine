@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import { deleteImage } from "@/lib/images/provider";
 import { publicImageUrl } from "@/lib/images/url";
+import { assertSlugRedirectAvailable, recordSlugChange } from "@/lib/db/product-slug";
 import type { ProductInput } from "@/lib/validation/product";
 import type { Database } from "@/types/database";
 
@@ -447,8 +448,21 @@ export async function createProduct(
   return product;
 }
 
-export async function updateProduct(id: string, input: ProductInput, sizes: string[]): Promise<Product> {
+export async function updateProduct(
+  id: string,
+  input: ProductInput,
+  sizes: string[],
+  previousSlug: string
+): Promise<Product> {
   const supabase = await createClient();
+  const slugChanged = input.slug !== previousSlug;
+
+  // Valida ANTES de escrever em products: se o slug antigo já pertence,
+  // no histórico, a outro produto, aborta a operação inteira aqui —
+  // nunca existe um produto salvo pela metade (ver lib/db/product-slug.ts).
+  if (slugChanged) {
+    await assertSlugRedirectAvailable(supabase, previousSlug, id);
+  }
 
   const { data: product, error } = await supabase
     .from("products")
@@ -458,6 +472,10 @@ export async function updateProduct(id: string, input: ProductInput, sizes: stri
     .single();
 
   if (error) throw new Error(error.message);
+
+  if (slugChanged) {
+    await recordSlugChange(supabase, id, previousSlug, input.slug);
+  }
 
   const { error: deleteError } = await supabase.from("product_sizes").delete().eq("product_id", id);
   if (deleteError) throw new Error(deleteError.message);
@@ -589,4 +607,88 @@ export async function setProductStatus(id: string, status: Product["status"]): P
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+}
+
+export interface ProductSearchResult {
+  id: string;
+  name: string;
+  code: string;
+  colorName: string | null;
+  mainImageUrl: string | null;
+}
+
+/**
+ * Busca por nome/código pro modal "relacionar peça já cadastrada" —
+ * exclui o próprio produto que está editando (não faz sentido relacionar
+ * uma peça a ela mesma) e produtos arquivados. Duas consultas extras em
+ * lote (cores + imagem principal), nunca uma por resultado.
+ */
+export async function searchProductsForRelate(query: string, excludeProductId: string): Promise<ProductSearchResult[]> {
+  const term = query.trim();
+  if (!term) return [];
+
+  const supabase = await createClient();
+  const escaped = term.replace(/[%_]/g, "\\$&");
+
+  const { data: rows, error } = await supabase
+    .from("products")
+    .select("id, name, code, color_id")
+    .neq("id", excludeProductId)
+    .neq("status", "ARCHIVED")
+    .or(`code.ilike.%${escaped}%,name.ilike.%${escaped}%`)
+    .limit(10);
+
+  if (error) throw new Error(error.message);
+  if (!rows || rows.length === 0) return [];
+
+  const colorIds = [...new Set(rows.map((r) => r.color_id).filter((id): id is string => id != null))];
+  const productIds = rows.map((r) => r.id);
+
+  const [{ data: colors }, { data: images }] = await Promise.all([
+    colorIds.length > 0
+      ? supabase.from("colors").select("id, name").in("id", colorIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    supabase.from("product_images").select("product_id, storage_path").in("product_id", productIds).eq("position", 0),
+  ]);
+
+  const colorNameById = new Map((colors ?? []).map((c) => [c.id, c.name]));
+  const imageByProduct = new Map(
+    (images ?? []).map((img) => [img.product_id, publicImageUrl(PRODUCTS_BUCKET, img.storage_path)])
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    code: r.code,
+    colorName: r.color_id ? (colorNameById.get(r.color_id) ?? null) : null,
+    mainImageUrl: imageByProduct.get(r.id) ?? null,
+  }));
+}
+
+export interface ProductGroupSibling {
+  id: string;
+  name: string;
+  slug: string;
+  colorId: string | null;
+}
+
+/**
+ * Peças "irmãs" (mesmo product_group_id) já publicadas — usado na página
+ * pública do produto pra "Outras cores disponíveis". Client público
+ * (RLS), então nunca vaza produto arquivado/despublicado. Não carrega
+ * fotos de propósito (ver item 13 da especificação: performance) — só o
+ * necessário pra montar o swatch e o link.
+ */
+export async function getPublishedGroupSiblings(groupId: string, excludeProductId: string): Promise<ProductGroupSibling[]> {
+  const supabase = createPublicClient();
+
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, name, slug, color_id")
+    .eq("product_group_id", groupId)
+    .neq("id", excludeProductId);
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row) => ({ id: row.id, name: row.name, slug: row.slug, colorId: row.color_id }));
 }
