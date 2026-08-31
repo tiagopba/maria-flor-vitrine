@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { SuccessToast } from "@/components/admin/SuccessToast";
 import { getActiveCategoriesPublic } from "@/lib/db/categories";
 import { getProductByIdAdmin } from "@/lib/db/products";
+import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { updateProductAction } from "../actions";
 import { ProductForm } from "../ProductForm";
 import { ProductImageManager } from "../ProductImageManager";
@@ -15,9 +16,10 @@ export default async function EditProductPage({
 }: PageProps<"/admin/produtos/[id]">) {
   const { id } = await params;
 
-  const [product, categories] = await Promise.all([
+  const [product, categories, paymentSettings] = await Promise.all([
     getProductByIdAdmin(id),
     getActiveCategoriesPublic(),
+    getPaymentSettings(),
   ]);
 
   if (!product) notFound();
@@ -43,6 +45,7 @@ export default async function EditProductPage({
             action={boundAction}
             categories={categories}
             submitLabel="Salvar alterações"
+            paymentSettings={paymentSettings}
             defaultValues={{
               code: product.code,
               name: product.name,
@@ -50,6 +53,8 @@ export default async function EditProductPage({
               description: product.description,
               price: product.price,
               promotional_price: product.promotional_price,
+              cash_price: product.cash_price,
+              max_installments_override: product.max_installments_override,
               category_id: product.category_id,
               status: product.status,
               featured: product.featured,

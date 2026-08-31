@@ -258,16 +258,21 @@ export interface PublicProductFilters {
  * status, busca por texto) — usada por /busca, /novidades e
  * /categoria/[slug]. Mesmas regras de visibilidade das outras listagens
  * públicas (status != ARCHIVED, published_at preenchido, o resto fica
- * para a RLS). O filtro de preço compara contra o preço EFETIVO (o
- * promocional quando existir, senão o cheio — a mesma regra que o
- * componente Price usa pra exibir), resolvido num único OR no banco, sem
- * trazer tudo pra filtrar em memória. O filtro de tamanho é uma segunda
- * consulta (product_sizes é tabela separada, não coluna) — nunca uma
- * consulta por produto.
+ * para a RLS). O filtro de tamanho é uma segunda consulta (product_sizes
+ * é tabela separada, não coluna) — nunca uma consulta por produto.
+ *
+ * Filtro de preço: quando `cashPriceEnabled` é true, compara contra
+ * `cash_price` quando o produto tiver (modelo novo), com fallback pro
+ * preço efetivo legado (`promotional_price ?? price`) pros que não têm —
+ * mesma regra de "Preço no Pix" usada em lib/catalog/pricing.ts. Quando
+ * `cashPriceEnabled` é false (Pix desativado na loja), a coluna
+ * `cash_price` nem é referenciada — comportamento idêntico ao que já
+ * existia antes do modelo de dois preços.
  */
 export async function listPublishedProductsFiltered(
   filters: PublicProductFilters = {},
-  limit?: number
+  limit?: number,
+  cashPriceEnabled = false
 ): Promise<ProductListItem[]> {
   const supabase = createPublicClient();
 
@@ -286,9 +291,9 @@ export async function listPublishedProductsFiltered(
   if (filters.minPrice != null || filters.maxPrice != null) {
     const min = filters.minPrice ?? 0;
     const max = filters.maxPrice ?? 999999;
-    query = query.or(
-      `and(promotional_price.gte.${min},promotional_price.lte.${max}),and(promotional_price.is.null,price.gte.${min},price.lte.${max})`
-    );
+    const legacyOr = `and(promotional_price.gte.${min},promotional_price.lte.${max}),and(promotional_price.is.null,price.gte.${min},price.lte.${max})`;
+    const dualOr = `and(cash_price.gte.${min},cash_price.lte.${max}),and(cash_price.is.null,promotional_price.gte.${min},promotional_price.lte.${max}),and(cash_price.is.null,promotional_price.is.null,price.gte.${min},price.lte.${max})`;
+    query = query.or(cashPriceEnabled ? dualOr : legacyOr);
   }
 
   if (filters.q) {

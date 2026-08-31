@@ -5,8 +5,15 @@ import { Price } from "@/components/ui/Price";
 import { FavoriteButton } from "@/components/catalog/FavoriteButton";
 import { publicStatusBadge } from "@/lib/catalog/status";
 import type { ProductListItem } from "@/lib/db/products";
+import type { PaymentSettings } from "@/lib/site-settings/payments";
 
-export function ProductCard({ product }: { product: ProductListItem }) {
+export function ProductCard({
+  product,
+  paymentSettings,
+}: {
+  product: ProductListItem;
+  paymentSettings: PaymentSettings;
+}) {
   const badge = publicStatusBadge(product.status);
 
   return (
@@ -37,7 +44,7 @@ export function ProductCard({ product }: { product: ProductListItem }) {
 
       <div className="mt-2">
         <p className="truncate text-sm text-text">{product.name}</p>
-        <Price price={product.price} promotionalPrice={product.promotional_price} />
+        <Price product={product} paymentSettings={paymentSettings} />
       </div>
     </Link>
   );

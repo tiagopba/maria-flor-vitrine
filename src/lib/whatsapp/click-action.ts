@@ -2,6 +2,8 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSiteUrl } from "@/lib/site";
+import { resolveProductPricing } from "@/lib/catalog/pricing";
+import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { buildProductWhatsAppMessage, buildSoldOutWhatsAppMessage, buildWhatsAppUrl } from "./message-builder";
 import { resolveSeller } from "./resolve-seller";
 
@@ -35,7 +37,7 @@ export async function submitWhatsAppClick(input: WhatsAppClickInput): Promise<Wh
 
   const { data: product, error: productError } = await supabase
     .from("products")
-    .select("id, name, code, slug, price, promotional_price, status")
+    .select("id, name, code, slug, price, promotional_price, cash_price, max_installments_override, status")
     .eq("id", input.productId)
     .maybeSingle();
 
@@ -45,7 +47,8 @@ export async function submitWhatsAppClick(input: WhatsAppClickInput): Promise<Wh
   const { seller, selectionMode } = await resolveSeller(supabase, input.sellerId);
   if (!seller) return { error: "Nenhuma vendedora disponível no momento." };
 
-  const price = product.promotional_price ?? product.price;
+  const paymentSettings = await getPaymentSettings();
+  const pricing = resolveProductPricing(product, paymentSettings);
   const productUrl = `${getSiteUrl()}/produto/${product.slug}`;
 
   const message =
@@ -54,7 +57,11 @@ export async function submitWhatsAppClick(input: WhatsAppClickInput): Promise<Wh
       : buildProductWhatsAppMessage({
           productName: product.name,
           code: product.code,
-          price,
+          price: pricing.model === "legacy" ? (pricing.promotionalPrice ?? pricing.price) : pricing.cardPrice,
+          dualPrice:
+            pricing.model === "dual"
+              ? { cashPrice: pricing.cashPrice, cardPrice: pricing.cardPrice, installmentCount: pricing.installmentCount }
+              : undefined,
           size: input.size ?? undefined,
           productUrl,
         });
