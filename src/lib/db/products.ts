@@ -2,10 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
-import { deleteImage } from "@/lib/images/provider";
 import { publicImageUrl } from "@/lib/images/url";
-import { assertSlugRedirectAvailable, recordSlugChange } from "@/lib/db/product-slug";
-import type { ProductInput } from "@/lib/validation/product";
 import type { Database } from "@/types/database";
 
 export type Product = Database["public"]["Tables"]["products"]["Row"];
@@ -401,202 +398,16 @@ export async function getProductsByIdsPublic(ids: string[]): Promise<ProductDeta
 }
 
 /**
- * Grava as linhas de product_images a partir de paths já enviados ao
- * Storage (upload acontece direto do navegador — ver
- * lib/images/upload-client.ts — nunca passa pelo corpo de uma Server
- * Action/Route Handler, por causa do limite de 4.5MB da Vercel).
+ * Ids dos membros atuais de um conjunto de cores — usado na tela de edição
+ * pra hidratar cada cor como um bloco de variante (ver
+ * save_product_with_variants: o grupo real é sempre redescoberto no banco
+ * a partir do root_product_id, nunca confiado a partir do client).
  */
-async function insertProductImageRows(productId: string, storagePaths: string[], startPosition: number) {
-  if (storagePaths.length === 0) return;
-
+export async function listGroupMemberIdsAdmin(groupId: string): Promise<string[]> {
   const supabase = await createClient();
-  const { error } = await supabase.from("product_images").insert(
-    storagePaths.map((storage_path, i) => ({
-      product_id: productId,
-      storage_path,
-      position: startPosition + i,
-    }))
-  );
-
+  const { data, error } = await supabase.from("products").select("id").eq("product_group_id", groupId);
   if (error) throw new Error(error.message);
-}
-
-export async function createProduct(
-  input: ProductInput,
-  sizes: string[],
-  imagePaths: string[]
-): Promise<Product> {
-  const supabase = await createClient();
-
-  const { data: product, error } = await supabase
-    .from("products")
-    .insert({ ...input, published_at: new Date().toISOString() })
-    .select("*")
-    .single();
-
-  if (error) throw new Error(error.message);
-
-  if (sizes.length > 0) {
-    const { error: sizesError } = await supabase
-      .from("product_sizes")
-      .insert(sizes.map((size, position) => ({ product_id: product.id, size, position })));
-    if (sizesError) throw new Error(sizesError.message);
-  }
-
-  await insertProductImageRows(product.id, imagePaths, 0);
-
-  return product;
-}
-
-export async function updateProduct(
-  id: string,
-  input: ProductInput,
-  sizes: string[],
-  previousSlug: string
-): Promise<Product> {
-  const supabase = await createClient();
-  const slugChanged = input.slug !== previousSlug;
-
-  // Valida ANTES de escrever em products: se o slug antigo já pertence,
-  // no histórico, a outro produto, aborta a operação inteira aqui —
-  // nunca existe um produto salvo pela metade (ver lib/db/product-slug.ts).
-  if (slugChanged) {
-    await assertSlugRedirectAvailable(supabase, previousSlug, id);
-  }
-
-  const { data: product, error } = await supabase
-    .from("products")
-    .update(input)
-    .eq("id", id)
-    .select("*")
-    .single();
-
-  if (error) throw new Error(error.message);
-
-  if (slugChanged) {
-    await recordSlugChange(supabase, id, previousSlug, input.slug);
-  }
-
-  const { error: deleteError } = await supabase.from("product_sizes").delete().eq("product_id", id);
-  if (deleteError) throw new Error(deleteError.message);
-
-  if (sizes.length > 0) {
-    const { error: sizesError } = await supabase
-      .from("product_sizes")
-      .insert(sizes.map((size, position) => ({ product_id: id, size, position })));
-    if (sizesError) throw new Error(sizesError.message);
-  }
-
-  return product;
-}
-
-export async function addProductImages(productId: string, imagePaths: string[]): Promise<void> {
-  const supabase = await createClient();
-  const { data: existing } = await supabase
-    .from("product_images")
-    .select("position")
-    .eq("product_id", productId)
-    .order("position", { ascending: false })
-    .limit(1);
-
-  const startPosition = (existing?.[0]?.position ?? -1) + 1;
-  await insertProductImageRows(productId, imagePaths, startPosition);
-}
-
-/**
- * Remove a imagem: apaga o arquivo do Storage e depois o registro em
- * `product_images`. Se o arquivo já não existir mais no Storage (ou a
- * remoção falhar por qualquer outro motivo), a falha é registrada mas não
- * bloqueia a limpeza do registro — o banco é sempre a fonte de verdade de
- * quais fotos o produto tem; não deixamos um registro "preso" só porque o
- * arquivo já sumiu. Isso evita órfãos novos sem precisar de um job de
- * garbage collection separado.
- */
-export async function deleteProductImage(imageId: string): Promise<void> {
-  const supabase = await createClient();
-
-  const { data: image, error: fetchError } = await supabase
-    .from("product_images")
-    .select("storage_path, product_id")
-    .eq("id", imageId)
-    .maybeSingle();
-
-  if (fetchError) throw new Error(fetchError.message);
-
-  if (image) {
-    try {
-      await deleteImage(PRODUCTS_BUCKET, image.storage_path);
-    } catch (err) {
-      console.error(`[deleteProductImage] falha ao remover do Storage (${image.storage_path}):`, err);
-    }
-  }
-
-  const { error } = await supabase.from("product_images").delete().eq("id", imageId);
-  if (error) throw new Error(error.message);
-
-  // Sem isso, remover a foto que estava na posição 0 (ex: depois de
-  // reordenar) deixa nenhuma imagem nessa posição — e a "imagem principal"
-  // das listagens é sempre buscada por position=0, então o produto passaria
-  // a aparecer como "sem foto" mesmo tendo fotos.
-  if (image) {
-    await renumberProductImages(image.product_id);
-  }
-}
-
-async function renumberProductImages(productId: string): Promise<void> {
-  const supabase = await createClient();
-
-  const { data: remaining, error } = await supabase
-    .from("product_images")
-    .select("id, position")
-    .eq("product_id", productId)
-    .order("position", { ascending: true });
-
-  if (error) throw new Error(error.message);
-
-  for (let i = 0; i < (remaining?.length ?? 0); i++) {
-    if (remaining![i].position !== i) {
-      const { error: updateError } = await supabase
-        .from("product_images")
-        .update({ position: i })
-        .eq("id", remaining![i].id);
-      if (updateError) throw new Error(updateError.message);
-    }
-  }
-}
-
-export async function moveProductImage(productId: string, imageId: string, direction: "up" | "down"): Promise<void> {
-  const supabase = await createClient();
-
-  const { data: all, error } = await supabase
-    .from("product_images")
-    .select("id, position")
-    .eq("product_id", productId)
-    .order("position", { ascending: true });
-
-  if (error) throw new Error(error.message);
-  if (!all) return;
-
-  const index = all.findIndex((img) => img.id === imageId);
-  if (index === -1) return;
-
-  const targetIndex = direction === "up" ? index - 1 : index + 1;
-  if (targetIndex < 0 || targetIndex >= all.length) return;
-
-  const current = all[index];
-  const target = all[targetIndex];
-
-  const { error: error1 } = await supabase
-    .from("product_images")
-    .update({ position: target.position })
-    .eq("id", current.id);
-  if (error1) throw new Error(error1.message);
-
-  const { error: error2 } = await supabase
-    .from("product_images")
-    .update({ position: current.position })
-    .eq("id", target.id);
-  if (error2) throw new Error(error2.message);
+  return (data ?? []).map((row) => row.id);
 }
 
 export async function setProductStatus(id: string, status: Product["status"]): Promise<void> {

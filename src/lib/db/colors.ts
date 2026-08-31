@@ -22,6 +22,14 @@ export async function listActiveColorsPublic(): Promise<Color[]> {
   return data ?? [];
 }
 
+/** Todas as cores (ativas e inativas), ordenadas por nome — para o painel /admin/cores. */
+export async function listColorsAdmin(): Promise<Color[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("colors").select("*").order("name");
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
 export interface CreateColorInput {
   name: string;
   hex_color: string | null;
@@ -45,4 +53,24 @@ export async function createColor(input: CreateColorInput): Promise<Color> {
 
   if (error) throw new Error(error.message);
   return data;
+}
+
+export async function updateColor(id: string, input: CreateColorInput): Promise<Color> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("colors")
+    .update({ name: input.name, slug: slugify(input.name), hex_color: input.hex_color })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function setColorActive(id: string, active: boolean): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("colors").update({ active }).eq("id", id);
+  if (error) throw new Error(error.message);
 }

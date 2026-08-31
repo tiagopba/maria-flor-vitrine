@@ -178,6 +178,7 @@ export interface Database {
           id: string;
           label: string;
           position: number;
+          active: boolean;
         },
         "label"
       >;
@@ -375,6 +376,16 @@ export interface Database {
           p_max_per_window: number;
         };
         Returns: boolean;
+      };
+      save_product_with_variants: {
+        Args: {
+          payload: Record<string, unknown>;
+        };
+        Returns: {
+          group_id: string | null;
+          variants: { id: string; code: string; slug: string }[];
+          removed_image_paths: string[];
+        };
       };
     };
   };
