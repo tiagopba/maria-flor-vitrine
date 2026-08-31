@@ -13,6 +13,7 @@ import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
 import { submitFavoritesWhatsAppClick } from "@/lib/whatsapp/favorites-click-action";
 import type { ProductDetail } from "@/lib/db/products";
+import type { PaymentSettings } from "@/lib/site-settings/payments";
 
 /**
  * Limite de itens enviados numa única mensagem — decisão explícita (não
@@ -23,7 +24,13 @@ import type { ProductDetail } from "@/lib/db/products";
  */
 const MAX_ITEMS_TO_SEND = 20;
 
-export function FavoritesPageClient({ sellers }: { sellers: { id: string; name: string }[] }) {
+export function FavoritesPageClient({
+  sellers,
+  paymentSettings,
+}: {
+  sellers: { id: string; name: string }[];
+  paymentSettings: PaymentSettings;
+}) {
   const entries = useFavoritesList();
   const [fetched, setFetched] = useState<{ key: string; data: ProductDetail[] } | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -198,6 +205,7 @@ export function FavoritesPageClient({ sellers }: { sellers: { id: string; name: 
               if (el) rowRefs.current.set(product.id, el);
               else rowRefs.current.delete(product.id);
             }}
+            paymentSettings={paymentSettings}
           />
         ))}
       </div>

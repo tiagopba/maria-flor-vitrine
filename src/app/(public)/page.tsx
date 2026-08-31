@@ -6,6 +6,7 @@ import { ProductGrid } from "@/components/catalog/ProductGrid";
 import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
 import { getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { listPublishedProducts } from "@/lib/db/products";
+import { getPaymentSettings } from "@/lib/site-settings/payments";
 
 // Sem isso, a Home (sem segmento dinâmico nem searchParams) é
 // estaticamente otimizada no build — "Acabaram de chegar" e "Explore por
@@ -18,9 +19,10 @@ import { listPublishedProducts } from "@/lib/db/products";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [novidades, categorias] = await Promise.all([
+  const [novidades, categorias, paymentSettings] = await Promise.all([
     listPublishedProducts(8),
     getVisibleCategoriesPublic(),
+    getPaymentSettings(),
   ]);
 
   const exploreCategories = buildExploreCategoriesItems(categorias);
@@ -56,7 +58,7 @@ export default async function Home() {
             As novidades da Maria Flor aparecem aqui assim que forem publicadas.
           </div>
         ) : (
-          <ProductGrid products={novidades} />
+          <ProductGrid products={novidades} paymentSettings={paymentSettings} />
         )}
       </section>
 

@@ -3,6 +3,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createSharedSelection } from "@/lib/db/shared-selections";
 import { getSiteUrl } from "@/lib/site";
+import { resolveProductPricing } from "@/lib/catalog/pricing";
+import { getPaymentSettings } from "@/lib/site-settings/payments";
 import type { Database } from "@/types/database";
 import { buildFavoritesWhatsAppMessage, buildWhatsAppUrl } from "./message-builder";
 import { resolveSeller } from "./resolve-seller";
@@ -61,7 +63,7 @@ export async function submitFavoritesWhatsAppClick(
 
   const { data: products, error: productsError } = await supabase
     .from("products")
-    .select("id, name, code, price, promotional_price, status")
+    .select("id, name, code, price, promotional_price, cash_price, max_installments_override, status")
     .in("id", ids);
 
   if (productsError) return { error: "Não foi possível carregar as peças selecionadas." };
@@ -105,11 +107,25 @@ export async function submitFavoritesWhatsAppClick(
   }
   const selectionUrl = token ? `${getSiteUrl()}/selecao/${token}` : undefined;
 
+  // Preço só é usado por buildFavoritesWhatsAppMessage quando a seleção tem
+  // exatamente 1 peça (o caso real de "Quero essa peça" — ver comentário lá).
+  // Resolver aqui pra cada item é barato e evita duplicar a checagem de
+  // tamanho da seleção.
+  const paymentSettings = await getPaymentSettings();
+
   const message = buildFavoritesWhatsAppMessage(
-    available.map((p) => ({
-      productName: p.name,
-      size: sizeByProductId.get(p.id) ?? undefined,
-    })),
+    available.map((p) => {
+      const pricing = resolveProductPricing(p, paymentSettings);
+      return {
+        productName: p.name,
+        size: sizeByProductId.get(p.id) ?? undefined,
+        price: pricing.model === "legacy" ? (pricing.promotionalPrice ?? pricing.price) : undefined,
+        dualPrice:
+          pricing.model === "dual"
+            ? { cashPrice: pricing.cashPrice, cardPrice: pricing.cardPrice, installmentCount: pricing.installmentCount }
+            : undefined,
+      };
+    }),
     selectionUrl
   );
 

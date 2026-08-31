@@ -93,6 +93,12 @@ export interface Database {
           description: string | null;
           price: number;
           promotional_price: number | null;
+          // Modelo de dois preços — NULL em qualquer um dos dois significa
+          // "produto no modelo legado" (ver lib/catalog/pricing.ts). Nunca
+          // preenchido junto com promotional_price (constraint
+          // cash_price_excludes_promotional_price no banco).
+          cash_price: number | null;
+          max_installments_override: number | null;
           category_id: string;
           status: ProductStatus;
           featured: boolean;

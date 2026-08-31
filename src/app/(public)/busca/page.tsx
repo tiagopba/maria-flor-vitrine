@@ -8,6 +8,7 @@ import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
 import { buildFilterQueryString, hasActiveFilters, parsePublicFilters } from "@/lib/catalog/filters";
 import { getCategoryBySlugPublic, getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { getAvailableSizesPublic, listPublishedProductsFiltered } from "@/lib/db/products";
+import { getPaymentSettings } from "@/lib/site-settings/payments";
 
 export const metadata: Metadata = { title: "Busca" };
 
@@ -18,20 +19,25 @@ export default async function SearchPage({ searchParams }: PageProps<"/busca">) 
   const filtersActive = hasActiveFilters(filters);
   const shouldSearch = Boolean(query) || filtersActive;
 
-  const [category, sizeOptions, categories] = await Promise.all([
+  const [category, sizeOptions, categories, paymentSettings] = await Promise.all([
     filters.category ? getCategoryBySlugPublic(filters.category) : Promise.resolve(null),
     getAvailableSizesPublic(),
     getVisibleCategoriesPublic(),
+    getPaymentSettings(),
   ]);
 
   const products = shouldSearch
-    ? await listPublishedProductsFiltered({
-        q: query || undefined,
-        categoryId: category?.id,
-        size: filters.size ?? undefined,
-        minPrice: filters.minPrice ?? undefined,
-        maxPrice: filters.maxPrice ?? undefined,
-      })
+    ? await listPublishedProductsFiltered(
+        {
+          q: query || undefined,
+          categoryId: category?.id,
+          size: filters.size ?? undefined,
+          minPrice: filters.minPrice ?? undefined,
+          maxPrice: filters.maxPrice ?? undefined,
+        },
+        undefined,
+        paymentSettings.cashPriceEnabled
+      )
     : [];
 
   const exploreCategories = buildExploreCategoriesItems(categories);
@@ -71,7 +77,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/busca">) 
             </div>
           )
         ) : (
-          <ProductGrid products={products} />
+          <ProductGrid products={products} paymentSettings={paymentSettings} />
         )}
       </div>
 

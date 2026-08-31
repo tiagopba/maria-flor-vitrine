@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { SuccessToast } from "@/components/admin/SuccessToast";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { getInstitutionalInfo } from "@/lib/site-settings/institutional";
-import { updateSiteSettingsAction } from "./actions";
+import { getPaymentSettings } from "@/lib/site-settings/payments";
+import { updatePaymentSettingsAction, updateSiteSettingsAction } from "./actions";
+import { PaymentSettingsForm } from "./PaymentSettingsForm";
 import { SiteSettingsForm } from "./SiteSettingsForm";
 
 export const metadata: Metadata = { title: "Configurações do Site" };
@@ -12,7 +14,7 @@ export default async function ConfiguracoesPage() {
   // de allowedRoles já usado nas outras telas do painel.
   await requireAdmin(["admin"]);
 
-  const info = await getInstitutionalInfo();
+  const [info, paymentSettings] = await Promise.all([getInstitutionalInfo(), getPaymentSettings()]);
 
   return (
     <div className="max-w-2xl">
@@ -22,6 +24,10 @@ export default async function ConfiguracoesPage() {
         Dados que aparecem nas páginas públicas — Quem Somos, Grupo de Ofertas, Como Chegar e o
         rodapé. Nenhum código precisa mudar quando você atualiza algo aqui.
       </p>
+
+      <div className="mb-6">
+        <PaymentSettingsForm action={updatePaymentSettingsAction} defaultValues={paymentSettings} />
+      </div>
 
       <SiteSettingsForm action={updateSiteSettingsAction} defaultValues={info} />
     </div>
