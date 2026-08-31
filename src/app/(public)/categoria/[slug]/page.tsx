@@ -9,6 +9,7 @@ import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
 import { buildFilterQueryString, hasActiveFilters, parsePublicFilters } from "@/lib/catalog/filters";
 import { getCategoryBySlugPublic, getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { getAvailableSizesPublic, listPublishedProductsFiltered } from "@/lib/db/products";
+import { getPaymentSettings } from "@/lib/site-settings/payments";
 
 // "novidades" é seção especial (rota própria /novidades), não uma
 // categoria de catálogo comum — ver lib/db/categories.ts. Continua
@@ -55,16 +56,22 @@ export default async function CategoryPage({ params, searchParams }: PageProps<"
   const filters = parsePublicFilters(rawParams);
   const filtersActive = hasActiveFilters(filters);
 
-  const [products, sizeOptions, categories] = await Promise.all([
-    listPublishedProductsFiltered({
+  const [sizeOptions, categories, paymentSettings] = await Promise.all([
+    getAvailableSizesPublic(),
+    getVisibleCategoriesPublic(),
+    getPaymentSettings(),
+  ]);
+
+  const products = await listPublishedProductsFiltered(
+    {
       categoryId: category.id,
       size: filters.size ?? undefined,
       minPrice: filters.minPrice ?? undefined,
       maxPrice: filters.maxPrice ?? undefined,
-    }),
-    getAvailableSizesPublic(),
-    getVisibleCategoriesPublic(),
-  ]);
+    },
+    undefined,
+    paymentSettings.cashPriceEnabled
+  );
 
   const emptyMessage =
     category.description ??
@@ -102,7 +109,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps<"
             </div>
           )
         ) : (
-          <ProductGrid products={products} />
+          <ProductGrid products={products} paymentSettings={paymentSettings} />
         )}
 
         <section className="mt-12 min-w-0">

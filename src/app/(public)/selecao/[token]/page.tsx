@@ -7,6 +7,7 @@ import { publicStatusBadge } from "@/lib/catalog/status";
 import { getProductsByIdsPublic } from "@/lib/db/products";
 import { getSharedSelection } from "@/lib/db/shared-selections";
 import { recordSelectionViewed } from "@/lib/selections/analytics";
+import { getPaymentSettings } from "@/lib/site-settings/payments";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,10 @@ export default async function SharedSelectionPage({ params }: { params: Promise<
   }
 
   const sizeByProductId = new Map(selection.items.map((i) => [i.product_id, i.selected_size]));
-  const products = await getProductsByIdsPublic(selection.items.map((i) => i.product_id));
+  const [products, paymentSettings] = await Promise.all([
+    getProductsByIdsPublic(selection.items.map((i) => i.product_id)),
+    getPaymentSettings(),
+  ]);
 
   // Não bloqueia a renderização — a vendedora precisa ver a seleção mesmo
   // se o registro do evento falhar (ex: migration ainda não aplicada).
@@ -97,7 +101,7 @@ export default async function SharedSelectionPage({ params }: { params: Promise<
                     </p>
                   )}
                   <div className="flex items-center gap-2">
-                    <Price price={product.price} promotionalPrice={product.promotional_price} />
+                    <Price product={product} paymentSettings={paymentSettings} />
                     {badge && <Badge tone="warning">{badge}</Badge>}
                   </div>
                 </div>

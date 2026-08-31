@@ -3,10 +3,13 @@
 import { useActionState, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { formatBRL } from "@/components/ui/Price";
 import { ImageUploadQueueList } from "@/components/admin/ImageUploadQueueList";
 import { SizeSelector } from "@/components/catalog/SizeSelector";
+import { calculateInstallmentCount } from "@/lib/catalog/installments";
 import { PRODUCT_STATUS_LABELS } from "@/lib/catalog/status";
 import { useImageUploadQueue } from "@/lib/images/use-image-upload-queue";
+import type { PaymentSettings } from "@/lib/site-settings/payments";
 import { slugify } from "@/lib/utils";
 import type { ProductFormState } from "./actions";
 
@@ -19,6 +22,8 @@ export interface ProductFormDefaults {
   description: string | null;
   price: number;
   promotional_price: number | null;
+  cash_price: number | null;
+  max_installments_override: number | null;
   category_id: string;
   status: string;
   featured: boolean;
@@ -35,12 +40,14 @@ export function ProductForm({
   defaultValues,
   submitLabel,
   showImageUpload = false,
+  paymentSettings,
 }: {
   action: ProductFormAction;
   categories: { id: string; name: string }[];
   defaultValues?: Partial<ProductFormDefaults>;
   submitLabel: string;
   showImageUpload?: boolean;
+  paymentSettings: PaymentSettings;
 }) {
   const [state, formAction, pending] = useActionState(action, initialState);
 
@@ -51,12 +58,48 @@ export function ProductForm({
   const [sizes, setSizes] = useState<string[]>(defaultValues?.sizes ?? []);
   const imageQueue = useImageUploadQueue("products");
 
+  // Preço no Pix e Preço promocional são mutuamente exclusivos nesta
+  // versão (regra de promoção + Pix ainda não definida) — desabilitar um
+  // campo quando o outro tem valor evita a cliente-admin preencher os dois
+  // e só descobrir o erro ao salvar. Campo desabilitado não entra no
+  // FormData no submit, então isso já garante o null do lado certo sem
+  // nenhum código extra.
+  const [price, setPrice] = useState(defaultValues?.price != null ? String(defaultValues.price) : "");
+  const [promotionalPrice, setPromotionalPrice] = useState(
+    defaultValues?.promotional_price != null ? String(defaultValues.promotional_price) : ""
+  );
+  const [cashPrice, setCashPrice] = useState(
+    defaultValues?.cash_price != null ? String(defaultValues.cash_price) : ""
+  );
+  const cashPriceHasValue = cashPrice.trim() !== "";
+  const promotionalPriceHasValue = promotionalPrice.trim() !== "";
+
+  const [useStoreDefaultInstallments, setUseStoreDefaultInstallments] = useState(
+    defaultValues?.max_installments_override == null
+  );
+  const [maxInstallmentsOverride, setMaxInstallmentsOverride] = useState(
+    defaultValues?.max_installments_override != null ? String(defaultValues.max_installments_override) : ""
+  );
+
   function handleImagesChange(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
     imageQueue.addFiles(files);
     event.target.value = "";
   }
+
+  const priceNum = Number(price);
+  const cashPriceNum = Number(cashPrice);
+  const showPreview = cashPriceHasValue && Number.isFinite(cashPriceNum) && Number.isFinite(priceNum) && priceNum > 0;
+  const previewInstallmentCount = showPreview
+    ? calculateInstallmentCount({
+        price: priceNum,
+        maxInstallmentsOverride: useStoreDefaultInstallments ? null : Number(maxInstallmentsOverride) || null,
+        defaultMaxInstallments: paymentSettings.defaultMaxInstallments,
+        minInstallmentValue: paymentSettings.minInstallmentValue,
+        installmentsEnabled: paymentSettings.installmentsEnabled,
+      })
+    : null;
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
@@ -146,17 +189,34 @@ export function ProductForm({
 
       <div className="grid grid-cols-2 gap-4">
         <Input
+          id="cash_price"
+          name="cash_price"
+          type="number"
+          step="0.01"
+          min="0"
+          label="Preço no Pix"
+          placeholder="179.90"
+          value={cashPrice}
+          onChange={(e) => setCashPrice(e.target.value)}
+          disabled={promotionalPriceHasValue}
+          error={state.fieldErrors?.cash_price}
+        />
+        <Input
           id="price"
           name="price"
           type="number"
           step="0.01"
           min="0"
-          label="Preço"
+          label="Preço a prazo/cartão"
           placeholder="199.90"
-          defaultValue={defaultValues?.price}
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
           error={state.fieldErrors?.price}
           required
         />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
         <Input
           id="promotional_price"
           name="promotional_price"
@@ -165,9 +225,62 @@ export function ProductForm({
           min="0"
           label="Preço promocional (opcional)"
           placeholder=""
-          defaultValue={defaultValues?.promotional_price ?? ""}
+          value={promotionalPrice}
+          onChange={(e) => setPromotionalPrice(e.target.value)}
+          disabled={cashPriceHasValue}
           error={state.fieldErrors?.promotional_price}
         />
+        {cashPriceHasValue && (
+          <p className="text-xs text-text-muted">
+            Desativado enquanto houver Preço no Pix — os dois não podem coexistir nesta versão.
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2 rounded-xl border border-border p-3.5">
+        <label className="flex items-center gap-2 text-sm text-text">
+          <input
+            type="checkbox"
+            checked={useStoreDefaultInstallments}
+            onChange={(e) => setUseStoreDefaultInstallments(e.target.checked)}
+            className="h-4 w-4 rounded border-border"
+          />
+          Usar parcelamento padrão da loja ({paymentSettings.defaultMaxInstallments}x)
+        </label>
+
+        {!useStoreDefaultInstallments && (
+          <Input
+            id="max_installments_override"
+            name="max_installments_override"
+            type="number"
+            step="1"
+            min="1"
+            label="Máximo de parcelas para este produto"
+            value={maxInstallmentsOverride}
+            onChange={(e) => setMaxInstallmentsOverride(e.target.value)}
+            error={state.fieldErrors?.max_installments_override}
+          />
+        )}
+
+        {showPreview && (
+          <div className="mt-1 rounded-lg bg-muted/60 p-3">
+            <p className="mb-1 text-xs font-medium text-text-muted">A cliente verá</p>
+            {paymentSettings.cashPriceEnabled ? (
+              <>
+                <p className="text-sm text-text">{formatBRL(cashPriceNum)} no Pix</p>
+                <p className="text-sm text-text-muted">
+                  {formatBRL(priceNum)} no cartão
+                  {previewInstallmentCount != null && ` • até ${previewInstallmentCount}x sem juros`}
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-amber-700">
+                O preço no Pix está desativado nas configurações da loja — a cliente não verá isso até
+                você ativar em /admin/configuracoes.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">

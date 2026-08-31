@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getActiveCategoriesPublic } from "@/lib/db/categories";
 import { getProductByIdAdmin } from "@/lib/db/products";
+import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { createProductAction } from "../actions";
 import { ProductForm, type ProductFormDefaults } from "../ProductForm";
 
@@ -13,9 +14,10 @@ export default async function NewProductPage({
   const params = await searchParams;
   const duplicateId = typeof params.duplicar === "string" ? params.duplicar : undefined;
 
-  const [categories, source] = await Promise.all([
+  const [categories, source, paymentSettings] = await Promise.all([
     getActiveCategoriesPublic(),
     duplicateId ? getProductByIdAdmin(duplicateId) : Promise.resolve(null),
+    getPaymentSettings(),
   ]);
 
   const defaultValues: Partial<ProductFormDefaults> | undefined = source
@@ -24,6 +26,8 @@ export default async function NewProductPage({
         description: source.description,
         price: source.price,
         promotional_price: source.promotional_price,
+        cash_price: source.cash_price,
+        max_installments_override: source.max_installments_override,
         category_id: source.category_id,
         status: source.status,
         featured: source.featured,
@@ -51,6 +55,7 @@ export default async function NewProductPage({
         defaultValues={defaultValues}
         submitLabel="Publicar produto"
         showImageUpload
+        paymentSettings={paymentSettings}
       />
     </div>
   );

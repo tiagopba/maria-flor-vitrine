@@ -3,6 +3,7 @@ import { CategoryCarousel } from "@/components/catalog/CategoryCarousel";
 import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
 import { getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { getActiveSellersForModal } from "@/lib/db/sellers";
+import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { FavoritesPageClient } from "./FavoritesPageClient";
 
 // noindex: página pessoal (o conteúdo depende do localStorage de cada
@@ -18,7 +19,11 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function FavoritosPage() {
-  const [sellers, categories] = await Promise.all([getActiveSellersForModal(), getVisibleCategoriesPublic()]);
+  const [sellers, categories, paymentSettings] = await Promise.all([
+    getActiveSellersForModal(),
+    getVisibleCategoriesPublic(),
+    getPaymentSettings(),
+  ]);
   const exploreCategories = buildExploreCategoriesItems(categories);
 
   return (
@@ -28,7 +33,7 @@ export default async function FavoritosPage() {
         Confira as peças que você escolheu, selecione os tamanhos e envie tudo para uma vendedora.
       </p>
 
-      <FavoritesPageClient sellers={sellers} />
+      <FavoritesPageClient sellers={sellers} paymentSettings={paymentSettings} />
 
       <section className="mt-12 min-w-0">
         <h2 className="mb-1 font-display text-lg text-text sm:text-xl">Explore por categoria</h2>

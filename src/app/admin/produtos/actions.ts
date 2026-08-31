@@ -27,6 +27,8 @@ function parseProductFormData(formData: FormData) {
     description: formData.get("description"),
     price: formData.get("price"),
     promotional_price: formData.get("promotional_price"),
+    cash_price: formData.get("cash_price"),
+    max_installments_override: formData.get("max_installments_override"),
     category_id: formData.get("category_id"),
     status: formData.get("status"),
     featured: formData.get("featured") === "on",

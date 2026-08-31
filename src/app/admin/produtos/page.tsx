@@ -7,6 +7,7 @@ import { Price } from "@/components/ui/Price";
 import { listCategoriesAdmin } from "@/lib/db/categories";
 import { listProductsAdmin, type ListProductsAdminFilters } from "@/lib/db/products";
 import { PRODUCT_STATUS_LABELS } from "@/lib/catalog/status";
+import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { toggleArchiveProductAction } from "./actions";
 
 export const metadata: Metadata = { title: "Produtos" };
@@ -27,9 +28,10 @@ export default async function ProductsPage({
   const categoryId = typeof params.categoria === "string" ? params.categoria : undefined;
   const status = parseStatusFilter(params.status);
 
-  const [products, categories] = await Promise.all([
+  const [products, categories, paymentSettings] = await Promise.all([
     listProductsAdmin({ search, categoryId, status }),
     listCategoriesAdmin(),
+    getPaymentSettings(),
   ]);
 
   return (
@@ -118,7 +120,7 @@ export default async function ProductsPage({
                   {new Date(product.created_at).toLocaleDateString("pt-BR")}
                 </p>
                 <div className="mt-1">
-                  <Price price={product.price} promotionalPrice={product.promotional_price} />
+                  <Price product={product} paymentSettings={paymentSettings} />
                 </div>
               </div>
 

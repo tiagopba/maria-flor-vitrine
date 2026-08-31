@@ -8,6 +8,7 @@ import { SingleSizeSelector } from "@/components/catalog/SingleSizeSelector";
 import { publicStatusBadge } from "@/lib/catalog/status";
 import { removeFavorite, setSelectedSize } from "@/lib/favorites/storage";
 import type { ProductDetail } from "@/lib/db/products";
+import type { PaymentSettings } from "@/lib/site-settings/payments";
 
 /**
  * Uma peça na lista de /favoritos — imagem à esquerda, informações à
@@ -20,12 +21,14 @@ export function FavoriteProductRow({
   selectedSize,
   pending,
   rowRef,
+  paymentSettings,
 }: {
   product: ProductDetail;
   selectedSize: string | null;
   /** true quando essa é a primeira peça sem tamanho escolhido — usado só para o scroll/foco, a mensagem de erro é única, mostrada acima da lista */
   pending?: boolean;
   rowRef?: (el: HTMLDivElement | null) => void;
+  paymentSettings: PaymentSettings;
 }) {
   const isSoldOut = product.status === "SOLD_OUT";
   const badge = publicStatusBadge(product.status);
@@ -63,7 +66,7 @@ export function FavoriteProductRow({
         </div>
 
         <div className="flex items-center gap-2">
-          <Price price={product.price} promotionalPrice={product.promotional_price} />
+          <Price product={product} paymentSettings={paymentSettings} />
           {badge && <Badge tone="warning">{badge}</Badge>}
         </div>
 

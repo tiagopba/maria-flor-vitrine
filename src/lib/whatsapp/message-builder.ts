@@ -6,6 +6,19 @@ export interface ProductMessageInput {
   productUrl?: string;
 }
 
+/**
+ * Linhas de preço do modelo Pix/cartão — quando presente, substitui a
+ * linha única de `price` na mensagem de "Quero essa peça" pela mesma
+ * informação de dois preços exibida no site (nunca pode divergir). Não é
+ * usado em buildLookWhatsAppMessage (Provador) — esse fluxo continua com
+ * o preço único de sempre, fora do escopo desta mudança.
+ */
+export interface DualPriceLines {
+  cashPrice: number;
+  cardPrice: number;
+  installmentCount: number | null;
+}
+
 const formatPrice = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -20,7 +33,10 @@ const HEART = String.fromCharCode(0x2764, 0xfe0f);
 const CAMERA = String.fromCodePoint(0x1f4f8);
 
 /**
- * Mensagem para "Quero essa peça" na página de produto.
+ * Mensagem para "Quero essa peça" na página de produto. Quando o produto
+ * usa o modelo de dois preços, `dualPrice` substitui a linha única de
+ * `price` pela mesma informação de Pix + cartão exibida no site — não pode
+ * haver divergência entre a Vitrine e a mensagem enviada à vendedora.
  */
 export function buildProductWhatsAppMessage({
   productName,
@@ -28,12 +44,22 @@ export function buildProductWhatsAppMessage({
   price,
   size,
   productUrl,
-}: ProductMessageInput): string {
+  dualPrice,
+}: ProductMessageInput & { dualPrice?: DualPriceLines }): string {
+  const priceLines = dualPrice
+    ? [
+        `${formatPrice(dualPrice.cashPrice)} no Pix`,
+        `${formatPrice(dualPrice.cardPrice)} no cartão${
+          dualPrice.installmentCount != null ? ` • até ${dualPrice.installmentCount}x sem juros` : ""
+        }`,
+      ]
+    : [formatPrice(price)];
+
   const lines = [
     `Oi! Vi essa peça na Vitrine Maria Flor ${HEART}`,
     productName,
     size ? `Código: ${code} | Tam: ${size}` : `Código: ${code}`,
-    formatPrice(price),
+    ...priceLines,
     "Pode verificar a disponibilidade pra mim?",
   ];
 
@@ -73,6 +99,10 @@ export function buildLookWhatsAppMessage({ lookTitle, products }: LookMessageInp
 export interface FavoritesSelectionItem {
   productName: string;
   size?: string;
+  /** Preço legado — só entra na mensagem quando a seleção tem exatamente 1 peça. */
+  price?: number;
+  /** Preço Pix/cartão do modelo de dois preços — mesma regra de `price` acima. */
+  dualPrice?: DualPriceLines;
 }
 
 /**
@@ -81,10 +111,17 @@ export interface FavoritesSelectionItem {
  * favorites-click-action.ts), então todo item da lista é, por definição,
  * uma peça disponível para consulta.
  *
- * Compacta de propósito (sem código/preço por item) — quem quiser esse
- * detalhe visual entra no link da seleção compartilhável, que é a
- * referência visual real; repetir tudo na mensagem só deixaria ela grande
- * e a URL individual de cada produto redundante.
+ * Compacta de propósito com 2+ peças (sem código/preço por item) — quem
+ * quiser esse detalhe visual entra no link da seleção compartilhável, que
+ * é a referência visual real; repetir tudo na mensagem só deixaria ela
+ * grande e a URL individual de cada produto redundante.
+ *
+ * Com exatamente 1 peça, porém, ESTA é a mensagem real de "Quero essa
+ * peça" na página de produto — "Quero essa peça" entra nesta mesma
+ * infraestrutura de seleção (ver ProductWhatsAppFlow.tsx) em vez de um
+ * envio isolado. Por isso o preço aparece nesse caso: não pode haver
+ * divergência entre o preço mostrado na Vitrine e o preço na mensagem
+ * enviada à vendedora.
  */
 export function buildFavoritesWhatsAppMessage(products: FavoritesSelectionItem[], selectionUrl?: string): string {
   const lines = [`Oi! Separei algumas peças na Vitrine Maria Flor ${HEART}`, ""];
@@ -94,6 +131,21 @@ export function buildFavoritesWhatsAppMessage(products: FavoritesSelectionItem[]
       product.size ? `${index + 1}. ${product.productName} — Tam: ${product.size}` : `${index + 1}. ${product.productName}`
     );
   });
+
+  if (products.length === 1) {
+    const [only] = products;
+    if (only.dualPrice) {
+      lines.push(
+        "",
+        `${formatPrice(only.dualPrice.cashPrice)} no Pix`,
+        `${formatPrice(only.dualPrice.cardPrice)} no cartão${
+          only.dualPrice.installmentCount != null ? ` • até ${only.dualPrice.installmentCount}x sem juros` : ""
+        }`
+      );
+    } else if (only.price != null) {
+      lines.push("", formatPrice(only.price));
+    }
+  }
 
   lines.push("", "Pode verificar quais estão disponíveis pra mim?");
 
