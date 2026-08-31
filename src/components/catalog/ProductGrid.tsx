@@ -1,7 +1,15 @@
-import { ProductCard } from "@/components/catalog/ProductCard";
+import { GroupedProductGrid } from "@/components/catalog/GroupedProductGrid";
+import { groupProductsForDisplay } from "@/lib/catalog/group-products-for-display";
 import type { ProductListItem } from "@/lib/db/products";
 import type { PaymentSettings } from "@/lib/site-settings/payments";
 
+/**
+ * Agrupa por product_group_id antes de renderizar (Home, Novidades,
+ * Categoria, "Você também pode gostar") — um modelo com 2+ cores vira 1
+ * card só, nunca um card por cor (ver lib/catalog/group-products-for-display.ts).
+ * A busca usa GroupedProductGrid diretamente porque precisa de uma regra
+ * de agrupamento diferente (código nunca some dentro do grupo).
+ */
 export function ProductGrid({
   products,
   paymentSettings,
@@ -9,11 +17,6 @@ export function ProductGrid({
   products: ProductListItem[];
   paymentSettings: PaymentSettings;
 }) {
-  return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
-      {products.map((product) => (
-        <ProductCard key={product.id} product={product} paymentSettings={paymentSettings} />
-      ))}
-    </div>
-  );
+  const groups = groupProductsForDisplay(products);
+  return <GroupedProductGrid groups={groups} paymentSettings={paymentSettings} />;
 }

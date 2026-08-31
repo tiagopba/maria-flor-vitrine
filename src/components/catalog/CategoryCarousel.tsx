@@ -2,24 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Shirt, ShoppingBag, Sparkles, Star, Tag, type LucideIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { CATEGORY_ICON_REGISTRY } from "@/lib/catalog/category-icons";
+import type { ExploreCategoryItem } from "@/lib/catalog/explore-categories";
 
-export type CategoryIconKey = "sparkles" | "star" | "shopping-bag" | "shirt" | "tag";
-
-export interface CategoryCarouselItem {
-  key: string;
-  name: string;
-  href: string;
-  icon: CategoryIconKey;
-}
-
-const ICONS: Record<CategoryIconKey, LucideIcon> = {
-  sparkles: Sparkles,
-  star: Star,
-  "shopping-bag": ShoppingBag,
-  shirt: Shirt,
-  tag: Tag,
-};
+export type CategoryCarouselItem = ExploreCategoryItem;
 
 /**
  * Carrossel horizontal de categorias — mesma técnica de scroll nativo da
@@ -33,6 +20,9 @@ const ICONS: Record<CategoryIconKey, LucideIcon> = {
  * montado no servidor (buildExploreCategoriesItems) e passado como prop
  * pra este Client Component — uma referência de função/componente não
  * atravessa essa fronteira serializável, só um valor simples como string.
+ * A chave é resolvida pro componente de verdade aqui dentro, via
+ * CATEGORY_ICON_REGISTRY (lib/catalog/category-icons.ts) — único lugar
+ * que conhece a lista de ícones disponíveis.
  */
 export function CategoryCarousel({ items }: { items: CategoryCarouselItem[] }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -78,7 +68,7 @@ export function CategoryCarousel({ items }: { items: CategoryCarouselItem[] }) {
         className="flex snap-x snap-proximity gap-2.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [overscroll-behavior-x:contain] [&::-webkit-scrollbar]:hidden"
       >
         {items.map((item) => {
-          const Icon = ICONS[item.icon];
+          const Icon = CATEGORY_ICON_REGISTRY[item.icon].Icon;
           return (
             <Link
               key={item.key}

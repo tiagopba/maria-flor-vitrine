@@ -1,61 +1,34 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getActiveCategoriesPublic } from "@/lib/db/categories";
-import { getProductByIdAdmin } from "@/lib/db/products";
+import { listActiveColorsAdmin } from "@/lib/db/colors";
+import { listActiveSizeOptionsAdmin } from "@/lib/db/sizes";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
-import { createProductAction } from "../actions";
-import { ProductForm, type ProductFormDefaults } from "../ProductForm";
+import { ProductForm } from "../ProductForm";
 
 export const metadata: Metadata = { title: "Novo produto" };
 
-export default async function NewProductPage({
-  searchParams,
-}: PageProps<"/admin/produtos/novo">) {
-  const params = await searchParams;
-  const duplicateId = typeof params.duplicar === "string" ? params.duplicar : undefined;
-
-  const [categories, source, paymentSettings] = await Promise.all([
+export default async function NewProductPage() {
+  const [categories, colors, sizeOptions, paymentSettings] = await Promise.all([
     getActiveCategoriesPublic(),
-    duplicateId ? getProductByIdAdmin(duplicateId) : Promise.resolve(null),
+    listActiveColorsAdmin(),
+    listActiveSizeOptionsAdmin(),
     getPaymentSettings(),
   ]);
 
-  const defaultValues: Partial<ProductFormDefaults> | undefined = source
-    ? {
-        name: source.name,
-        description: source.description,
-        price: source.price,
-        promotional_price: source.promotional_price,
-        cash_price: source.cash_price,
-        max_installments_override: source.max_installments_override,
-        category_id: source.category_id,
-        status: source.status,
-        featured: source.featured,
-        sizes: source.sizes,
-        // code e slug ficam em branco de propósito — precisam ser novos
-      }
-    : undefined;
-
   return (
-    <div className="max-w-md">
+    <div className="max-w-2xl">
       <Link href="/admin/produtos" className="text-sm text-text-muted hover:text-text">
         ← Produtos
       </Link>
-      <h1 className="mb-1 mt-2 font-display text-2xl text-text">Novo produto</h1>
-      {source && (
-        <p className="mb-4 text-sm text-text-muted">
-          Duplicado de <strong>{source.name}</strong> ({source.code}). Defina um código e um slug
-          novos antes de publicar.
-        </p>
-      )}
-      {!source && <div className="mb-4" />}
+      <h1 className="mb-6 mt-2 font-display text-2xl text-text">Novo produto</h1>
       <ProductForm
-        action={createProductAction}
         categories={categories}
-        defaultValues={defaultValues}
-        submitLabel="Publicar produto"
-        showImageUpload
+        colors={colors}
+        sizeOptions={sizeOptions}
         paymentSettings={paymentSettings}
+        rootProductId={null}
+        submitLabel="Publicar produto"
       />
     </div>
   );

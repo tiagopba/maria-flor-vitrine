@@ -1,150 +1,195 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/permissions";
-import {
-  addProductImages,
-  createProduct,
-  deleteProductImage,
-  getProductByIdAdmin,
-  moveProductImage,
-  setProductStatus,
-  updateProduct,
-} from "@/lib/db/products";
-import { productSchema, productSizesSchema } from "@/lib/validation/product";
+import { getProductByIdAdmin, searchProductsForRelate, setProductStatus, type ProductSearchResult } from "@/lib/db/products";
+import { createColor, type Color } from "@/lib/db/colors";
+import { createSizeOption, type SizeOption } from "@/lib/db/sizes";
+import { relateProductToGroup } from "@/lib/db/product-groups";
+import { saveProductWithVariants, SaveProductWithVariantsError } from "@/lib/db/product-variants";
+import { deleteImage } from "@/lib/images/provider";
+import { colorSchema } from "@/lib/validation/color";
+import { sizeOptionSchema } from "@/lib/validation/size";
+import { saveProductVariantsPayloadSchema } from "@/lib/validation/product-variants";
 
-export interface ProductFormState {
-  error?: string;
-  fieldErrors?: Record<string, string>;
+export type SaveProductVariantsActionResult =
+  | { ok: true; productId: string }
+  | { error: string; fieldErrors?: Record<string, string> };
+
+/**
+ * Traduz o `code` controlado devolvido pela RPC (ou por uma violação de
+ * unique constraint) em mensagem amigável — a admin nunca vê SQL bruto.
+ * Alguns códigos indicam bug de frontend/payload adulterado; esses também
+ * viram log interno, mas a mensagem pra admin continua genérica e educada.
+ */
+const FRIENDLY_SAVE_ERRORS: Record<string, string> = {
+  slug_taken: "Este endereço já está sendo usado por outra peça.",
+  slug_reserved: "Este endereço pertence ao histórico de outra peça.",
+  duplicate_code: "Este código já está cadastrado.",
+  duplicate_slug: "Este endereço já está sendo usado por outra peça.",
+  duplicate_key: "Um dos dados já está cadastrado.",
+  image_not_owned_by_variant: "Não foi possível salvar as fotos. Atualize a página e tente novamente.",
+  image_storage_path_required: "Não foi possível salvar as fotos. Atualize a página e tente novamente.",
+  variant_not_in_group: "Uma das cores não pertence mais a este modelo. Atualize a página e tente novamente.",
+  group_members_incomplete: "As cores desta peça foram alteradas em outra sessão. Atualize a página antes de salvar.",
+  variant_in_both_lists: "Não foi possível salvar. Atualize a página e tente novamente.",
+  root_product_not_found: "Um dos produtos não foi encontrado. Atualize a página e tente novamente.",
+  variant_not_found: "Um dos produtos não foi encontrado. Atualize a página e tente novamente.",
+  status_archived_not_allowed: "Não foi possível salvar. Atualize a página e tente novamente.",
+  no_variants: "Preencha os dados da peça antes de salvar.",
+  color_required_for_multi_variant: "Escolha a cor de cada peça antes de adicionar outra cor.",
+  cannot_remove_root_variant: "Não é possível remover a peça que está sendo editada agora.",
+  not_authorized: "Você não tem permissão para esta ação.",
+};
+
+const INTERNAL_ONLY_ERROR_CODES = new Set([
+  "image_not_owned_by_variant",
+  "image_storage_path_required",
+  "variant_in_both_lists",
+  "status_archived_not_allowed",
+]);
+
+function friendlySaveError(err: SaveProductWithVariantsError): { error: string } {
+  if (INTERNAL_ONLY_ERROR_CODES.has(err.code)) {
+    console.error("[saveProductWithVariantsAction]", err.code, err.message);
+  }
+  return { error: FRIENDLY_SAVE_ERRORS[err.code] ?? "Não foi possível salvar. Tente novamente." };
 }
 
 /**
- * Um campo opcional desabilitado (exclusão mútua Pix/promocional, ou
- * "usar parcelamento padrão") não entra no FormData e formData.get()
- * devolve `null` — mas z.string().optional() só aceita `undefined`, nunca
- * `null`, e falha com uma mensagem técnica do Zod ("Invalid input:
- * expected string, received null"). Normaliza null e string vazia pra
- * undefined aqui, antes do Zod ver o valor, pros dois significarem a
- * mesma coisa: "não informado".
+ * Salvamento único e atômico de uma peça + todas as suas cores (RPC
+ * save_product_with_variants). Recebe o payload já montado pelo
+ * ProductForm (sempre pelo menos 1 variante) — nunca via <form action>
+ * tradicional, porque a estrutura é aninhada demais para FormData.
  */
-function optionalFormValue(formData: FormData, key: string): string | undefined {
-  const value = formData.get(key);
-  if (value === null) return undefined;
-  const str = String(value).trim();
-  return str === "" ? undefined : str;
-}
-
-function parseProductFormData(formData: FormData) {
-  const parsed = productSchema.safeParse({
-    code: formData.get("code"),
-    name: formData.get("name"),
-    slug: formData.get("slug"),
-    description: optionalFormValue(formData, "description"),
-    price: formData.get("price"),
-    promotional_price: optionalFormValue(formData, "promotional_price"),
-    cash_price: optionalFormValue(formData, "cash_price"),
-    max_installments_override: optionalFormValue(formData, "max_installments_override"),
-    category_id: formData.get("category_id"),
-    status: formData.get("status"),
-    featured: formData.get("featured") === "on",
-  });
-
-  const sizesRaw = formData.getAll("sizes").map(String);
-  const sizesParsed = productSizesSchema.safeParse(sizesRaw);
-
-  return { parsed, sizes: sizesParsed.success ? sizesParsed.data : [] };
-}
-
-function collectImagePaths(formData: FormData): string[] {
-  return formData
-    .getAll("image_paths")
-    .map(String)
-    .filter(Boolean);
-}
-
-/**
- * Última rede de segurança: se algum caminho ainda deixar passar uma
- * mensagem padrão do Zod (ex: "Invalid input: expected string, received
- * null") em vez da mensagem customizada do schema, troca por um texto
- * genérico — a admin nunca deve ver jargão de validação técnica.
- */
-function friendlyFieldMessage(message: string): string {
-  return /^invalid /i.test(message) ? "Valor inválido." : message;
-}
-
-function fieldErrorsFrom(parsed: { success: false; error: { flatten: () => { fieldErrors: Record<string, string[] | undefined> } } }) {
-  return Object.fromEntries(
-    Object.entries(parsed.error.flatten().fieldErrors).map(([k, v]) => [k, friendlyFieldMessage(v?.[0] ?? "")])
-  );
-}
-
-/** Traduz violação de unique constraint (code/slug) em erro de campo legível. */
-function duplicateKeyFieldError(message: string): ProductFormState | null {
-  if (message.includes("products_code_key")) {
-    return { fieldErrors: { code: "Já existe um produto com esse código." } };
-  }
-  if (message.includes("products_slug_key")) {
-    return { fieldErrors: { slug: "Já existe um produto com esse slug." } };
-  }
-  return null;
-}
-
-export async function createProductAction(
-  _prevState: ProductFormState,
-  formData: FormData
-): Promise<ProductFormState> {
+export async function saveProductWithVariantsAction(rawPayload: unknown): Promise<SaveProductVariantsActionResult> {
   await requireAdmin(["admin", "catalog_editor"]);
 
-  const { parsed, sizes } = parseProductFormData(formData);
+  const parsed = saveProductVariantsPayloadSchema.safeParse(rawPayload);
   if (!parsed.success) {
-    return { fieldErrors: fieldErrorsFrom(parsed) };
+    const flat = parsed.error.flatten();
+    const message = flat.formErrors[0] ?? Object.values(flat.fieldErrors).flat().find(Boolean) ?? "Dados inválidos.";
+    return { error: message };
   }
 
-  const imagePaths = collectImagePaths(formData);
-
-  let productId: string;
+  let result;
   try {
-    const product = await createProduct(parsed.data, sizes, imagePaths);
-    productId = product.id;
+    result = await saveProductWithVariants(parsed.data);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Não foi possível publicar o produto.";
-    return duplicateKeyFieldError(message) ?? { error: message };
+    if (err instanceof SaveProductWithVariantsError) return friendlySaveError(err);
+    return { error: err instanceof Error ? err.message : "Não foi possível salvar o produto." };
   }
 
   revalidatePath("/admin/produtos");
   revalidatePath("/novidades");
-  redirect(`/admin/produtos/${productId}?sucesso=${encodeURIComponent("Produto cadastrado com sucesso.")}`);
+  revalidatePath("/categoria");
+  for (const v of result.variants) revalidatePath(`/produto/${v.slug}`);
+
+  const productId = parsed.data.root_product_id ?? result.variants[0]?.id;
+  if (!productId) return { error: "Não foi possível salvar o produto." };
+
+  revalidatePath(`/admin/produtos/${productId}`);
+  return { ok: true, productId };
 }
 
-export async function updateProductAction(
-  id: string,
-  _prevState: ProductFormState,
-  formData: FormData
-): Promise<ProductFormState> {
+/**
+ * Cria uma cor nova sem sair do formulário de produto — usada pelo drawer
+ * "+ Nova cor" dentro de cada bloco de variante. Reaproveita colorSchema/
+ * createColor (mesma validação e gravação de qualquer outro fluxo de cor).
+ */
+export async function createColorQuickAction(
+  name: string,
+  hexColor: string | null
+): Promise<{ color: Color } | { error: string }> {
   await requireAdmin(["admin", "catalog_editor"]);
 
-  const existing = await getProductByIdAdmin(id);
-  if (!existing) return { error: "Produto não encontrado." };
-
-  const { parsed, sizes } = parseProductFormData(formData);
+  const parsed = colorSchema.safeParse({ name, hex_color: hexColor ?? undefined });
   if (!parsed.success) {
-    return { fieldErrors: fieldErrorsFrom(parsed) };
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
   try {
-    await updateProduct(id, parsed.data, sizes);
+    const color = await createColor(parsed.data);
+    return { color };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Não foi possível salvar o produto.";
-    return duplicateKeyFieldError(message) ?? { error: message };
+    const message = err instanceof Error ? err.message : "Não foi possível criar a cor.";
+    return { error: message.includes("colors_slug_key") ? "Já existe uma cor com esse nome." : message };
+  }
+}
+
+/**
+ * Cria um tamanho novo sem sair do formulário de produto — usada pelo "+
+ * Novo tamanho" dentro de cada bloco de variante. Reaproveita
+ * sizeOptionSchema/createSizeOption (mesma validação/gravação de
+ * /admin/tamanhos), entra ativo e disponível pra qualquer produto futuro.
+ */
+export async function createSizeQuickAction(label: string): Promise<{ size: SizeOption } | { error: string }> {
+  await requireAdmin(["admin", "catalog_editor"]);
+
+  const parsed = sizeOptionSchema.safeParse({ label });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
-  revalidatePath("/admin/produtos");
-  revalidatePath("/novidades");
-  revalidatePath(`/produto/${existing.slug}`);
-  if (existing.slug !== parsed.data.slug) revalidatePath(`/produto/${parsed.data.slug}`);
-  revalidatePath(`/categoria`);
-  redirect(`/admin/produtos/${id}?sucesso=${encodeURIComponent("Alterações salvas com sucesso.")}`);
+  try {
+    const size = await createSizeOption(parsed.data.label);
+    return { size };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Não foi possível criar o tamanho.";
+    return { error: message.includes("size_options_label_key") ? "Já existe um tamanho com esse nome." : message };
+  }
+}
+
+/** Busca por nome/código pro link discreto "Localizar peça já cadastrada" (só na edição). */
+export async function searchProductsForRelateAction(
+  query: string,
+  excludeProductId: string
+): Promise<ProductSearchResult[]> {
+  await requireAdmin(["admin", "catalog_editor"]);
+  return searchProductsForRelate(query, excludeProductId);
+}
+
+/**
+ * Relaciona uma peça já cadastrada como "outra cor do mesmo modelo" do
+ * produto atual — caminho específico pra quando as duas cores foram
+ * cadastradas separadamente em datas diferentes. Idempotente se já
+ * estiver no mesmo grupo; erro amigável se já pertencer a outro grupo
+ * (nunca merge automático). Depois de relacionar, a página recarrega os
+ * membros do grupo do banco — a nova peça relacionada passa a aparecer
+ * como bloco de variante, pronta pra entrar no próximo salvamento.
+ */
+export async function relateProductToGroupAction(
+  currentProductId: string,
+  targetProductId: string
+): Promise<{ ok: true } | { error: string }> {
+  await requireAdmin(["admin", "catalog_editor"]);
+
+  try {
+    await relateProductToGroup(currentProductId, targetProductId);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Não foi possível relacionar as peças." };
+  }
+
+  revalidatePath(`/admin/produtos/${currentProductId}`);
+  revalidatePath(`/admin/produtos/${targetProductId}`);
+  return { ok: true };
+}
+
+/**
+ * Chamada quando a admin remove, dentro do próprio formulário, uma foto que
+ * acabou de subir mas ainda não foi salva em nenhum produto (sem
+ * product_images.id, só existe no Storage). Seguro apagar na hora: nada no
+ * banco referencia esse arquivo ainda. Nunca chamada para uma foto que já
+ * pertence a um produto salvo — remover essas só acontece implicitamente
+ * pela reconciliação da RPC no próximo salvamento.
+ */
+export async function discardUnusedUploadAction(storagePath: string): Promise<void> {
+  await requireAdmin(["admin", "catalog_editor"]);
+  try {
+    await deleteImage("products", storagePath);
+  } catch (err) {
+    console.error(`[discardUnusedUploadAction] falha ao remover do Storage (${storagePath}):`, err);
+  }
 }
 
 export async function toggleArchiveProductAction(id: string, archive: boolean) {
@@ -158,34 +203,4 @@ export async function toggleArchiveProductAction(id: string, archive: boolean) {
   revalidatePath("/admin/produtos");
   revalidatePath("/novidades");
   revalidatePath(`/produto/${existing.slug}`);
-}
-
-/**
- * Chamada diretamente do client (não via <form action>) depois que o
- * navegador já subiu os arquivos direto pro Storage — só recebe os paths
- * resultantes, nunca os bytes da imagem.
- */
-export async function addProductImagesAction(productId: string, imagePaths: string[]) {
-  await requireAdmin(["admin", "catalog_editor"]);
-
-  if (imagePaths.length === 0) return;
-
-  await addProductImages(productId, imagePaths);
-  revalidatePath(`/admin/produtos/${productId}`);
-}
-
-export async function deleteProductImageAction(productId: string, imageId: string) {
-  await requireAdmin(["admin", "catalog_editor"]);
-  await deleteProductImage(imageId);
-  revalidatePath(`/admin/produtos/${productId}`);
-}
-
-export async function moveProductImageAction(
-  productId: string,
-  imageId: string,
-  direction: "up" | "down"
-) {
-  await requireAdmin(["admin", "catalog_editor"]);
-  await moveProductImage(productId, imageId, direction);
-  revalidatePath(`/admin/produtos/${productId}`);
 }

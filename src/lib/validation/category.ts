@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CATEGORY_ICON_KEYS } from "@/lib/catalog/category-icons";
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -18,6 +19,12 @@ export const categorySchema = z.object({
     .or(z.literal(""))
     .transform((v) => (v ? v : null)),
   cover_image: z.string().trim().url().optional().or(z.literal("")).transform((v) => (v ? v : null)),
+  icon_key: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v : null))
+    .refine((v) => v === null || (CATEGORY_ICON_KEYS as readonly string[]).includes(v), "Ícone inválido."),
 });
 
 export type CategoryInput = z.infer<typeof categorySchema>;

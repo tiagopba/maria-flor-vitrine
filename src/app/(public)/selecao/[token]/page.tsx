@@ -95,6 +95,7 @@ export default async function SharedSelectionPage({ params }: { params: Promise<
                 <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                   <p className="truncate text-sm font-medium text-text">{product.name}</p>
                   <p className="text-xs text-text-muted">Código: {product.code}</p>
+                  {product.colorName && <p className="text-xs text-text-muted">Cor: {product.colorName}</p>}
                   {size && (
                     <p className="text-xs text-text">
                       Tamanho: <span className="font-medium">{size}</span>

@@ -4,6 +4,8 @@ export interface ProductMessageInput {
   price: number;
   size?: string;
   productUrl?: string;
+  /** Nome da cor (quando o produto tem color_id) — nunca omitir quando presente, senão a vendedora não sabe qual variante a cliente escolheu. */
+  colorName?: string;
 }
 
 /**
@@ -44,6 +46,7 @@ export function buildProductWhatsAppMessage({
   price,
   size,
   productUrl,
+  colorName,
   dualPrice,
 }: ProductMessageInput & { dualPrice?: DualPriceLines }): string {
   const priceLines = dualPrice
@@ -55,13 +58,14 @@ export function buildProductWhatsAppMessage({
       ]
     : [formatPrice(price)];
 
-  const lines = [
-    `Oi! Vi essa peça na Vitrine Maria Flor ${HEART}`,
-    productName,
-    size ? `Código: ${code} | Tam: ${size}` : `Código: ${code}`,
-    ...priceLines,
-    "Pode verificar a disponibilidade pra mim?",
-  ];
+  const lines = [`Oi! Vi essa peça na Vitrine Maria Flor ${HEART}`, productName, `Código: ${code}`];
+
+  // "Cor" só entra quando o produto tem color_id — nunca mostrada pra
+  // peça sem cor (item 1 da especificação).
+  if (colorName) lines.push(`Cor: ${colorName}`);
+  if (size) lines.push(`Tamanho: ${size}`);
+
+  lines.push(...priceLines, "Pode verificar a disponibilidade pra mim?");
 
   if (productUrl) lines.push(productUrl);
 
@@ -72,8 +76,17 @@ export function buildProductWhatsAppMessage({
  * Mensagem para "Quero algo parecido" quando o produto está SOLD_OUT — não
  * pede tamanho (não faz sentido para uma peça esgotada).
  */
-export function buildSoldOutWhatsAppMessage({ productName, code }: { productName: string; code: string }): string {
-  return `Gostei da peça ${code} (${productName}), mas vi que está esgotada. Vocês têm algo parecido?`;
+export function buildSoldOutWhatsAppMessage({
+  productName,
+  code,
+  colorName,
+}: {
+  productName: string;
+  code: string;
+  colorName?: string;
+}): string {
+  const label = colorName ? `${productName} - ${colorName}` : productName;
+  return `Gostei da peça ${code} (${label}), mas vi que está esgotada. Vocês têm algo parecido?`;
 }
 
 export interface LookMessageInput {
@@ -98,7 +111,10 @@ export function buildLookWhatsAppMessage({ lookTitle, products }: LookMessageInp
 
 export interface FavoritesSelectionItem {
   productName: string;
+  code: string;
   size?: string;
+  /** Nome da cor (quando o produto tem color_id) — cada variante é uma escolha diferente da cliente, nunca omitir. */
+  colorName?: string;
   /** Preço legado — só entra na mensagem quando a seleção tem exatamente 1 peça. */
   price?: number;
   /** Preço Pix/cartão do modelo de dois preços — mesma regra de `price` acima. */
@@ -126,10 +142,16 @@ export interface FavoritesSelectionItem {
 export function buildFavoritesWhatsAppMessage(products: FavoritesSelectionItem[], selectionUrl?: string): string {
   const lines = [`Oi! Separei algumas peças na Vitrine Maria Flor ${HEART}`, ""];
 
-  products.forEach((product, index) => {
-    lines.push(
-      product.size ? `${index + 1}. ${product.productName} — Tam: ${product.size}` : `${index + 1}. ${product.productName}`
-    );
+  // Cada peça em duas linhas — nome, depois código/cor/tamanho juntos. A
+  // cor SEMPRE aparece quando o produto tem color_id (item 1 da
+  // especificação): sem ela, duas variantes da mesma peça ficam
+  // indistinguíveis na mensagem pra vendedora.
+  products.forEach((product) => {
+    lines.push(`• ${product.productName}`);
+    const details = [`Cód. ${product.code}`];
+    if (product.colorName) details.push(product.colorName);
+    if (product.size) details.push(`Tam. ${product.size}`);
+    lines.push(`  ${details.join(" | ")}`);
   });
 
   if (products.length === 1) {
