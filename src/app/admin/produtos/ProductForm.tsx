@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { DualPriceBlock } from "@/components/ui/Price";
@@ -16,7 +16,7 @@ import { CategoryQuickAddModal } from "./CategoryQuickAddModal";
 import { ColorQuickAddDrawer } from "./ColorQuickAddDrawer";
 import { RelateProductModal } from "./RelateProductModal";
 import { SizeQuickAddDrawer } from "./SizeQuickAddDrawer";
-import { VariantBlock, type VariantBlockData } from "./VariantBlock";
+import { VariantBlock, type VariantBlockData, type VariantUploadState } from "./VariantBlock";
 
 function emptyVariant(sizeOptions: SizeOption[], suggestedSizes: string[] = []): VariantBlockData {
   return {
@@ -104,12 +104,37 @@ export function ProductForm({
 
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // Trava síncrona contra clique-duplo/duplo-submit — diferente de `pending`
+  // (estado React, só reflete na tela no próximo render), esta ref já vale
+  // na mesma tarefa síncrona, então mesmo dois disparos praticamente
+  // simultâneos (ex: Enter + clique) nunca chegam a chamar a RPC duas vezes.
+  const submittingRef = useRef(false);
+
+  const [uploadStatusByKey, setUploadStatusByKey] = useState<Record<string, VariantUploadState>>({});
+  const handleUploadStateChange = useCallback((key: string, state: VariantUploadState) => {
+    setUploadStatusByKey((prev) => {
+      const current = prev[key];
+      if (current && current.uploading === state.uploading && current.hasUnresolvedError === state.hasUnresolvedError && current.errorCount === state.errorCount) {
+        return prev;
+      }
+      return { ...prev, [key]: state };
+    });
+  }, []);
 
   function updateVariant(key: string, next: VariantBlockData) {
     setVariants((prev) => prev.map((v) => (v.key === key ? next : v)));
   }
 
   const allColored = variants.every((v) => v.colorId !== null);
+  const anyUploading = variants.some((v) => uploadStatusByKey[v.key]?.uploading);
+  const blocksWithUploadErrors = variants.filter((v) => uploadStatusByKey[v.key]?.hasUnresolvedError);
+  const hasUnresolvedUploadError = blocksWithUploadErrors.length > 0;
+
+  function blockLabel(block: VariantBlockData): string {
+    const index = variants.indexOf(block);
+    const colorName = block.colorId ? (colors.find((c) => c.id === block.colorId)?.name ?? null) : null;
+    return colorName ?? (index === 0 ? "Peça principal" : `Cor ${index + 1}`);
+  }
 
   function handleAddColor() {
     if (!allColored) {
@@ -184,13 +209,27 @@ export function ProductForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setFormError(null);
 
+    // Cobre tanto o clique no botão (já desabilitado nesses casos) quanto o
+    // Enter dado num campo de texto — que dispara o submit do form mesmo
+    // com o botão desabilitado.
+    if (submittingRef.current || pending) return;
+
+    if (anyUploading) {
+      setFormError("Aguarde as fotos terminarem de enviar antes de salvar.");
+      return;
+    }
+    if (hasUnresolvedUploadError) {
+      setFormError("Corrija ou remova as fotos com erro antes de salvar.");
+      return;
+    }
     if (!allColored) {
       setFormError("Escolha a cor de cada peça antes de salvar.");
       return;
     }
 
+    setFormError(null);
+    submittingRef.current = true;
     setPending(true);
 
     const payload = {
@@ -223,6 +262,7 @@ export function ProductForm({
 
     const result = await saveProductWithVariantsAction(payload);
     setPending(false);
+    submittingRef.current = false;
 
     if ("error" in result) {
       setFormError(result.error);
@@ -402,6 +442,7 @@ export function ProductForm({
             onRemove={() => handleRemoveVariant(block)}
             onOpenColorDrawer={() => setColorDrawerForKey(block.key)}
             onOpenSizeDrawer={() => setSizeDrawerForKey(block.key)}
+            onUploadStateChange={handleUploadStateChange}
           />
         ))}
 
@@ -429,10 +470,28 @@ export function ProductForm({
         )}
       </div>
 
+      {hasUnresolvedUploadError && (
+        <div className="flex flex-col gap-1 rounded-lg border border-red-200 bg-red-50 p-3">
+          {blocksWithUploadErrors.map((block) => {
+            const count = uploadStatusByKey[block.key]?.errorCount ?? 0;
+            return (
+              <p key={block.key} className="text-xs text-red-700">
+                <strong>{blockLabel(block).toUpperCase()}:</strong> Não foi possível enviar{" "}
+                {count === 1 ? "1 foto" : `${count} fotos`}. Tente novamente ou remova a foto antes de salvar.
+              </p>
+            );
+          })}
+        </div>
+      )}
+
+      {anyUploading && !hasUnresolvedUploadError && (
+        <p className="text-xs text-text-muted">Aguarde as fotos terminarem de enviar antes de salvar.</p>
+      )}
+
       {formError && <p className="text-sm text-red-600">{formError}</p>}
 
-      <Button type="submit" disabled={pending} className="mt-2">
-        {pending ? "Salvando..." : submitLabel}
+      <Button type="submit" disabled={pending || anyUploading || hasUnresolvedUploadError} className="mt-2">
+        {pending ? "Salvando..." : anyUploading ? "Enviando fotos..." : submitLabel}
       </Button>
 
       <CategoryQuickAddModal

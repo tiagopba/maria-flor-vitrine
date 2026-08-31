@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ImageUploadQueueList } from "@/components/admin/ImageUploadQueueList";
 import { SizeSelector } from "@/components/catalog/SizeSelector";
 import { PRODUCT_STATUS_LABELS } from "@/lib/catalog/status";
@@ -40,6 +40,12 @@ export interface VariantBlockData {
   sizeOptions: SizeOption[];
 }
 
+export interface VariantUploadState {
+  uploading: boolean;
+  hasUnresolvedError: boolean;
+  errorCount: number;
+}
+
 export function VariantBlock({
   block,
   index,
@@ -51,6 +57,7 @@ export function VariantBlock({
   onRemove,
   onOpenColorDrawer,
   onOpenSizeDrawer,
+  onUploadStateChange,
 }: {
   block: VariantBlockData;
   index: number;
@@ -62,6 +69,8 @@ export function VariantBlock({
   onRemove: () => void;
   onOpenColorDrawer: () => void;
   onOpenSizeDrawer: () => void;
+  /** Notifica o ProductForm sempre que a fila de upload desta cor muda — é assim que o botão "Salvar" sabe se alguma cor ainda tem foto em andamento ou com erro. */
+  onUploadStateChange: (key: string, state: VariantUploadState) => void;
 }) {
   const colorName = block.colorId ? (colors.find((c) => c.id === block.colorId)?.name ?? null) : null;
   const title = colorName ?? (index === 0 ? "PEÇA PRINCIPAL" : "NOVA COR");
@@ -76,6 +85,19 @@ export function VariantBlock({
       images: [...block.images, { id: null, storage_path: result.path, url: result.url }],
     });
   });
+
+  const errorCount = imageQueue.items.filter((i) => i.status === "error").length;
+
+  // Sincroniza o estado da fila de upload desta cor com o ProductForm — é
+  // uma notificação pra um sistema externo (o botão "Salvar", que precisa
+  // saber o estado agregado de TODAS as cores), não um setState local.
+  useEffect(() => {
+    onUploadStateChange(block.key, {
+      uploading: imageQueue.isUploading,
+      hasUnresolvedError: imageQueue.hasUnresolvedError,
+      errorCount,
+    });
+  }, [block.key, imageQueue.isUploading, imageQueue.hasUnresolvedError, errorCount, onUploadStateChange]);
 
   function handleFilesChange(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
@@ -255,7 +277,7 @@ export function VariantBlock({
           disabled={imageQueue.isUploading}
           className="text-sm text-text-muted file:mr-3 file:rounded-full file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-text"
         />
-        <ImageUploadQueueList items={imageQueue.items} onRetry={imageQueue.retry} />
+        <ImageUploadQueueList items={imageQueue.items} onRetry={imageQueue.retry} onRemove={imageQueue.removeItem} />
       </div>
 
       <div className="flex flex-col gap-1.5">
