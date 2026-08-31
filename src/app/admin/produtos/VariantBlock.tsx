@@ -65,7 +65,8 @@ export function VariantBlock({
   isRoot: boolean;
   duplicateColorName: string | null;
   computedSlug: string;
-  onChange: (next: VariantBlockData) => void;
+  /** Aceita um valor pronto ou um updater `(prev) => next` — ver comentário em ProductForm.updateVariant sobre por que isso é obrigatório pro upload de várias fotos simultâneas. */
+  onChange: (next: VariantBlockData | ((prev: VariantBlockData) => VariantBlockData)) => void;
   onRemove: () => void;
   onOpenColorDrawer: () => void;
   onOpenSizeDrawer: () => void;
@@ -75,15 +76,20 @@ export function VariantBlock({
   const colorName = block.colorId ? (colors.find((c) => c.id === block.colorId)?.name ?? null) : null;
   const title = colorName ?? (index === 0 ? "PEÇA PRINCIPAL" : "NOVA COR");
 
+  // Sempre via updater (nunca `{...block, ...patch}` direto): `block` é o
+  // valor da prop NO RENDER ATUAL, e várias fotos podem terminar de subir
+  // em sequência rápida antes de um re-render acontecer — computar a
+  // partir do estado mais recente dentro do próprio setVariants (ver
+  // ProductForm.updateVariant) é o que evita uma foto sobrescrever a outra.
   function update(patch: Partial<VariantBlockData>) {
-    onChange({ ...block, ...patch });
+    onChange((prev) => ({ ...prev, ...patch }));
   }
 
   const imageQueue = useImageUploadQueue("products", (result) => {
-    onChange({
-      ...block,
-      images: [...block.images, { id: null, storage_path: result.path, url: result.url }],
-    });
+    onChange((prev) => ({
+      ...prev,
+      images: [...prev.images, { id: null, storage_path: result.path, url: result.url }],
+    }));
   });
 
   const errorCount = imageQueue.items.filter((i) => i.status === "error").length;
@@ -106,17 +112,26 @@ export function VariantBlock({
     event.target.value = "";
   }
 
-  function moveImage(imgIndex: number, direction: "left" | "right") {
-    const targetIndex = direction === "left" ? imgIndex - 1 : imgIndex + 1;
-    if (targetIndex < 0 || targetIndex >= block.images.length) return;
-    const next = [...block.images];
-    [next[imgIndex], next[targetIndex]] = [next[targetIndex], next[imgIndex]];
-    update({ images: next });
+  // As três funções abaixo identificam a foto pela referência do objeto
+  // (nunca por índice) e recalculam contra `prev.images` dentro do próprio
+  // updater — mesmo motivo do onSuccess do upload: um clique de reordenar/
+  // remover pode acontecer bem na hora que outra foto termina de subir, e
+  // só assim as duas mudanças convivem em vez de uma apagar a outra.
+  function moveImage(img: VariantGalleryImage, direction: "left" | "right") {
+    onChange((prev) => {
+      const imgIndex = prev.images.indexOf(img);
+      if (imgIndex === -1) return prev;
+      const targetIndex = direction === "left" ? imgIndex - 1 : imgIndex + 1;
+      if (targetIndex < 0 || targetIndex >= prev.images.length) return prev;
+      const next = [...prev.images];
+      [next[imgIndex], next[targetIndex]] = [next[targetIndex], next[imgIndex]];
+      return { ...prev, images: next };
+    });
   }
 
   /** Move a foto direto pra position 0 — bem mais rápido no celular do que várias setinhas. */
   function makePrimary(img: VariantGalleryImage) {
-    update({ images: [img, ...block.images.filter((i) => i !== img)] });
+    onChange((prev) => ({ ...prev, images: [img, ...prev.images.filter((i) => i !== img)] }));
   }
 
   function removeImage(img: VariantGalleryImage) {
@@ -125,7 +140,7 @@ export function VariantBlock({
       // Storage na hora (nada no banco referencia esse arquivo).
       discardUnusedUploadAction(img.storage_path);
     }
-    update({ images: block.images.filter((i) => i !== img) });
+    onChange((prev) => ({ ...prev, images: prev.images.filter((i) => i !== img) }));
   }
 
   return (
@@ -266,7 +281,7 @@ export function VariantBlock({
                     <button
                       type="button"
                       disabled={imgIndex === 0}
-                      onClick={() => moveImage(imgIndex, "left")}
+                      onClick={() => moveImage(img, "left")}
                       aria-label="Mover para a esquerda"
                       className="flex h-8 w-8 items-center justify-center rounded text-text-muted hover:bg-muted disabled:opacity-30"
                     >
@@ -275,7 +290,7 @@ export function VariantBlock({
                     <button
                       type="button"
                       disabled={imgIndex === block.images.length - 1}
-                      onClick={() => moveImage(imgIndex, "right")}
+                      onClick={() => moveImage(img, "right")}
                       aria-label="Mover para a direita"
                       className="flex h-8 w-8 items-center justify-center rounded text-text-muted hover:bg-muted disabled:opacity-30"
                     >

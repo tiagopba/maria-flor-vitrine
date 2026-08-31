@@ -121,17 +121,31 @@ export function ProductForm({
     });
   }, []);
 
-  function updateVariant(key: string, next: VariantBlockData) {
+  /**
+   * Aceita tanto um valor pronto quanto um updater `(prev) => next` — o
+   * updater é essencial pro upload de várias fotos ao mesmo tempo: cada
+   * upload resolve de forma assíncrona e independente, e se o callback de
+   * sucesso computasse `next` a partir do `block` capturado no fechamento
+   * de quando o upload começou (em vez de a partir do estado mais recente
+   * dentro deste próprio `setVariants`), duas fotos terminando perto uma
+   * da outra fariam a segunda sobrescrever a primeira — exatamente o bug
+   * de "só 1 foto entra" quando várias são selecionadas de uma vez.
+   */
+  function updateVariant(key: string, updater: VariantBlockData | ((prev: VariantBlockData) => VariantBlockData)) {
     setVariants((prev) => {
-      const previous = prev.find((v) => v.key === key);
+      const index = prev.findIndex((v) => v.key === key);
+      if (index === -1) return prev;
+      const previous = prev[index];
+      const next = typeof updater === "function" ? updater(previous) : updater;
+
       // Só uma cor destacada por modelo: ao marcar "Destacar esta cor"
       // (transição false → true, nunca reage a outros campos mudando),
       // desmarca automaticamente as outras — a Home usa a variante
       // destacada como representante do card (ver group-products-for-display.ts),
       // então duas destacadas no mesmo grupo não têm sentido.
-      const justFeatured = next.featured && !previous?.featured;
-      return prev.map((v) => {
-        if (v.key === key) return next;
+      const justFeatured = next.featured && !previous.featured;
+      return prev.map((v, i) => {
+        if (i === index) return next;
         if (justFeatured && v.featured) return { ...v, featured: false };
         return v;
       });
