@@ -1,32 +1,70 @@
 import {
-  Columns2,
   Footprints,
   Gem,
   Handbag,
   Layers2,
   PersonStanding,
-  Scissors,
   Shirt,
   Sparkles,
   Star,
   Tag,
-  Triangle,
-  Venus,
   type LucideIcon,
 } from "lucide-react";
+import { createElement, type SVGProps } from "react";
+
+/**
+ * Assinatura mínima que tanto os ícones do lucide-react quanto os SVGs
+ * lineares próprios abaixo satisfazem — é o que o carrossel/seletor do
+ * admin realmente usam (className, strokeWidth, aria-hidden). Não é o
+ * tipo LucideIcon em si porque os SVGs próprios não são gerados pelo
+ * lucide, mas têm exatamente o mesmo traço/estética.
+ */
+export type CategoryIconComponent = (props: {
+  className?: string;
+  strokeWidth?: number;
+  "aria-hidden"?: SVGProps<SVGSVGElement>["aria-hidden"];
+}) => ReturnType<LucideIcon>;
+
+/**
+ * O lucide-react não tem ícone literal de calça/saia/vestido/short — os
+ * mais próximos disponíveis (colunas, tesoura, triângulo, símbolo de
+ * Vênus) não lembram a peça de verdade e ficam estranhos num seletor
+ * visual. Em vez de forçar um símbolo que não diz nada, estes são SVGs
+ * lineares simples, desenhados à mão, com o mesmo traço/estética do
+ * lucide (viewBox 24x24, sem preenchimento, ponta e junção arredondada,
+ * strokeWidth configurável) — silhueta reconhecível, não um ícone
+ * genérico qualquer.
+ */
+function createLinearIcon(paths: string[]): CategoryIconComponent {
+  return function LinearCategoryIcon({ className, strokeWidth = 2, ...rest }) {
+    return createElement(
+      "svg",
+      {
+        viewBox: "0 0 24 24",
+        fill: "none",
+        stroke: "currentColor",
+        strokeWidth,
+        strokeLinecap: "round",
+        strokeLinejoin: "round",
+        className,
+        ...rest,
+      },
+      paths.map((d, i) => createElement("path", { key: i, d }))
+    );
+  };
+}
+
+const PantsIcon = createLinearIcon(["M7,3 L17,3 L18,21 L14,21 L12,10 L10,21 L6,21 Z"]);
+const ShortsIcon = createLinearIcon(["M7,3 L17,3 L17.5,15 L14,15 L12,9 L10,15 L6.5,15 Z"]);
+const SkirtIcon = createLinearIcon(["M9,4 L15,4 L19,20 L5,20 Z"]);
+const DressIcon = createLinearIcon(["M9,3 Q12,5 15,3 L13,11 L16.5,21 L7.5,21 L11,11 Z"]);
 
 /**
  * Registry central de ícones de categoria — único lugar do código que
- * conhece a lista de ícones disponíveis e o componente lucide-react de
- * cada um. Toda área que precisa exibir ou escolher um ícone de
- * categoria (carrossel público, seletor do admin) usa este arquivo, pra
- * nunca duplicar a lista em mais de um lugar.
- *
- * O lucide-react não tem ícone literal de calça/vestido/saia/short/cabide
- * — os mais próximos disponíveis foram escolhidos por semelhança visual
- * (ex: "pants" usa Columns2, duas barras verticais lembrando pernas de
- * calça). Por isso o admin escolhe visualmente em vez de confiar 100% no
- * nome — ver suggestCategoryIconKey, que é só uma sugestão inicial.
+ * conhece a lista de ícones disponíveis e o componente de cada um. Toda
+ * área que precisa exibir ou escolher um ícone de categoria (carrossel
+ * público, seletor do admin) usa este arquivo, pra nunca duplicar a
+ * lista em mais de um lugar.
  */
 export const CATEGORY_ICON_KEYS = [
   "shirt",
@@ -46,12 +84,12 @@ export const CATEGORY_ICON_KEYS = [
 
 export type CategoryIconKey = (typeof CATEGORY_ICON_KEYS)[number];
 
-export const CATEGORY_ICON_REGISTRY: Record<CategoryIconKey, { label: string; Icon: LucideIcon }> = {
+export const CATEGORY_ICON_REGISTRY: Record<CategoryIconKey, { label: string; Icon: CategoryIconComponent }> = {
   shirt: { label: "Blusa / Camiseta", Icon: Shirt },
-  pants: { label: "Calça", Icon: Columns2 },
-  dress: { label: "Vestido", Icon: Venus },
-  skirt: { label: "Saia", Icon: Triangle },
-  shorts: { label: "Shorts", Icon: Scissors },
+  pants: { label: "Calça", Icon: PantsIcon },
+  dress: { label: "Vestido", Icon: DressIcon },
+  skirt: { label: "Saia", Icon: SkirtIcon },
+  shorts: { label: "Shorts", Icon: ShortsIcon },
   set: { label: "Conjunto", Icon: Layers2 },
   bag: { label: "Bolsa", Icon: Handbag },
   accessories: { label: "Acessórios", Icon: Gem },
@@ -121,6 +159,8 @@ export function suggestCategoryIconKey(name: string): CategoryIconKey {
     normalized.includes("blusa") ||
     normalized.includes("camiseta") ||
     normalized.includes("camisa") ||
+    normalized.includes("t-shirt") ||
+    normalized.includes("tshirt") ||
     normalized.includes("top") ||
     normalized.includes("regata")
   )
