@@ -12,12 +12,12 @@ export function formatBRL(value: number): string {
  * produto — pra nunca haver diferença visual entre eles. `variant` só
  * controla tamanho/espaçamento; hierarquia, cor e texto são os mesmos.
  *
- * Hierarquia (mais forte → mais discreto): Pix > parcela > total no
- * cartão > texto auxiliar. Sem parcelamento aplicável, mostra só Pix +
- * "R$ Y no cartão" (nunca "1x"). No card (lista/grade), o total do
- * cartão fica de fora quando há parcela — a peça já tem preço de sobra
- * pra card compacto; o total completo continua sempre visível na página
- * do produto (variant="detail").
+ * Hierarquia (mais forte → mais discreto): Pix > total no cartão >
+ * parcela > texto auxiliar. Sem parcelamento aplicável, mostra só Pix +
+ * "R$ Y no cartão" (nunca "1x"). O valor de cada parcela vem sempre de
+ * pricing.installmentAmount (lib/catalog/pricing.ts — mesmo
+ * arredondamento em centavos usado em todo lugar), nunca recalculado
+ * aqui, pra nunca divergir do total do cartão mostrado ao lado.
  */
 export function DualPriceBlock({
   pricing,
@@ -35,9 +35,14 @@ export function DualPriceBlock({
           {formatBRL(pricing.cashPrice)} no Pix
         </span>
         {hasInstallments ? (
-          <span className="text-sm font-medium leading-tight text-primary/75">
-            ou {pricing.installmentCount}x de {formatBRL(pricing.installmentAmount!)} sem juros
-          </span>
+          <>
+            <span className="text-sm font-semibold leading-tight text-primary sm:text-base">
+              ou {formatBRL(pricing.cardPrice)} no cartão
+            </span>
+            <span className="text-xs font-medium leading-tight text-primary/70">
+              em até {pricing.installmentCount}x de {formatBRL(pricing.installmentAmount!)} sem juros
+            </span>
+          </>
         ) : (
           <span className="text-xs font-normal leading-tight text-text-muted">
             {formatBRL(pricing.cardPrice)} no cartão
@@ -57,11 +62,11 @@ export function DualPriceBlock({
       </span>
       {hasInstallments ? (
         <span className="flex flex-col gap-0.5">
-          <span className="text-lg font-medium leading-tight text-primary/75 sm:text-xl">
-            ou {pricing.installmentCount}x de {formatBRL(pricing.installmentAmount!)} sem juros
+          <span className="text-lg font-semibold leading-tight text-primary sm:text-xl">
+            ou {formatBRL(pricing.cardPrice)} no cartão
           </span>
-          <span className="text-[13px] font-normal leading-tight text-text-muted">
-            total no cartão {formatBRL(pricing.cardPrice)}
+          <span className="text-sm font-medium leading-tight text-primary/70">
+            em até {pricing.installmentCount}x de {formatBRL(pricing.installmentAmount!)} sem juros
           </span>
         </span>
       ) : (
