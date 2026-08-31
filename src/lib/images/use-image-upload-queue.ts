@@ -82,9 +82,19 @@ export function useImageUploadQueue(bucket: string, onSuccess?: (result: Uploade
     [uploadOne]
   );
 
+  /** Descarta um item da fila (ex: uma foto com erro que a admin decidiu não reenviar). */
+  const removeItem = useCallback((id: string) => {
+    setItems((prev) => {
+      const item = prev.find((i) => i.id === id);
+      if (item) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter((i) => i.id !== id);
+    });
+  }, []);
+
   const isUploading = items.some((i) => i.status === "uploading");
+  const hasUnresolvedError = items.some((i) => i.status === "error");
   /** Ordem de seleção preservada — nunca reordenamos o array, só o status muda. */
   const successfulPaths = items.filter((i) => i.status === "done" && i.result).map((i) => i.result!.path);
 
-  return { items, addFiles, retry, isUploading, successfulPaths };
+  return { items, addFiles, retry, removeItem, isUploading, hasUnresolvedError, successfulPaths };
 }

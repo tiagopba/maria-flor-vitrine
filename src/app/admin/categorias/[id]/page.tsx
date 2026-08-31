@@ -31,6 +31,7 @@ export default async function EditCategoryPage({
           slug: category.slug,
           description: category.description,
           cover_image: category.cover_image,
+          icon_key: category.icon_key,
         }}
       />
     </div>

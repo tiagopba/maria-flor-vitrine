@@ -3,22 +3,20 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-const NUMERIC_SUGGESTIONS = ["34", "36", "38", "40", "42", "44", "46"];
-const LETTER_SUGGESTIONS = ["PP", "P", "M", "G", "GG"];
-
 /**
- * Sugestões de tamanho só para acelerar o toque no cadastro — a estrutura
- * no banco (product_sizes) aceita qualquer texto livre (ex: "Único"),
- * nunca um enum fechado.
+ * Chips vêm do catálogo central `size_options` (ver lib/db/sizes.ts) — quem
+ * chama já resolveu a união certa (ativos + os já usados nesta variante,
+ * mesmo que inativos — item 11 aprovado). O campo livre "Outro" continua
+ * existindo: product_sizes aceita qualquer texto, nunca um enum fechado.
  */
 export function SizeSelector({
-  name,
   value,
   onChange,
+  options,
 }: {
-  name: string;
   value: string[];
   onChange: (sizes: string[]) => void;
+  options: { label: string }[];
 }) {
   const [customValue, setCustomValue] = useState("");
 
@@ -34,24 +32,19 @@ export function SizeSelector({
     setCustomValue("");
   }
 
-  const extraSizes = value.filter(
-    (s) => !NUMERIC_SUGGESTIONS.includes(s) && !LETTER_SUGGESTIONS.includes(s)
-  );
+  const optionLabels = new Set(options.map((o) => o.label));
+  const extraSizes = value.filter((s) => !optionLabels.has(s));
 
   return (
     <div className="flex flex-col gap-2">
-      {value.map((size) => (
-        <input key={size} type="hidden" name={name} value={size} />
-      ))}
-
       <div className="flex flex-wrap gap-1.5">
-        {NUMERIC_SUGGESTIONS.map((size) => (
-          <SizeChip key={size} label={size} selected={value.includes(size)} onClick={() => toggle(size)} />
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {LETTER_SUGGESTIONS.map((size) => (
-          <SizeChip key={size} label={size} selected={value.includes(size)} onClick={() => toggle(size)} />
+        {options.map((option) => (
+          <SizeChip
+            key={option.label}
+            label={option.label}
+            selected={value.includes(option.label)}
+            onClick={() => toggle(option.label)}
+          />
         ))}
       </div>
 

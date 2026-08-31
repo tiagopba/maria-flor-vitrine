@@ -56,6 +56,22 @@ export const productSchema = z
     category_id: z.string({ error: "Selecione uma categoria." }).uuid("Selecione uma categoria."),
     status: z.enum(PRODUCT_STATUS_VALUES, { error: "Selecione um status válido." }),
     featured: z.boolean(),
+    // Cor (opcional) e agrupamento "mesmo modelo, cores diferentes"
+    // (opcional, só preenchido pelo fluxo de "cadastrar nova peça em
+    // outra cor" — ver lib/db/product-groups.ts). Nunca preenchidos
+    // automaticamente fora desses fluxos explícitos.
+    color_id: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => (v ? v : null))
+      .refine((v) => v === null || z.uuid().safeParse(v).success, "Cor inválida."),
+    product_group_id: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => (v ? v : null))
+      .refine((v) => v === null || z.uuid().safeParse(v).success, "Conjunto de cores inválido."),
   })
   .refine((data) => data.promotional_price === null || data.promotional_price < data.price, {
     message: "O preço promocional deve ser menor que o preço normal.",

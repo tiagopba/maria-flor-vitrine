@@ -4,9 +4,12 @@ import type { UploadQueueItem } from "@/lib/images/use-image-upload-queue";
 export function ImageUploadQueueList({
   items,
   onRetry,
+  onRemove,
 }: {
   items: UploadQueueItem[];
   onRetry: (id: string) => void;
+  /** Descarta um item com erro da fila — sem isso, uma foto que falhou nunca sai da tela. */
+  onRemove?: (id: string) => void;
 }) {
   if (items.length === 0) return null;
 
@@ -39,6 +42,15 @@ export function ImageUploadQueueList({
                   className="text-[10px] font-medium text-primary underline"
                 >
                   Tentar de novo
+                </button>
+              )}
+              {onRemove && (
+                <button
+                  type="button"
+                  onClick={() => onRemove(item.id)}
+                  className="text-[10px] font-medium text-text-muted underline"
+                >
+                  Remover
                 </button>
               )}
             </div>

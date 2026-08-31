@@ -3,28 +3,59 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SuccessToast } from "@/components/admin/SuccessToast";
 import { getActiveCategoriesPublic } from "@/lib/db/categories";
-import { getProductByIdAdmin } from "@/lib/db/products";
+import { listActiveColorsAdmin } from "@/lib/db/colors";
+import { getProductByIdAdmin, listGroupMemberIdsAdmin, type ProductDetail } from "@/lib/db/products";
+import { listActiveSizeOptionsAdmin, listSizeOptionsForVariantEdit } from "@/lib/db/sizes";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
-import { updateProductAction } from "../actions";
 import { ProductForm } from "../ProductForm";
-import { ProductImageManager } from "../ProductImageManager";
+import type { VariantBlockData } from "../VariantBlock";
 
 export const metadata: Metadata = { title: "Editar produto" };
+
+function toVariantBlock(product: ProductDetail, sizeOptions: Awaited<ReturnType<typeof listSizeOptionsForVariantEdit>>): VariantBlockData {
+  return {
+    key: product.id,
+    id: product.id,
+    code: product.code,
+    colorId: product.color_id,
+    status: product.status,
+    featured: product.featured,
+    manualSlug: null,
+    initialSlug: product.slug,
+    initialCode: product.code,
+    initialColorId: product.color_id,
+    sizes: product.sizes,
+    images: product.images.map((img) => ({ id: img.id, storage_path: img.storage_path, url: img.url })),
+    sizeOptions,
+  };
+}
 
 export default async function EditProductPage({
   params,
 }: PageProps<"/admin/produtos/[id]">) {
   const { id } = await params;
 
-  const [product, categories, paymentSettings] = await Promise.all([
+  const [product, categories, colors, paymentSettings, activeSizeOptions] = await Promise.all([
     getProductByIdAdmin(id),
     getActiveCategoriesPublic(),
+    listActiveColorsAdmin(),
     getPaymentSettings(),
+    listActiveSizeOptionsAdmin(),
   ]);
 
   if (!product) notFound();
 
-  const boundAction = updateProductAction.bind(null, product.id);
+  const siblingIds = product.product_group_id
+    ? (await listGroupMemberIdsAdmin(product.product_group_id)).filter((sid) => sid !== product.id)
+    : [];
+  const siblings = (await Promise.all(siblingIds.map((sid) => getProductByIdAdmin(sid)))).filter(
+    (s): s is ProductDetail => s !== null
+  );
+
+  const allProducts = [product, ...siblings];
+  const variantDefaults = await Promise.all(
+    allProducts.map(async (p) => toVariantBlock(p, await listSizeOptionsForVariantEdit(p.sizes)))
+  );
 
   return (
     <div className="max-w-2xl">
@@ -34,35 +65,25 @@ export default async function EditProductPage({
       </Link>
       <h1 className="mb-6 mt-2 font-display text-2xl text-text">Editar produto</h1>
 
-      <div className="grid gap-8 sm:grid-cols-2">
-        <div>
-          <h2 className="mb-3 text-sm font-medium text-text-muted">Fotos</h2>
-          <ProductImageManager productId={product.id} images={product.images} />
-        </div>
-
-        <div className="max-w-md">
-          <ProductForm
-            action={boundAction}
-            categories={categories}
-            submitLabel="Salvar alterações"
-            paymentSettings={paymentSettings}
-            defaultValues={{
-              code: product.code,
-              name: product.name,
-              slug: product.slug,
-              description: product.description,
-              price: product.price,
-              promotional_price: product.promotional_price,
-              cash_price: product.cash_price,
-              max_installments_override: product.max_installments_override,
-              category_id: product.category_id,
-              status: product.status,
-              featured: product.featured,
-              sizes: product.sizes,
-            }}
-          />
-        </div>
-      </div>
+      <ProductForm
+        key={allProducts.map((p) => p.id).join(",")}
+        categories={categories}
+        colors={colors}
+        sizeOptions={activeSizeOptions}
+        paymentSettings={paymentSettings}
+        rootProductId={product.id}
+        submitLabel="Salvar alterações"
+        sharedDefaults={{
+          name: product.name,
+          description: product.description,
+          category_id: product.category_id,
+          price: product.price,
+          promotional_price: product.promotional_price,
+          cash_price: product.cash_price,
+          max_installments_override: product.max_installments_override,
+        }}
+        variantDefaults={variantDefaults}
+      />
     </div>
   );
 }

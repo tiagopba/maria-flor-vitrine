@@ -2,9 +2,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
-import { deleteImage } from "@/lib/images/provider";
+import { attachColorInfo } from "@/lib/db/colors";
 import { publicImageUrl } from "@/lib/images/url";
-import type { ProductInput } from "@/lib/validation/product";
 import type { Database } from "@/types/database";
 
 export type Product = Database["public"]["Tables"]["products"]["Row"];
@@ -14,6 +13,8 @@ export type ProductSize = Database["public"]["Tables"]["product_sizes"]["Row"];
 export interface ProductListItem extends Product {
   categoryName: string | null;
   mainImageUrl: string | null;
+  colorName: string | null;
+  colorHex: string | null;
 }
 
 export interface ProductDetail extends Product {
@@ -21,6 +22,8 @@ export interface ProductDetail extends Product {
   categorySlug: string | null;
   images: (ProductImage & { url: string })[];
   sizes: string[];
+  colorName: string | null;
+  colorHex: string | null;
 }
 
 const PRODUCTS_BUCKET = "products";
@@ -34,13 +37,14 @@ async function attachCategoryAndMainImage(
   const categoryIds = [...new Set(products.map((p) => p.category_id))];
   const productIds = products.map((p) => p.id);
 
-  const [{ data: categories }, { data: images }] = await Promise.all([
+  const [{ data: categories }, { data: images }, withColors] = await Promise.all([
     supabase.from("categories").select("id, name").in("id", categoryIds),
     supabase
       .from("product_images")
       .select("product_id, storage_path, position")
       .in("product_id", productIds)
       .eq("position", 0),
+    attachColorInfo(supabase, products),
   ]);
 
   const categoryNameById = new Map((categories ?? []).map((c) => [c.id, c.name]));
@@ -48,7 +52,7 @@ async function attachCategoryAndMainImage(
     (images ?? []).map((img) => [img.product_id, publicImageUrl(PRODUCTS_BUCKET, img.storage_path)])
   );
 
-  return products.map((product) => ({
+  return withColors.map((product) => ({
     ...product,
     categoryName: categoryNameById.get(product.category_id) ?? null,
     mainImageUrl: mainImageByProduct.get(product.id) ?? null,
@@ -102,14 +106,13 @@ export async function getProductByIdAdmin(id: string): Promise<ProductDetail | n
   if (error) throw new Error(error.message);
   if (!product) return null;
 
-  const { data: category } = await supabase
-    .from("categories")
-    .select("name, slug")
-    .eq("id", product.category_id)
-    .maybeSingle();
+  const [{ data: category }, [withColor]] = await Promise.all([
+    supabase.from("categories").select("name, slug").eq("id", product.category_id).maybeSingle(),
+    attachColorInfo(supabase, [product]),
+  ]);
 
   return {
-    ...product,
+    ...withColor,
     categoryName: category?.name ?? null,
     categorySlug: category?.slug ?? null,
     images: (images ?? []).map((img) => ({ ...img, url: publicImageUrl(PRODUCTS_BUCKET, img.storage_path) })),
@@ -139,14 +142,15 @@ export async function getProductBySlugPublic(slug: string): Promise<ProductDetai
   if (error) throw new Error(error.message);
   if (!product) return null;
 
-  const [{ data: images }, { data: sizes }, { data: category }] = await Promise.all([
+  const [{ data: images }, { data: sizes }, { data: category }, [withColor]] = await Promise.all([
     supabase.from("product_images").select("*").eq("product_id", product.id).order("position"),
     supabase.from("product_sizes").select("*").eq("product_id", product.id).order("position"),
     supabase.from("categories").select("name, slug").eq("id", product.category_id).maybeSingle(),
+    attachColorInfo(supabase, [product]),
   ]);
 
   return {
-    ...product,
+    ...withColor,
     categoryName: category?.name ?? null,
     categorySlug: category?.slug ?? null,
     images: (images ?? []).map((img) => ({ ...img, url: publicImageUrl(PRODUCTS_BUCKET, img.storage_path) })),
@@ -160,19 +164,33 @@ export async function getProductBySlugPublic(slug: string): Promise<ProductDetai
  * attachCategoryAndMainImage, sem N+1). Sem motor de recomendação: se a
  * categoria tiver menos que `limit` peças publicadas, mostra só o que
  * existe — não completa com outras categorias.
+ *
+ * `groupId`, quando o produto atual pertence a um conjunto de cores,
+ * também exclui as outras cores do MESMO modelo — sem isso, a peça que a
+ * cliente já está vendo (via uma cor irmã) reaparece como "recomendação",
+ * o que é exatamente o tipo de duplicação que o agrupamento existe para
+ * evitar (a troca de cor já tem seu próprio lugar: "Outras cores
+ * disponíveis").
  */
-export async function getRelatedProductsPublic(productId: string, categoryId: string, limit = 8): Promise<ProductListItem[]> {
+export async function getRelatedProductsPublic(
+  productId: string,
+  categoryId: string,
+  groupId: string | null,
+  limit = 8
+): Promise<ProductListItem[]> {
   const supabase = createPublicClient();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("products")
     .select("*")
     .eq("category_id", categoryId)
     .neq("id", productId)
     .neq("status", "ARCHIVED")
-    .not("published_at", "is", null)
-    .order("published_at", { ascending: false })
-    .limit(limit);
+    .not("published_at", "is", null);
+
+  if (groupId) query = query.or(`product_group_id.is.null,product_group_id.neq.${groupId}`);
+
+  const { data, error } = await query.order("published_at", { ascending: false }).limit(limit);
 
   if (error) throw new Error(error.message);
 
@@ -364,10 +382,11 @@ export async function getProductsByIdsPublic(ids: string[]): Promise<ProductDeta
   const validIds = products.map((p) => p.id);
   const categoryIds = [...new Set(products.map((p) => p.category_id))];
 
-  const [{ data: images }, { data: sizes }, { data: categories }] = await Promise.all([
+  const [{ data: images }, { data: sizes }, { data: categories }, withColors] = await Promise.all([
     supabase.from("product_images").select("*").in("product_id", validIds).order("position"),
     supabase.from("product_sizes").select("*").in("product_id", validIds).order("position"),
     supabase.from("categories").select("id, name, slug").in("id", categoryIds),
+    attachColorInfo(supabase, products),
   ]);
 
   const categoryNameById = new Map((categories ?? []).map((c) => [c.id, c.name]));
@@ -387,7 +406,7 @@ export async function getProductsByIdsPublic(ids: string[]): Promise<ProductDeta
     sizesByProduct.set(s.product_id, list);
   }
 
-  return products.map((product) => ({
+  return withColors.map((product) => ({
     ...product,
     categoryName: categoryNameById.get(product.category_id) ?? null,
     categorySlug: categorySlugById.get(product.category_id) ?? null,
@@ -400,185 +419,16 @@ export async function getProductsByIdsPublic(ids: string[]): Promise<ProductDeta
 }
 
 /**
- * Grava as linhas de product_images a partir de paths já enviados ao
- * Storage (upload acontece direto do navegador — ver
- * lib/images/upload-client.ts — nunca passa pelo corpo de uma Server
- * Action/Route Handler, por causa do limite de 4.5MB da Vercel).
+ * Ids dos membros atuais de um conjunto de cores — usado na tela de edição
+ * pra hidratar cada cor como um bloco de variante (ver
+ * save_product_with_variants: o grupo real é sempre redescoberto no banco
+ * a partir do root_product_id, nunca confiado a partir do client).
  */
-async function insertProductImageRows(productId: string, storagePaths: string[], startPosition: number) {
-  if (storagePaths.length === 0) return;
-
+export async function listGroupMemberIdsAdmin(groupId: string): Promise<string[]> {
   const supabase = await createClient();
-  const { error } = await supabase.from("product_images").insert(
-    storagePaths.map((storage_path, i) => ({
-      product_id: productId,
-      storage_path,
-      position: startPosition + i,
-    }))
-  );
-
+  const { data, error } = await supabase.from("products").select("id").eq("product_group_id", groupId);
   if (error) throw new Error(error.message);
-}
-
-export async function createProduct(
-  input: ProductInput,
-  sizes: string[],
-  imagePaths: string[]
-): Promise<Product> {
-  const supabase = await createClient();
-
-  const { data: product, error } = await supabase
-    .from("products")
-    .insert({ ...input, published_at: new Date().toISOString() })
-    .select("*")
-    .single();
-
-  if (error) throw new Error(error.message);
-
-  if (sizes.length > 0) {
-    const { error: sizesError } = await supabase
-      .from("product_sizes")
-      .insert(sizes.map((size, position) => ({ product_id: product.id, size, position })));
-    if (sizesError) throw new Error(sizesError.message);
-  }
-
-  await insertProductImageRows(product.id, imagePaths, 0);
-
-  return product;
-}
-
-export async function updateProduct(id: string, input: ProductInput, sizes: string[]): Promise<Product> {
-  const supabase = await createClient();
-
-  const { data: product, error } = await supabase
-    .from("products")
-    .update(input)
-    .eq("id", id)
-    .select("*")
-    .single();
-
-  if (error) throw new Error(error.message);
-
-  const { error: deleteError } = await supabase.from("product_sizes").delete().eq("product_id", id);
-  if (deleteError) throw new Error(deleteError.message);
-
-  if (sizes.length > 0) {
-    const { error: sizesError } = await supabase
-      .from("product_sizes")
-      .insert(sizes.map((size, position) => ({ product_id: id, size, position })));
-    if (sizesError) throw new Error(sizesError.message);
-  }
-
-  return product;
-}
-
-export async function addProductImages(productId: string, imagePaths: string[]): Promise<void> {
-  const supabase = await createClient();
-  const { data: existing } = await supabase
-    .from("product_images")
-    .select("position")
-    .eq("product_id", productId)
-    .order("position", { ascending: false })
-    .limit(1);
-
-  const startPosition = (existing?.[0]?.position ?? -1) + 1;
-  await insertProductImageRows(productId, imagePaths, startPosition);
-}
-
-/**
- * Remove a imagem: apaga o arquivo do Storage e depois o registro em
- * `product_images`. Se o arquivo já não existir mais no Storage (ou a
- * remoção falhar por qualquer outro motivo), a falha é registrada mas não
- * bloqueia a limpeza do registro — o banco é sempre a fonte de verdade de
- * quais fotos o produto tem; não deixamos um registro "preso" só porque o
- * arquivo já sumiu. Isso evita órfãos novos sem precisar de um job de
- * garbage collection separado.
- */
-export async function deleteProductImage(imageId: string): Promise<void> {
-  const supabase = await createClient();
-
-  const { data: image, error: fetchError } = await supabase
-    .from("product_images")
-    .select("storage_path, product_id")
-    .eq("id", imageId)
-    .maybeSingle();
-
-  if (fetchError) throw new Error(fetchError.message);
-
-  if (image) {
-    try {
-      await deleteImage(PRODUCTS_BUCKET, image.storage_path);
-    } catch (err) {
-      console.error(`[deleteProductImage] falha ao remover do Storage (${image.storage_path}):`, err);
-    }
-  }
-
-  const { error } = await supabase.from("product_images").delete().eq("id", imageId);
-  if (error) throw new Error(error.message);
-
-  // Sem isso, remover a foto que estava na posição 0 (ex: depois de
-  // reordenar) deixa nenhuma imagem nessa posição — e a "imagem principal"
-  // das listagens é sempre buscada por position=0, então o produto passaria
-  // a aparecer como "sem foto" mesmo tendo fotos.
-  if (image) {
-    await renumberProductImages(image.product_id);
-  }
-}
-
-async function renumberProductImages(productId: string): Promise<void> {
-  const supabase = await createClient();
-
-  const { data: remaining, error } = await supabase
-    .from("product_images")
-    .select("id, position")
-    .eq("product_id", productId)
-    .order("position", { ascending: true });
-
-  if (error) throw new Error(error.message);
-
-  for (let i = 0; i < (remaining?.length ?? 0); i++) {
-    if (remaining![i].position !== i) {
-      const { error: updateError } = await supabase
-        .from("product_images")
-        .update({ position: i })
-        .eq("id", remaining![i].id);
-      if (updateError) throw new Error(updateError.message);
-    }
-  }
-}
-
-export async function moveProductImage(productId: string, imageId: string, direction: "up" | "down"): Promise<void> {
-  const supabase = await createClient();
-
-  const { data: all, error } = await supabase
-    .from("product_images")
-    .select("id, position")
-    .eq("product_id", productId)
-    .order("position", { ascending: true });
-
-  if (error) throw new Error(error.message);
-  if (!all) return;
-
-  const index = all.findIndex((img) => img.id === imageId);
-  if (index === -1) return;
-
-  const targetIndex = direction === "up" ? index - 1 : index + 1;
-  if (targetIndex < 0 || targetIndex >= all.length) return;
-
-  const current = all[index];
-  const target = all[targetIndex];
-
-  const { error: error1 } = await supabase
-    .from("product_images")
-    .update({ position: target.position })
-    .eq("id", current.id);
-  if (error1) throw new Error(error1.message);
-
-  const { error: error2 } = await supabase
-    .from("product_images")
-    .update({ position: current.position })
-    .eq("id", target.id);
-  if (error2) throw new Error(error2.message);
+  return (data ?? []).map((row) => row.id);
 }
 
 export async function setProductStatus(id: string, status: Product["status"]): Promise<void> {
@@ -589,4 +439,88 @@ export async function setProductStatus(id: string, status: Product["status"]): P
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+}
+
+export interface ProductSearchResult {
+  id: string;
+  name: string;
+  code: string;
+  colorName: string | null;
+  mainImageUrl: string | null;
+}
+
+/**
+ * Busca por nome/código pro modal "relacionar peça já cadastrada" —
+ * exclui o próprio produto que está editando (não faz sentido relacionar
+ * uma peça a ela mesma) e produtos arquivados. Duas consultas extras em
+ * lote (cores + imagem principal), nunca uma por resultado.
+ */
+export async function searchProductsForRelate(query: string, excludeProductId: string): Promise<ProductSearchResult[]> {
+  const term = query.trim();
+  if (!term) return [];
+
+  const supabase = await createClient();
+  const escaped = term.replace(/[%_]/g, "\\$&");
+
+  const { data: rows, error } = await supabase
+    .from("products")
+    .select("id, name, code, color_id")
+    .neq("id", excludeProductId)
+    .neq("status", "ARCHIVED")
+    .or(`code.ilike.%${escaped}%,name.ilike.%${escaped}%`)
+    .limit(10);
+
+  if (error) throw new Error(error.message);
+  if (!rows || rows.length === 0) return [];
+
+  const colorIds = [...new Set(rows.map((r) => r.color_id).filter((id): id is string => id != null))];
+  const productIds = rows.map((r) => r.id);
+
+  const [{ data: colors }, { data: images }] = await Promise.all([
+    colorIds.length > 0
+      ? supabase.from("colors").select("id, name").in("id", colorIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    supabase.from("product_images").select("product_id, storage_path").in("product_id", productIds).eq("position", 0),
+  ]);
+
+  const colorNameById = new Map((colors ?? []).map((c) => [c.id, c.name]));
+  const imageByProduct = new Map(
+    (images ?? []).map((img) => [img.product_id, publicImageUrl(PRODUCTS_BUCKET, img.storage_path)])
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    code: r.code,
+    colorName: r.color_id ? (colorNameById.get(r.color_id) ?? null) : null,
+    mainImageUrl: imageByProduct.get(r.id) ?? null,
+  }));
+}
+
+export interface ProductGroupSibling {
+  id: string;
+  name: string;
+  slug: string;
+  colorId: string | null;
+}
+
+/**
+ * Peças "irmãs" (mesmo product_group_id) já publicadas — usado na página
+ * pública do produto pra "Outras cores disponíveis". Client público
+ * (RLS), então nunca vaza produto arquivado/despublicado. Não carrega
+ * fotos de propósito (ver item 13 da especificação: performance) — só o
+ * necessário pra montar o swatch e o link.
+ */
+export async function getPublishedGroupSiblings(groupId: string, excludeProductId: string): Promise<ProductGroupSibling[]> {
+  const supabase = createPublicClient();
+
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, name, slug, color_id")
+    .eq("product_group_id", groupId)
+    .neq("id", excludeProductId);
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row) => ({ id: row.id, name: row.name, slug: row.slug, colorId: row.color_id }));
 }

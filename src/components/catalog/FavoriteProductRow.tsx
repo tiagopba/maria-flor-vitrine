@@ -55,6 +55,10 @@ export function FavoriteProductRow({
           <Link href={`/produto/${product.slug}`} className="min-w-0">
             <p className="truncate text-sm font-medium text-text">{product.name}</p>
             <p className="text-xs text-text-muted">Código: {product.code}</p>
+            {/* Duas variantes da mesma peça (cores diferentes) podem estar
+                selecionadas ao mesmo tempo — sem isso ficam indistinguíveis
+                aqui, já que Minha Seleção nunca agrupa (item 9). */}
+            {product.colorName && <p className="text-xs text-text-muted">Cor: {product.colorName}</p>}
           </Link>
           <button
             type="button"

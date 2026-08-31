@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { CategoryCarousel } from "@/components/catalog/CategoryCarousel";
 import { FilteredEmptyState } from "@/components/catalog/FilteredEmptyState";
+import { GroupedProductGrid } from "@/components/catalog/GroupedProductGrid";
 import { ProductFilters } from "@/components/catalog/ProductFilters";
-import { ProductGrid } from "@/components/catalog/ProductGrid";
 import { SearchForm } from "@/components/catalog/SearchForm";
 import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
 import { buildFilterQueryString, hasActiveFilters, parsePublicFilters } from "@/lib/catalog/filters";
+import { groupProductsForDisplay } from "@/lib/catalog/group-products-for-display";
 import { getCategoryBySlugPublic, getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { getAvailableSizesPublic, listPublishedProductsFiltered } from "@/lib/db/products";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
@@ -42,6 +43,17 @@ export default async function SearchPage({ searchParams }: PageProps<"/busca">) 
 
   const exploreCategories = buildExploreCategoriesItems(categories);
 
+  // Busca por código precisa sempre achar a variante exata — nunca some
+  // escondida atrás de outra cor do mesmo modelo escolhida como
+  // representante do card (item 8 da especificação). Busca por nome/
+  // descrição continua agrupando normalmente.
+  const trimmedQuery = query.trim().toLowerCase();
+  const groups = trimmedQuery
+    ? groupProductsForDisplay(products, {
+        keepStandalone: (p) => p.code.toLowerCase().includes(trimmedQuery),
+      })
+    : groupProductsForDisplay(products);
+
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
       <h1 className="mb-1 text-center font-display text-xl text-text sm:text-2xl">
@@ -77,7 +89,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/busca">) 
             </div>
           )
         ) : (
-          <ProductGrid products={products} paymentSettings={paymentSettings} />
+          <GroupedProductGrid groups={groups} paymentSettings={paymentSettings} />
         )}
       </div>
 

@@ -18,6 +18,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Provadores", href: "/admin/provadores", available: false },
   { label: "Coleções", href: "/admin/colecoes", available: false },
   { label: "Categorias", href: "/admin/categorias", available: true },
+  { label: "Cores", href: "/admin/cores", available: true },
+  { label: "Tamanhos", href: "/admin/tamanhos", available: true },
   { label: "Clientes/Leads", href: "/admin/leads", available: false },
   { label: "Vendedoras", href: "/admin/vendedoras", available: true },
   { label: "Relatórios", href: "/admin/relatorios", available: false },

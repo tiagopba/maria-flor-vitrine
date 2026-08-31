@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createSharedSelection } from "@/lib/db/shared-selections";
+import { getColorNamesByIds } from "@/lib/db/colors";
 import { getSiteUrl } from "@/lib/site";
 import { resolveProductPricing } from "@/lib/catalog/pricing";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
@@ -63,7 +64,7 @@ export async function submitFavoritesWhatsAppClick(
 
   const { data: products, error: productsError } = await supabase
     .from("products")
-    .select("id, name, code, price, promotional_price, cash_price, max_installments_override, status")
+    .select("id, name, code, color_id, price, promotional_price, cash_price, max_installments_override, status")
     .in("id", ids);
 
   if (productsError) return { error: "Não foi possível carregar as peças selecionadas." };
@@ -113,11 +114,16 @@ export async function submitFavoritesWhatsAppClick(
   // tamanho da seleção.
   const paymentSettings = await getPaymentSettings();
 
+  const colorIds = [...new Set(available.map((p) => p.color_id).filter((id): id is string => id != null))];
+  const colorNameById = await getColorNamesByIds(supabase, colorIds);
+
   const message = buildFavoritesWhatsAppMessage(
     available.map((p) => {
       const pricing = resolveProductPricing(p, paymentSettings);
       return {
         productName: p.name,
+        code: p.code,
+        colorName: p.color_id ? colorNameById.get(p.color_id) : undefined,
         size: sizeByProductId.get(p.id) ?? undefined,
         price: pricing.model === "legacy" ? (pricing.promotionalPrice ?? pricing.price) : undefined,
         dualPrice:
