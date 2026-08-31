@@ -122,7 +122,20 @@ export function ProductForm({
   }, []);
 
   function updateVariant(key: string, next: VariantBlockData) {
-    setVariants((prev) => prev.map((v) => (v.key === key ? next : v)));
+    setVariants((prev) => {
+      const previous = prev.find((v) => v.key === key);
+      // Só uma cor destacada por modelo: ao marcar "Destacar esta cor"
+      // (transição false → true, nunca reage a outros campos mudando),
+      // desmarca automaticamente as outras — a Home usa a variante
+      // destacada como representante do card (ver group-products-for-display.ts),
+      // então duas destacadas no mesmo grupo não têm sentido.
+      const justFeatured = next.featured && !previous?.featured;
+      return prev.map((v) => {
+        if (v.key === key) return next;
+        if (justFeatured && v.featured) return { ...v, featured: false };
+        return v;
+      });
+    });
   }
 
   const allColored = variants.every((v) => v.colorId !== null);

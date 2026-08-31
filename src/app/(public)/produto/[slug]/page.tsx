@@ -77,7 +77,13 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
       <BackButton fallbackHref="/novidades" className="mb-4" />
 
       <div className="grid gap-8 sm:grid-cols-2">
-        <ProductGallery images={product.images} productName={product.name} />
+        {/* key=product.id força remontar a galeria ao trocar de variante:
+            /produto/[slug] é a mesma rota entre cores diferentes do mesmo
+            modelo, então o Next só troca os dados via navegação client-side
+            — sem essa key, o scroller herdava o scrollLeft/activeIndex da
+            cor anterior e o swipe só "acordava" depois de algum clique que
+            forçasse um novo estado. */}
+        <ProductGallery key={product.id} images={product.images} productName={product.name} />
 
         <div className="flex flex-col gap-4">
           {product.categoryName && (

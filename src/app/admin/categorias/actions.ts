@@ -12,20 +12,45 @@ import {
   type Category,
 } from "@/lib/db/categories";
 import { categorySchema } from "@/lib/validation/category";
+import { optionalFormValue } from "@/lib/utils";
 
 export interface CategoryFormState {
   error?: string;
   fieldErrors?: Record<string, string>;
 }
 
+/**
+ * `description`/`cover_image`/`icon_key` são opcionais no schema, mas um
+ * chamador que nunca inclui esses campos no FormData (ex: o modal de
+ * cadastro rápido, que só manda name/slug/icon_key) faz `formData.get()`
+ * devolver `null` em vez de `undefined` — e `.optional()` do Zod só aceita
+ * `undefined`. Sem essa normalização, o cadastro rápido falhava sempre com
+ * "Invalid input: expected string, received null" (ver optionalFormValue).
+ */
 function parseCategoryFormData(formData: FormData) {
   return categorySchema.safeParse({
     name: formData.get("name"),
     slug: formData.get("slug"),
-    description: formData.get("description"),
-    cover_image: formData.get("cover_image"),
-    icon_key: formData.get("icon_key"),
+    description: optionalFormValue(formData, "description"),
+    cover_image: optionalFormValue(formData, "cover_image"),
+    icon_key: optionalFormValue(formData, "icon_key"),
   });
+}
+
+/**
+ * Última rede de segurança: se algum caminho ainda deixar passar uma
+ * mensagem padrão do Zod em vez da mensagem customizada do schema, troca
+ * por um texto genérico — a admin nunca deve ver jargão de validação
+ * técnica.
+ */
+function friendlyFieldMessage(message: string): string {
+  return /^invalid /i.test(message) ? "Valor inválido." : message;
+}
+
+function fieldErrorsFrom(parsed: { success: false; error: { flatten: () => { fieldErrors: Record<string, string[] | undefined> } } }) {
+  return Object.fromEntries(
+    Object.entries(parsed.error.flatten().fieldErrors).map(([k, v]) => [k, friendlyFieldMessage(v?.[0] ?? "")])
+  );
 }
 
 export async function createCategoryAction(
@@ -36,9 +61,7 @@ export async function createCategoryAction(
 
   const parsed = parseCategoryFormData(formData);
   if (!parsed.success) {
-    return { fieldErrors: Object.fromEntries(
-      Object.entries(parsed.error.flatten().fieldErrors).map(([k, v]) => [k, v?.[0] ?? ""])
-    ) };
+    return { fieldErrors: fieldErrorsFrom(parsed) };
   }
 
   try {
@@ -60,9 +83,7 @@ export async function updateCategoryAction(
 
   const parsed = parseCategoryFormData(formData);
   if (!parsed.success) {
-    return { fieldErrors: Object.fromEntries(
-      Object.entries(parsed.error.flatten().fieldErrors).map(([k, v]) => [k, v?.[0] ?? ""])
-    ) };
+    return { fieldErrors: fieldErrorsFrom(parsed) };
   }
 
   const existing = await getCategoryByIdAdmin(id);
@@ -111,12 +132,11 @@ export async function createCategoryQuickAction(
 
   const parsed = parseCategoryFormData(formData);
   if (!parsed.success) {
-    return {
-      error: "Dados inválidos.",
-      fieldErrors: Object.fromEntries(
-        Object.entries(parsed.error.flatten().fieldErrors).map(([k, v]) => [k, v?.[0] ?? ""])
-      ),
-    };
+    const fieldErrors = fieldErrorsFrom(parsed);
+    // Mensagem principal é o primeiro erro específico (ex: "Informe o
+    // nome.") — nunca só "Dados inválidos.", que não diz o que corrigir.
+    const firstMessage = Object.values(fieldErrors).find(Boolean) ?? "Dados inválidos.";
+    return { error: firstMessage, fieldErrors };
   }
 
   try {

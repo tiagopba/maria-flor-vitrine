@@ -114,6 +114,11 @@ export function VariantBlock({
     update({ images: next });
   }
 
+  /** Move a foto direto pra position 0 — bem mais rápido no celular do que várias setinhas. */
+  function makePrimary(img: VariantGalleryImage) {
+    update({ images: [img, ...block.images.filter((i) => i !== img)] });
+  }
+
   function removeImage(img: VariantGalleryImage) {
     if (img.id === null) {
       // Ainda não pertence a nenhum produto salvo — seguro apagar do
@@ -226,47 +231,60 @@ export function VariantBlock({
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-text">Fotos</span>
         {block.images.length > 0 && (
-          <div className="grid grid-cols-4 gap-2">
-            {block.images.map((img, imgIndex) => (
-              <div key={img.id ?? img.storage_path} className="flex flex-col gap-1">
-                <div className="relative aspect-square overflow-hidden rounded-lg bg-muted">
-                  <Image src={img.url} alt="" fill className="object-cover" sizes="120px" />
-                  {imgIndex === 0 && (
-                    <span className="absolute left-1 top-1 rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-medium text-primary-foreground">
-                      Principal
-                    </span>
-                  )}
+          <div className="flex gap-3 overflow-x-auto pb-1">
+            {block.images.map((img, imgIndex) => {
+              const isPrimary = imgIndex === 0;
+              return (
+                <div key={img.id ?? img.storage_path} className="flex w-24 shrink-0 flex-col gap-1.5">
+                  <div className="relative aspect-square overflow-hidden rounded-lg bg-muted">
+                    <Image src={img.url} alt="" fill className="object-cover" sizes="96px" />
+                    {isPrimary && (
+                      <span className="absolute left-1 top-1 rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-medium text-primary-foreground">
+                        Principal
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeImage(img)}
+                      aria-label="Remover foto"
+                      className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-xs leading-none text-white hover:bg-black/80"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={isPrimary}
+                    onClick={() => makePrimary(img)}
+                    className="flex h-7 items-center justify-center gap-1 rounded-full border border-border text-[10px] font-medium text-text-muted hover:border-primary/40 hover:text-text disabled:pointer-events-none disabled:opacity-30"
+                  >
+                    ★ Tornar principal
+                  </button>
+
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      disabled={imgIndex === 0}
+                      onClick={() => moveImage(imgIndex, "left")}
+                      aria-label="Mover para a esquerda"
+                      className="flex h-8 w-8 items-center justify-center rounded text-text-muted hover:bg-muted disabled:opacity-30"
+                    >
+                      ←
+                    </button>
+                    <button
+                      type="button"
+                      disabled={imgIndex === block.images.length - 1}
+                      onClick={() => moveImage(imgIndex, "right")}
+                      aria-label="Mover para a direita"
+                      className="flex h-8 w-8 items-center justify-center rounded text-text-muted hover:bg-muted disabled:opacity-30"
+                    >
+                      →
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <button
-                    type="button"
-                    disabled={imgIndex === 0}
-                    onClick={() => moveImage(imgIndex, "left")}
-                    aria-label="Mover para a esquerda"
-                    className="flex h-6 w-6 items-center justify-center rounded text-text-muted hover:bg-muted disabled:opacity-30"
-                  >
-                    ←
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeImage(img)}
-                    aria-label="Remover foto"
-                    className="flex h-6 w-6 items-center justify-center rounded text-red-600 hover:bg-red-50"
-                  >
-                    ✕
-                  </button>
-                  <button
-                    type="button"
-                    disabled={imgIndex === block.images.length - 1}
-                    onClick={() => moveImage(imgIndex, "right")}
-                    aria-label="Mover para a direita"
-                    className="flex h-6 w-6 items-center justify-center rounded text-text-muted hover:bg-muted disabled:opacity-30"
-                  >
-                    →
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
         <input
@@ -277,7 +295,14 @@ export function VariantBlock({
           disabled={imageQueue.isUploading}
           className="text-sm text-text-muted file:mr-3 file:rounded-full file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-text"
         />
-        <ImageUploadQueueList items={imageQueue.items} onRetry={imageQueue.retry} onRemove={imageQueue.removeItem} />
+        {/* Item "done" já apareceu no grid principal (com Principal/★/←→/✕)
+            assim que a foto entrou em block.images — mostrar de novo aqui
+            seria uma miniatura duplicada e sem nenhum controle, só confusão. */}
+        <ImageUploadQueueList
+          items={imageQueue.items.filter((i) => i.status !== "done")}
+          onRetry={imageQueue.retry}
+          onRemove={imageQueue.removeItem}
+        />
       </div>
 
       <div className="flex flex-col gap-1.5">
