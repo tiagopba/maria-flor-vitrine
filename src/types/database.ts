@@ -76,6 +76,9 @@ export interface Database {
           slug: string;
           description: string | null;
           cover_image: string | null;
+          // Chave do ícone — registry central em lib/catalog/category-icons.ts.
+          // NULL = ícone neutro até um admin escolher um específico.
+          icon_key: string | null;
           position: number;
           active: boolean;
           created_at: string;

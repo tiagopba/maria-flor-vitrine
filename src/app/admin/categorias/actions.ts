@@ -23,6 +23,7 @@ function parseCategoryFormData(formData: FormData) {
     slug: formData.get("slug"),
     description: formData.get("description"),
     cover_image: formData.get("cover_image"),
+    icon_key: formData.get("icon_key"),
   });
 }
 

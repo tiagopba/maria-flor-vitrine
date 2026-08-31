@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useActionState, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { CATEGORY_ICON_KEYS, CATEGORY_ICON_REGISTRY, suggestCategoryIconKey, type CategoryIconKey } from "@/lib/catalog/category-icons";
 import { uploadImageDirect, validateImageFile } from "@/lib/images/upload-client";
 import { slugify } from "@/lib/utils";
 import type { CategoryFormState } from "./actions";
@@ -18,6 +19,7 @@ export interface CategoryFormDefaults {
   slug: string;
   description: string | null;
   cover_image: string | null;
+  icon_key: string | null;
 }
 
 const initialState: CategoryFormState = {};
@@ -36,6 +38,14 @@ export function CategoryForm({
   const [name, setName] = useState(defaultValues?.name ?? "");
   const [slug, setSlug] = useState(defaultValues?.slug ?? "");
   const slugTouched = useRef(Boolean(defaultValues?.slug));
+
+  // Sugere um ícone com base no nome só enquanto a admin não escolheu um
+  // manualmente — categoria existente (defaultValues.icon_key já
+  // preenchido) nunca tem a sugestão rodando por cima da escolha dela.
+  const [iconKey, setIconKey] = useState<CategoryIconKey>(
+    (defaultValues?.icon_key as CategoryIconKey | null) ?? suggestCategoryIconKey(defaultValues?.name ?? "")
+  );
+  const iconTouched = useRef(Boolean(defaultValues?.icon_key));
 
   const [coverImage, setCoverImage] = useState<string | null>(defaultValues?.cover_image ?? null);
   const [uploading, setUploading] = useState(false);
@@ -80,6 +90,7 @@ export function CategoryForm({
           const value = e.target.value;
           setName(value);
           if (!slugTouched.current) setSlug(slugify(value));
+          if (!iconTouched.current) setIconKey(suggestCategoryIconKey(value));
         }}
         error={state.fieldErrors?.name}
         required
@@ -118,6 +129,38 @@ export function CategoryForm({
         {state.fieldErrors?.description && (
           <p className="text-xs text-red-600">{state.fieldErrors.description}</p>
         )}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm font-medium text-text">Ícone da categoria</label>
+        <input type="hidden" name="icon_key" value={iconKey} />
+        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+          {CATEGORY_ICON_KEYS.map((key) => {
+            const { label, Icon } = CATEGORY_ICON_REGISTRY[key];
+            const selected = key === iconKey;
+            return (
+              <button
+                key={key}
+                type="button"
+                title={label}
+                aria-pressed={selected}
+                onClick={() => {
+                  iconTouched.current = true;
+                  setIconKey(key);
+                }}
+                className={`flex flex-col items-center gap-1 rounded-lg border p-2 text-center transition-colors ${
+                  selected
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-text-muted hover:border-primary/40 hover:text-text"
+                }`}
+              >
+                <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                <span className="text-[10px] leading-tight">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+        {state.fieldErrors?.icon_key && <p className="text-xs text-red-600">{state.fieldErrors.icon_key}</p>}
       </div>
 
       <div className="flex flex-col gap-1.5">

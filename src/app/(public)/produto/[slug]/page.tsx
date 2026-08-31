@@ -84,17 +84,19 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
             {badge && <Badge tone="warning">{badge}</Badge>}
           </div>
 
-          <p className="text-xs text-text-muted">Código: {product.code}</p>
+          <p className="font-sans text-xs text-text-muted">Código: {product.code}</p>
 
           {isSoldOut && (
             <p className="text-sm font-medium text-red-600">{PRODUCT_STATUS_LABELS.SOLD_OUT}</p>
           )}
 
           {product.description && (
-            <p className="whitespace-pre-line text-sm text-text-muted">{product.description}</p>
+            <p className="whitespace-pre-line font-sans text-sm font-normal leading-[1.6] text-text-muted sm:text-base">
+              {product.description}
+            </p>
           )}
 
-          <p className="text-xs text-text-muted">
+          <p className="font-sans text-xs text-text-muted">
             Disponibilidade sujeita à confirmação devido ao giro rápido das peças.
           </p>
 
