@@ -17,13 +17,20 @@ interface Slide {
   memberIndex: number;
   url: string;
   alt: string;
+  key: string;
 }
+
+const SETTLE_DELAY_MS = 220;
 
 /**
  * Página do produto (galeria + painel de informações) com navegação
- * contínua entre as cores do mesmo modelo — deslizar/setear além da
- * última foto de uma cor entra direto na próxima cor, sem precisar clicar
- * no chip (ver rodada de correções: "slider contínuo entre cores").
+ * CONTÍNUA E CIRCULAR entre as cores do mesmo modelo — deslizar/setear
+ * além da última foto de uma cor entra direto na próxima cor, e da última
+ * foto da última cor volta pra primeira foto da primeira (e vice-versa no
+ * sentido inverso). Sempre começa pela variante que a cliente abriu
+ * (`initialActiveId`) — os `members` são reordenados (rotacionados) pra
+ * essa variante virar o índice 0 da sequência, nunca uma ordem fixa
+ * independente de qual cor foi aberta.
  *
  * NUNCA junta produtos no banco: `members` é sempre uma lista de
  * `ProductDetail` reais e independentes (cada cor = 1 linha em
@@ -33,11 +40,19 @@ interface Slide {
  * Clique manual num chip de cor continua sendo uma navegação de verdade
  * (<Link>, histórico normal). Só a troca de cor pelo gesto de deslizar
  * (ou pelas setas) usa `history.replaceState` pra manter a URL certa sem
- * criar uma entrada nova no histórico a cada foto — sem isso, "voltar" no
- * navegador teria que desfazer cada foto deslizada uma por uma.
+ * criar uma entrada nova no histórico a cada foto.
+ *
+ * Efeito circular: implementado com o truque padrão de "slides clone" —
+ * um clone do último slide antes do primeiro, e um clone do primeiro
+ * depois do último. Ao pousar num clone (seta ou swipe), esperamos o
+ * scroll assentar (debounce, sem depender de `scrollend` por causa do
+ * suporte inconsistente no Safari/iOS) e então reposicionamos
+ * INSTANTANEAMENTE (sem animação) pro slide real equivalente — como o
+ * clone é visualmente idêntico ao slide real, a cliente nunca percebe o
+ * "teleporte".
  */
 export function ProductDetailView({
-  members,
+  members: membersProp,
   initialActiveId,
   paymentSettings,
   sellers,
@@ -47,20 +62,46 @@ export function ProductDetailView({
   paymentSettings: PaymentSettings;
   sellers: { id: string; name: string }[];
 }) {
-  const initialIndex = Math.max(
-    0,
-    members.findIndex((m) => m.id === initialActiveId)
-  );
-  const [activeIndex, setActiveIndex] = useState(initialIndex);
+  // Rotaciona pra a variante atual ser sempre o índice 0 — "sempre
+  // começando pela primeira foto da variante atual/principal".
+  const members = useMemo(() => {
+    const start = Math.max(
+      0,
+      membersProp.findIndex((m) => m.id === initialActiveId)
+    );
+    return [...membersProp.slice(start), ...membersProp.slice(0, start)];
+  }, [membersProp, initialActiveId]);
+
+  const [activeIndex, setActiveIndex] = useState(0);
   const active = members[activeIndex];
 
   const slides = useMemo<Slide[]>(
     () =>
-      members.flatMap((m, mi) => m.images.map((img) => ({ memberIndex: mi, url: img.url, alt: img.alt_text ?? m.name }))),
+      members.flatMap((m, mi) =>
+        m.images.map((img) => ({ memberIndex: mi, url: img.url, alt: img.alt_text ?? m.name, key: `${m.id}-${img.id}` }))
+      ),
     [members]
   );
 
-  // Índice global (entre TODAS as cores) do primeiro slide de cada membro.
+  // [clone-do-último, ...slides reais..., clone-do-primeiro] — ver
+  // explicação do efeito circular acima.
+  const displaySlides = useMemo<Slide[]>(() => {
+    if (slides.length === 0) return [];
+    return [
+      { ...slides[slides.length - 1], key: "clone-start" },
+      ...slides,
+      { ...slides[0], key: "clone-end" },
+    ];
+  }, [slides]);
+
+  function displayToReal(displayIndex: number): number {
+    if (slides.length === 0) return 0;
+    if (displayIndex <= 0) return slides.length - 1;
+    if (displayIndex >= displaySlides.length - 1) return 0;
+    return displayIndex - 1;
+  }
+
+  // Índice global (entre TODAS as cores) do primeiro slide REAL de cada membro.
   const memberSlideStart = useMemo(() => {
     const starts: number[] = [];
     let acc = 0;
@@ -71,52 +112,41 @@ export function ProductDetailView({
     return starts;
   }, [members]);
 
-  const [activeSlideIndex, setActiveSlideIndex] = useState(memberSlideStart[initialIndex] ?? 0);
-  const localSlideIndex = activeSlideIndex - memberSlideStart[activeIndex];
+  const [activeDisplayIndex, setActiveDisplayIndex] = useState(1); // slide real 0 = display 1 (depois do clone inicial)
+  const localSlideIndex = displayToReal(activeDisplayIndex) - memberSlideStart[activeIndex];
   const scrollerRef = useRef<HTMLDivElement>(null);
   const thumbRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const rafRef = useRef<number | null>(null);
-  // Espelham activeSlideIndex/activeIndex de forma síncrona (nunca esperam
-  // o próximo render) — sem isso, dois cliques na seta mais rápidos do que
-  // o React consegue re-renderizar leriam o MESMO índice "antigo" do
-  // fechamento do botão, e o segundo clique não avançaria nada (mesma
-  // categoria do bug do upload de várias fotos: sempre calcular o próximo
-  // estado a partir do estado mais recente de verdade, nunca de uma
-  // variável capturada no render em que o handler foi criado).
-  const activeSlideIndexRef = useRef(activeSlideIndex);
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Espelham activeDisplayIndex/activeIndex de forma síncrona (nunca
+  // esperam o próximo render) — sem isso, dois cliques na seta mais
+  // rápidos do que o React consegue re-renderizar leriam o MESMO índice
+  // "antigo" do fechamento do botão, e o segundo clique não avançaria nada
+  // (mesma categoria do bug do upload de várias fotos: sempre calcular o
+  // próximo estado a partir do estado mais recente de verdade, nunca de
+  // uma variável capturada no render em que o handler foi criado).
+  const activeDisplayIndexRef = useRef(activeDisplayIndex);
   const activeIndexRef = useRef(activeIndex);
 
-  // Posiciona o scroller na primeira foto da cor inicial assim que monta,
-  // sem animação — senão a cliente veria a galeria "deslizar sozinha" ao
-  // abrir a página (as fotos das cores anteriores na sequência ficam à
-  // esquerda, fora de vista, prontas pra deslizar de volta — item 4/5).
+  // Posiciona o scroller na primeira foto da variante atual assim que
+  // monta, sem animação — senão a cliente veria a galeria "deslizar
+  // sozinha" ao abrir a página.
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
-    scroller.scrollLeft = (memberSlideStart[initialIndex] ?? 0) * scroller.clientWidth;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    scroller.scrollLeft = scroller.clientWidth;
   }, []);
 
   useLayoutEffect(() => {
     thumbRefs.current[localSlideIndex]?.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
   }, [localSlideIndex]);
 
-  // Setas e miniaturas atualizam o estado (dots/URL/preço/tamanhos) na
-  // hora — nunca esperam só o evento de scroll (que passa por
-  // requestAnimationFrame em handleScroll) pra refletir a mudança. Deixar
-  // só no scroll-driven faria clique de seta/miniatura ficar visualmente
-  // atrasado (ou, em navegadores/telas que atrasam o rAF, nem atualizar).
-  function scrollToSlide(index: number) {
-    const clamped = Math.max(0, Math.min(index, slides.length - 1));
-    const scroller = scrollerRef.current;
-    if (scroller) scroller.scrollTo({ left: clamped * scroller.clientWidth, behavior: "smooth" });
-    applyActiveSlide(clamped);
-  }
+  function applyActiveDisplaySlide(displayIndex: number) {
+    activeDisplayIndexRef.current = displayIndex;
+    setActiveDisplayIndex(displayIndex);
 
-  function applyActiveSlide(index: number) {
-    activeSlideIndexRef.current = index;
-    setActiveSlideIndex(index);
-    const slide = slides[index];
+    const real = displayToReal(displayIndex);
+    const slide = slides[real];
     if (!slide || slide.memberIndex === activeIndexRef.current) return;
 
     activeIndexRef.current = slide.memberIndex;
@@ -127,6 +157,40 @@ export function ProductDetailView({
     window.history.replaceState(null, "", `/produto/${newActive.slug}`);
   }
 
+  /** Depois que o scroll assenta num clone, reposiciona sem animação pro slide real equivalente. */
+  function snapOutOfCloneIfNeeded() {
+    const scroller = scrollerRef.current;
+    if (!scroller || displaySlides.length === 0) return;
+    const di = activeDisplayIndexRef.current;
+    let target: number | null = null;
+    if (di <= 0) target = displaySlides.length - 2; // clone do primeiro → último slide real
+    else if (di >= displaySlides.length - 1) target = 1; // clone do último → primeiro slide real
+    if (target === null) return;
+
+    scroller.scrollLeft = target * scroller.clientWidth;
+    activeDisplayIndexRef.current = target;
+    setActiveDisplayIndex(target);
+  }
+
+  function scheduleSettleCheck() {
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = setTimeout(() => {
+      settleTimerRef.current = null;
+      snapOutOfCloneIfNeeded();
+    }, SETTLE_DELAY_MS);
+  }
+
+  // Setas e miniaturas atualizam o estado (dots/URL/preço/tamanhos) na
+  // hora — nunca esperam só o evento de scroll (que passa por
+  // requestAnimationFrame em handleScroll) pra refletir a mudança.
+  function scrollToDisplay(displayIndex: number) {
+    const clamped = Math.max(0, Math.min(displayIndex, displaySlides.length - 1));
+    const scroller = scrollerRef.current;
+    if (scroller) scroller.scrollTo({ left: clamped * scroller.clientWidth, behavior: "smooth" });
+    applyActiveDisplaySlide(clamped);
+    scheduleSettleCheck();
+  }
+
   function handleScroll() {
     if (rafRef.current !== null) return;
     rafRef.current = requestAnimationFrame(() => {
@@ -134,17 +198,18 @@ export function ProductDetailView({
       const scroller = scrollerRef.current;
       if (!scroller || scroller.clientWidth === 0) return;
       const index = Math.round(scroller.scrollLeft / scroller.clientWidth);
-      applyActiveSlide(index);
+      applyActiveDisplaySlide(index);
+      scheduleSettleCheck();
     });
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (e.key === "ArrowLeft") {
       e.preventDefault();
-      scrollToSlide(activeSlideIndexRef.current - 1);
+      scrollToDisplay(activeDisplayIndexRef.current - 1);
     } else if (e.key === "ArrowRight") {
       e.preventDefault();
-      scrollToSlide(activeSlideIndexRef.current + 1);
+      scrollToDisplay(activeDisplayIndexRef.current + 1);
     }
   }
 
@@ -182,13 +247,13 @@ export function ProductDetailView({
                 hasMultipleSlides && "[overscroll-behavior-x:contain]"
               )}
             >
-              {slides.map((slide, index) => (
-                <div key={`${slide.memberIndex}-${slide.url}`} className="relative h-full w-full shrink-0 snap-center">
+              {(hasMultipleSlides ? displaySlides : slides).map((slide, index) => (
+                <div key={slide.key} className="relative h-full w-full shrink-0 snap-center">
                   <Image
                     src={slide.url}
                     alt={slide.alt}
                     fill
-                    priority={index === (memberSlideStart[initialIndex] ?? 0)}
+                    priority={index === (hasMultipleSlides ? 1 : 0)}
                     sizes="(max-width: 640px) 100vw, 50vw"
                     className="object-cover"
                   />
@@ -201,18 +266,16 @@ export function ProductDetailView({
                 <button
                   type="button"
                   aria-label="Foto anterior"
-                  onClick={() => scrollToSlide(activeSlideIndexRef.current - 1)}
-                  disabled={activeSlideIndex === 0}
-                  className="absolute left-2 top-1/2 z-10 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-border/60 bg-white/85 text-text shadow-sm backdrop-blur-sm transition-opacity hover:bg-white disabled:pointer-events-none disabled:opacity-0 sm:flex"
+                  onClick={() => scrollToDisplay(activeDisplayIndexRef.current - 1)}
+                  className="absolute left-2 top-1/2 z-10 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-border/60 bg-white/85 text-text shadow-sm backdrop-blur-sm transition-opacity hover:bg-white sm:flex"
                 >
                   <ChevronIcon direction="left" />
                 </button>
                 <button
                   type="button"
                   aria-label="Próxima foto"
-                  onClick={() => scrollToSlide(activeSlideIndexRef.current + 1)}
-                  disabled={activeSlideIndex === slides.length - 1}
-                  className="absolute right-2 top-1/2 z-10 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-border/60 bg-white/85 text-text shadow-sm backdrop-blur-sm transition-opacity hover:bg-white disabled:pointer-events-none disabled:opacity-0 sm:flex"
+                  onClick={() => scrollToDisplay(activeDisplayIndexRef.current + 1)}
+                  className="absolute right-2 top-1/2 z-10 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-border/60 bg-white/85 text-text shadow-sm backdrop-blur-sm transition-opacity hover:bg-white sm:flex"
                 >
                   <ChevronIcon direction="right" />
                 </button>
@@ -255,7 +318,7 @@ export function ProductDetailView({
                 ref={(el) => {
                   thumbRefs.current[i] = el;
                 }}
-                onClick={() => scrollToSlide(memberSlideStart[activeIndexRef.current] + i)}
+                onClick={() => scrollToDisplay(memberSlideStart[activeIndexRef.current] + i + 1)}
                 aria-label={`Ver foto ${i + 1} de ${memberSlideCount}`}
                 aria-current={i === localSlideIndex}
                 className={cn(
