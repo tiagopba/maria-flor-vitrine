@@ -11,6 +11,7 @@ import { getCategoryBySlugPublic, getVisibleCategoriesPublic } from "@/lib/db/ca
 import { getAvailableSizesPublic, listPublishedProductsFiltered } from "@/lib/db/products";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { buildCategoryDescription, buildCategoryTitle } from "@/lib/seo/local";
+import { CategoryViewTracker } from "@/components/analytics/CategoryViewTracker";
 
 // "novidades" é seção especial (rota própria /novidades), não uma
 // categoria de catálogo comum — ver lib/db/categories.ts. Continua
@@ -103,6 +104,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps<"
       )}
 
       <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+        <CategoryViewTracker categoryId={category.id} />
         <h1 className="mb-6 font-display text-2xl text-text sm:text-3xl">{category.name}</h1>
 
         <div className="mb-6">

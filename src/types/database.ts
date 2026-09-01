@@ -46,7 +46,11 @@ export type AnalyticsEventType =
   | "OFFERS_PAGE_VIEW"
   | "OFFER_LEAD_SUBMITTED"
   | "OFFERS_GROUP_CLICK"
-  | "STORE_DIRECTIONS_CLICK";
+  | "STORE_DIRECTIONS_CLICK"
+  // Módulo de instrumentação/dashboard — ver migration
+  // 20260901120000_analytics_dashboard_events.sql (preparada, não aplicada).
+  | "PAGE_VIEW"
+  | "OFFER_LEAD_CONFIRMED";
 
 type Table<Row, RequiredInsertKeys extends keyof Row> = {
   Row: Row;
@@ -319,6 +323,9 @@ export interface Database {
           seller_id: string | null;
           size: string | null;
           source: string | null;
+          // Ver migration 20260901120000_analytics_dashboard_events.sql
+          // (preparada, não aplicada) — coluna nova, nullable, aditiva.
+          device_type: string | null;
           utm_source: string | null;
           utm_medium: string | null;
           utm_campaign: string | null;

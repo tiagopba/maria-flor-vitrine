@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { headers } from "next/headers";
 import { createPublicClient } from "@/lib/supabase/public";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { recordInstitutionalEvent } from "@/lib/institutional/analytics";
 import { EMAIL_OTP_LENGTH } from "./otp-constants";
 
 /**
@@ -63,6 +64,12 @@ type LeadOtpRow = {
   auth_user_id: string | null;
   whatsapp_verified_at: string | null;
   email_verified_at: string | null;
+  session_id: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  utm_content: string | null;
+  referrer: string | null;
 };
 
 async function resolveLead(token: string): Promise<LeadOtpRow | null> {
@@ -71,12 +78,30 @@ async function resolveLead(token: string): Promise<LeadOtpRow | null> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("leads")
-    .select("id, email, auth_user_id, whatsapp_verified_at, email_verified_at")
+    .select(
+      "id, email, auth_user_id, whatsapp_verified_at, email_verified_at, session_id, utm_source, utm_medium, utm_campaign, utm_content, referrer"
+    )
     .eq("resume_token_hash", hashToken(token))
     .gt("resume_token_expires_at", new Date().toISOString())
     .maybeSingle();
 
   return data;
+}
+
+/** OFFER_LEAD_CONFIRMED reaproveita o session_id/UTMs já gravados no lead
+ * desde o envio do formulário (submitOfferLead) — o fluxo de OTP nunca
+ * recebe esses dados do navegador de novo, então usar o que já está salvo
+ * evita ter que fazer confirmEmailOtp aceitar parâmetros novos só pra isso. */
+function recordOfferLeadConfirmed(lead: LeadOtpRow): void {
+  recordInstitutionalEvent({
+    eventType: "OFFER_LEAD_CONFIRMED",
+    sessionId: lead.session_id ?? "unknown",
+    utmSource: lead.utm_source,
+    utmMedium: lead.utm_medium,
+    utmCampaign: lead.utm_campaign,
+    utmContent: lead.utm_content,
+    referrer: lead.referrer,
+  }).catch(() => {});
 }
 
 export type StartEmailOtpResult = { success: true; email: string } | { error: string };
@@ -197,6 +222,7 @@ export async function confirmEmailOtp(token: string, code: string): Promise<Conf
     if (updateError) {
       console.error("[confirmEmailOtp] falha ao marcar email_verified_at:", updateError.message);
     }
+    if (!lead.email_verified_at) recordOfferLeadConfirmed(lead);
     return { success: true };
   }
 
@@ -215,6 +241,8 @@ export async function confirmEmailOtp(token: string, code: string): Promise<Conf
   if (updateError) {
     console.error("[confirmEmailOtp] falha ao marcar email_verified_at:", updateError.message);
   }
+
+  if (!lead.email_verified_at) recordOfferLeadConfirmed(lead);
 
   return { success: true };
 }
