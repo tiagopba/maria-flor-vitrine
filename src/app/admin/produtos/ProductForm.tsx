@@ -153,6 +153,14 @@ export function ProductForm({
   }
 
   const allColored = variants.every((v) => v.colorId !== null);
+  // Regra de negócio (mesma da constraint em saveProductVariantsPayloadSchema
+  // e da RPC save_product_with_variants): "Sem cor" só é inválido quando o
+  // modelo tem 2+ variantes — com uma peça só, color_id null é uma
+  // representação legítima de "sem cor cadastrada". `allColored` continua
+  // exigindo cor em QUALQUER contagem porque handleAddColor precisa dela pra
+  // impedir criar a 2ª variante enquanto a 1ª ainda está "Sem cor" (isso já
+  // levaria a exatamente o estado inválido que a regra proíbe).
+  const colorsValidForSave = variants.length === 1 || allColored;
   const anyUploading = variants.some((v) => uploadStatusByKey[v.key]?.uploading);
   const blocksWithUploadErrors = variants.filter((v) => uploadStatusByKey[v.key]?.hasUnresolvedError);
   const hasUnresolvedUploadError = blocksWithUploadErrors.length > 0;
@@ -250,7 +258,7 @@ export function ProductForm({
       setFormError("Corrija ou remova as fotos com erro antes de salvar.");
       return;
     }
-    if (!allColored) {
+    if (!colorsValidForSave) {
       setFormError("Escolha a cor de cada peça antes de salvar.");
       return;
     }
