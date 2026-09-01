@@ -7,6 +7,7 @@ import { FavoriteProductRow } from "@/components/catalog/FavoriteProductRow";
 import { SellerSelectionDrawer } from "@/components/catalog/SellerSelectionDrawer";
 import { getFavoriteProductsAction } from "@/lib/favorites/actions";
 import { recordFavoriteEvent } from "@/lib/favorites/analytics";
+import { markJustContactedSeller } from "@/lib/favorites/post-contact";
 import { clearFavorites, removeFavoritesNotIn } from "@/lib/favorites/storage";
 import { useFavoritesList } from "@/lib/favorites/useFavorites";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
@@ -157,6 +158,7 @@ export function FavoritesPageClient({
         return;
       }
 
+      markJustContactedSeller();
       window.location.href = result.url;
     } catch {
       setSellerError("Não foi possível abrir o WhatsApp. Tente novamente.");
