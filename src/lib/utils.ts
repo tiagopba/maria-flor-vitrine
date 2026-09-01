@@ -21,3 +21,20 @@ export function slugify(text: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
+
+/**
+ * Um campo opcional ausente do FormData (ex: um `<textarea>`/`<input>` que
+ * o formulário nunca inclui, como nos modais de cadastro rápido)
+ * `formData.get()` devolve `null` — mas `z.string().optional()` só aceita
+ * `undefined`, nunca `null`, e falha com uma mensagem técnica do Zod
+ * ("Invalid input: expected string, received null") em vez da mensagem
+ * customizada do schema. Normaliza `null` e string vazia pra `undefined`
+ * aqui, antes do Zod ver o valor, pros três significarem a mesma coisa:
+ * "não informado".
+ */
+export function optionalFormValue(formData: FormData, key: string): string | undefined {
+  const value = formData.get(key);
+  if (value === null) return undefined;
+  const str = String(value).trim();
+  return str === "" ? undefined : str;
+}
