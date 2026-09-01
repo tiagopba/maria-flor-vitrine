@@ -128,12 +128,20 @@ export function CategoryMenuDrawer({ categories }: { categories: { name: string;
             Novidades
           </Link>
           <Link
+            href="/busca"
+            onClick={close}
+            tabIndex={open ? 0 : -1}
+            className="block rounded-lg px-3 py-2.5 text-base font-semibold text-text hover:bg-muted"
+          >
+            Buscar peças
+          </Link>
+          <Link
             href="/favoritos"
             onClick={close}
             tabIndex={open ? 0 : -1}
             className="block rounded-lg px-3 py-2.5 text-base font-semibold text-text hover:bg-muted"
           >
-            ❤️ Minha seleção
+            ❤️ Minha Seleção
           </Link>
 
           {categories.length > 0 && (
@@ -195,12 +203,13 @@ export function CategoryMenuDrawer({ categories }: { categories: { name: string;
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label="Menu"
-        className="flex h-9 w-9 items-center justify-center rounded-full text-text-muted hover:bg-muted"
+        aria-label="Abrir menu"
+        className="flex h-9 items-center justify-center gap-1 whitespace-nowrap rounded-full px-2 text-text-muted hover:bg-muted"
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M3 6h18M3 12h18M3 18h18" strokeLinecap="round" />
         </svg>
+        <span className="text-xs font-semibold text-text">Menu</span>
       </button>
 
       {mounted && createPortal(panel, document.body)}

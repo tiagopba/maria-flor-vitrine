@@ -9,6 +9,7 @@ import { SellerSelectionDrawer } from "@/components/catalog/SellerSelectionDrawe
 import { SingleSizeSelector } from "@/components/catalog/SingleSizeSelector";
 import { getHopsFromListing, getLastListingPath, hasInternalHistory } from "@/components/layout/NavigationTracker";
 import { recordFavoriteEvent } from "@/lib/favorites/analytics";
+import { markJustContactedSeller } from "@/lib/favorites/post-contact";
 import { addFavorite, getFavorites, setSelectedSize as persistSelectedSize } from "@/lib/favorites/storage";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
@@ -216,6 +217,7 @@ export function ProductWhatsAppFlow({
         return;
       }
 
+      markJustContactedSeller();
       window.location.href = result.url;
     } catch {
       setSellerError("Não foi possível abrir o WhatsApp. Tente novamente.");
