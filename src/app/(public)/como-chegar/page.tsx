@@ -10,6 +10,7 @@ export const metadata: Metadata = {
   // "Maria Flor" duas vezes se passasse pelo template).
   title: { absolute: "Como Chegar à Maria Flor | Paranaíba/MS" },
   description: "Endereço, telefone e como chegar até a loja física da Maria Flor em Paranaíba/MS.",
+  alternates: { canonical: "/como-chegar" },
 };
 
 // Mesmo motivo das outras páginas institucionais: dados vêm do Supabase e
