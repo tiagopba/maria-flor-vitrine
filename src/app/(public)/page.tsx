@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { CategoryCarousel } from "@/components/catalog/CategoryCarousel";
@@ -7,6 +8,26 @@ import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
 import { getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { listPublishedProducts } from "@/lib/db/products";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
+
+// `absolute` de propósito — o layout raiz aplica um template "%s | Maria
+// Flor" a todo título; aqui a marca já vem primeiro no texto pedido, então
+// o template duplicaria "Maria Flor".
+const HOME_TITLE = "Maria Flor | Moda Feminina em Paranaíba MS";
+const HOME_DESCRIPTION =
+  "Loja de moda feminina em Paranaíba MS. Roupas femininas, jeans, vestidos, blusas, conjuntos, acessórios e novidades todos os dias. Conheça a Maria Flor.";
+
+export const metadata: Metadata = {
+  title: { absolute: HOME_TITLE },
+  description: HOME_DESCRIPTION,
+  alternates: { canonical: "/" },
+  // Sem `images` de propósito — herda o `opengraph-image.png` já existente
+  // na raiz do app (convenção de arquivo do Next.js), a mesma imagem
+  // institucional usada como fallback em qualquer página sem foto própria.
+  openGraph: {
+    title: HOME_TITLE,
+    description: HOME_DESCRIPTION,
+  },
+};
 
 // Sem isso, a Home (sem segmento dinâmico nem searchParams) é
 // estaticamente otimizada no build — "Acabaram de chegar" e "Explore por
@@ -29,10 +50,18 @@ export default async function Home() {
 
   return (
     <main className="flex flex-1 flex-col">
-      {/* Hero */}
+      {/* Hero — H1 real é "Moda Feminina em Paranaíba MS" (item 1 do SEO
+          local), mas visualmente quase idêntico ao anterior: só ganha uma
+          linha pequena em cima da mesma frase de sempre, sem texto
+          escondido nem mudança de estilo do hero. */}
       <section className="px-4 py-10 text-center sm:py-14">
-        <h1 className="mx-auto max-w-md font-display text-xl text-text sm:text-3xl">
-          Tudo o que você viu nos nossos Stories, agora em um só lugar.
+        <h1 className="mx-auto max-w-md font-display text-text">
+          <span className="block text-xs font-semibold uppercase tracking-wide text-primary sm:text-sm">
+            Moda Feminina em Paranaíba MS
+          </span>
+          <span className="mt-2 block text-xl sm:text-3xl">
+            Tudo o que você viu nos nossos Stories, agora em um só lugar.
+          </span>
         </h1>
       </section>
 

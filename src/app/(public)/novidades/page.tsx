@@ -9,10 +9,18 @@ import { getCategoryBySlugPublic, getVisibleCategoriesPublic } from "@/lib/db/ca
 import { getAvailableSizesPublic, listPublishedProductsFiltered } from "@/lib/db/products";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 
-export const metadata: Metadata = {
-  title: "Novidades",
-  description: "As novidades que você viu nos nossos Stories, agora em um só lugar.",
-};
+export async function generateMetadata({ searchParams }: PageProps<"/novidades">): Promise<Metadata> {
+  const rawParams = await searchParams;
+  const hasFilters = hasActiveFilters(parsePublicFilters(rawParams));
+
+  return {
+    title: "Novidades",
+    description:
+      "As novidades que você viu nos nossos Stories, agora em um só lugar — moda feminina em Paranaíba, MS.",
+    alternates: { canonical: "/novidades" },
+    ...(hasFilters ? { robots: { index: false, follow: true } } : {}),
+  };
+}
 
 export default async function NovidadesPage({ searchParams }: PageProps<"/novidades">) {
   const params = await searchParams;

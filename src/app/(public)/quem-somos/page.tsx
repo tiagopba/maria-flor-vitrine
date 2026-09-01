@@ -7,6 +7,7 @@ import { getInstitutionalInfo } from "@/lib/site-settings/institutional";
 export const metadata: Metadata = {
   title: "Quem Somos",
   description: "Conheça a história da Maria Flor, moda feminina em Paranaíba/MS.",
+  alternates: { canonical: "/quem-somos" },
 };
 
 // Sem segmento dinâmico, essa página seria estaticamente otimizada no
@@ -16,7 +17,8 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 const DEFAULT_STORY =
-  "Nossa loja física, em Paranaíba, no interior de Mato Grosso do Sul, é o coração da Maria Flor. " +
+  "Maria Flor é uma loja de moda feminina em Paranaíba, Mato Grosso do Sul. Nossa loja física, no " +
+  "coração da cidade, é onde tudo começou. " +
   "Agora, nossa Vitrine Online nasceu para tornar essa experiência ainda mais fácil: você acompanha " +
   "as novidades, salva suas peças favoritas e fala diretamente com nossas vendedoras.";
 
