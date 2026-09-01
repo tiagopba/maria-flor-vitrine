@@ -3,7 +3,12 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface RecordInstitutionalEventInput {
-  eventType: "OFFERS_PAGE_VIEW" | "OFFER_LEAD_SUBMITTED" | "OFFERS_GROUP_CLICK" | "STORE_DIRECTIONS_CLICK";
+  eventType:
+    | "OFFERS_PAGE_VIEW"
+    | "OFFER_LEAD_SUBMITTED"
+    | "OFFERS_GROUP_CLICK"
+    | "STORE_DIRECTIONS_CLICK"
+    | "OFFER_LEAD_CONFIRMED";
   sessionId: string;
   utmSource: string | null;
   utmMedium: string | null;
