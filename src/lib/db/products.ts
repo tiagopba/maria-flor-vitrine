@@ -497,30 +497,32 @@ export async function searchProductsForRelate(query: string, excludeProductId: s
   }));
 }
 
-export interface ProductGroupSibling {
-  id: string;
-  name: string;
-  slug: string;
-  colorId: string | null;
-}
-
 /**
- * Peças "irmãs" (mesmo product_group_id) já publicadas — usado na página
- * pública do produto pra "Outras cores disponíveis". Client público
- * (RLS), então nunca vaza produto arquivado/despublicado. Não carrega
- * fotos de propósito (ver item 13 da especificação: performance) — só o
- * necessário pra montar o swatch e o link.
+ * Todos os membros publicados de um conjunto de cores, com fotos/tamanhos/
+ * preço completos — usado na página pública do produto pro slider
+ * contínuo entre cores (item 2 da rodada de correções: deslizar direto de
+ * uma cor pra outra, sem precisar clicar no chip). Reaproveita
+ * getProductsByIdsPublic (mesmo client público/RLS, mesma consulta em
+ * lote já testada — nenhuma fonte de verdade nova). Ordenado por
+ * `created_at` pra dar uma sequência estável e determinística entre as
+ * cores (a mesma ordem sempre, em qualquer variante que a cliente entrar
+ * primeiro).
  */
-export async function getPublishedGroupSiblings(groupId: string, excludeProductId: string): Promise<ProductGroupSibling[]> {
+export async function getPublishedGroupMembersFull(groupId: string): Promise<ProductDetail[]> {
   const supabase = createPublicClient();
 
   const { data, error } = await supabase
     .from("products")
-    .select("id, name, slug, color_id")
+    .select("id")
     .eq("product_group_id", groupId)
-    .neq("id", excludeProductId);
+    .neq("status", "ARCHIVED")
+    .not("published_at", "is", null);
 
   if (error) throw new Error(error.message);
 
-  return (data ?? []).map((row) => ({ id: row.id, name: row.name, slug: row.slug, colorId: row.color_id }));
+  const ids = (data ?? []).map((row) => row.id);
+  if (ids.length === 0) return [];
+
+  const members = await getProductsByIdsPublic(ids);
+  return members.sort((a, b) => a.created_at.localeCompare(b.created_at));
 }

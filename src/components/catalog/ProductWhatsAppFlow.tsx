@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import { SellerSelectionDrawer } from "@/components/catalog/SellerSelectionDrawer";
 import { SingleSizeSelector } from "@/components/catalog/SingleSizeSelector";
-import { hasInternalHistory } from "@/components/layout/NavigationTracker";
+import { getHopsFromListing, getLastListingPath, hasInternalHistory } from "@/components/layout/NavigationTracker";
 import { recordFavoriteEvent } from "@/lib/favorites/analytics";
 import { addFavorite, getFavorites, setSelectedSize as persistSelectedSize } from "@/lib/favorites/storage";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
@@ -141,8 +141,25 @@ export function ProductWhatsAppFlow({
     setAddedSheetOpen(false);
 
     // Produto e tamanho já estão salvos no localStorage — só navega.
-    if (hasInternalHistory()) router.back();
-    else router.push("/novidades");
+    //
+    // "Voltar pra origem" precisa ser a página de listagem de onde a
+    // cliente realmente veio (Novidades/Categoria/Busca com filtros) —
+    // nunca a Home por padrão, e nunca uma cor diferente da que ela clicou
+    // originalmente (trocar de cor pelo slider usa history.replaceState,
+    // que não conta como "pulo" aqui — ver NavigationTracker).
+    //
+    // router.back() é preferido quando ainda estamos na MESMA página de
+    // produto que a cliente abriu a partir da listagem (0 pulos): o Next
+    // restaura a posição/scroll exata da listagem, sem recarregar. Se ela
+    // navegou manualmente entre peças/cores (clique real em link) antes de
+    // adicionar à seleção, back() só desfaria um desses cliques — nesse
+    // caso usamos a URL da listagem guardada diretamente.
+    if (hasInternalHistory() && getHopsFromListing() === 0) {
+      router.back();
+      return;
+    }
+
+    router.push(getLastListingPath() ?? "/novidades");
   }
 
   function handleTalkToSeller() {

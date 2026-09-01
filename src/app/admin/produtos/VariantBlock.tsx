@@ -65,7 +65,8 @@ export function VariantBlock({
   isRoot: boolean;
   duplicateColorName: string | null;
   computedSlug: string;
-  onChange: (next: VariantBlockData) => void;
+  /** Aceita um valor pronto ou um updater `(prev) => next` — ver comentário em ProductForm.updateVariant sobre por que isso é obrigatório pro upload de várias fotos simultâneas. */
+  onChange: (next: VariantBlockData | ((prev: VariantBlockData) => VariantBlockData)) => void;
   onRemove: () => void;
   onOpenColorDrawer: () => void;
   onOpenSizeDrawer: () => void;
@@ -75,15 +76,20 @@ export function VariantBlock({
   const colorName = block.colorId ? (colors.find((c) => c.id === block.colorId)?.name ?? null) : null;
   const title = colorName ?? (index === 0 ? "PEÇA PRINCIPAL" : "NOVA COR");
 
+  // Sempre via updater (nunca `{...block, ...patch}` direto): `block` é o
+  // valor da prop NO RENDER ATUAL, e várias fotos podem terminar de subir
+  // em sequência rápida antes de um re-render acontecer — computar a
+  // partir do estado mais recente dentro do próprio setVariants (ver
+  // ProductForm.updateVariant) é o que evita uma foto sobrescrever a outra.
   function update(patch: Partial<VariantBlockData>) {
-    onChange({ ...block, ...patch });
+    onChange((prev) => ({ ...prev, ...patch }));
   }
 
   const imageQueue = useImageUploadQueue("products", (result) => {
-    onChange({
-      ...block,
-      images: [...block.images, { id: null, storage_path: result.path, url: result.url }],
-    });
+    onChange((prev) => ({
+      ...prev,
+      images: [...prev.images, { id: null, storage_path: result.path, url: result.url }],
+    }));
   });
 
   const errorCount = imageQueue.items.filter((i) => i.status === "error").length;
@@ -106,12 +112,26 @@ export function VariantBlock({
     event.target.value = "";
   }
 
-  function moveImage(imgIndex: number, direction: "left" | "right") {
-    const targetIndex = direction === "left" ? imgIndex - 1 : imgIndex + 1;
-    if (targetIndex < 0 || targetIndex >= block.images.length) return;
-    const next = [...block.images];
-    [next[imgIndex], next[targetIndex]] = [next[targetIndex], next[imgIndex]];
-    update({ images: next });
+  // As três funções abaixo identificam a foto pela referência do objeto
+  // (nunca por índice) e recalculam contra `prev.images` dentro do próprio
+  // updater — mesmo motivo do onSuccess do upload: um clique de reordenar/
+  // remover pode acontecer bem na hora que outra foto termina de subir, e
+  // só assim as duas mudanças convivem em vez de uma apagar a outra.
+  function moveImage(img: VariantGalleryImage, direction: "left" | "right") {
+    onChange((prev) => {
+      const imgIndex = prev.images.indexOf(img);
+      if (imgIndex === -1) return prev;
+      const targetIndex = direction === "left" ? imgIndex - 1 : imgIndex + 1;
+      if (targetIndex < 0 || targetIndex >= prev.images.length) return prev;
+      const next = [...prev.images];
+      [next[imgIndex], next[targetIndex]] = [next[targetIndex], next[imgIndex]];
+      return { ...prev, images: next };
+    });
+  }
+
+  /** Move a foto direto pra position 0 — bem mais rápido no celular do que várias setinhas. */
+  function makePrimary(img: VariantGalleryImage) {
+    onChange((prev) => ({ ...prev, images: [img, ...prev.images.filter((i) => i !== img)] }));
   }
 
   function removeImage(img: VariantGalleryImage) {
@@ -120,7 +140,7 @@ export function VariantBlock({
       // Storage na hora (nada no banco referencia esse arquivo).
       discardUnusedUploadAction(img.storage_path);
     }
-    update({ images: block.images.filter((i) => i !== img) });
+    onChange((prev) => ({ ...prev, images: prev.images.filter((i) => i !== img) }));
   }
 
   return (
@@ -226,47 +246,60 @@ export function VariantBlock({
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-text">Fotos</span>
         {block.images.length > 0 && (
-          <div className="grid grid-cols-4 gap-2">
-            {block.images.map((img, imgIndex) => (
-              <div key={img.id ?? img.storage_path} className="flex flex-col gap-1">
-                <div className="relative aspect-square overflow-hidden rounded-lg bg-muted">
-                  <Image src={img.url} alt="" fill className="object-cover" sizes="120px" />
-                  {imgIndex === 0 && (
-                    <span className="absolute left-1 top-1 rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-medium text-primary-foreground">
-                      Principal
-                    </span>
-                  )}
+          <div className="flex gap-3 overflow-x-auto pb-1">
+            {block.images.map((img, imgIndex) => {
+              const isPrimary = imgIndex === 0;
+              return (
+                <div key={img.id ?? img.storage_path} className="flex w-24 shrink-0 flex-col gap-1.5">
+                  <div className="relative aspect-square overflow-hidden rounded-lg bg-muted">
+                    <Image src={img.url} alt="" fill className="object-cover" sizes="96px" />
+                    {isPrimary && (
+                      <span className="absolute left-1 top-1 rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-medium text-primary-foreground">
+                        Principal
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeImage(img)}
+                      aria-label="Remover foto"
+                      className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-xs leading-none text-white hover:bg-black/80"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={isPrimary}
+                    onClick={() => makePrimary(img)}
+                    className="flex h-7 items-center justify-center gap-1 rounded-full border border-border text-[10px] font-medium text-text-muted hover:border-primary/40 hover:text-text disabled:pointer-events-none disabled:opacity-30"
+                  >
+                    ★ Tornar principal
+                  </button>
+
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      disabled={imgIndex === 0}
+                      onClick={() => moveImage(img, "left")}
+                      aria-label="Mover para a esquerda"
+                      className="flex h-8 w-8 items-center justify-center rounded text-text-muted hover:bg-muted disabled:opacity-30"
+                    >
+                      ←
+                    </button>
+                    <button
+                      type="button"
+                      disabled={imgIndex === block.images.length - 1}
+                      onClick={() => moveImage(img, "right")}
+                      aria-label="Mover para a direita"
+                      className="flex h-8 w-8 items-center justify-center rounded text-text-muted hover:bg-muted disabled:opacity-30"
+                    >
+                      →
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <button
-                    type="button"
-                    disabled={imgIndex === 0}
-                    onClick={() => moveImage(imgIndex, "left")}
-                    aria-label="Mover para a esquerda"
-                    className="flex h-6 w-6 items-center justify-center rounded text-text-muted hover:bg-muted disabled:opacity-30"
-                  >
-                    ←
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeImage(img)}
-                    aria-label="Remover foto"
-                    className="flex h-6 w-6 items-center justify-center rounded text-red-600 hover:bg-red-50"
-                  >
-                    ✕
-                  </button>
-                  <button
-                    type="button"
-                    disabled={imgIndex === block.images.length - 1}
-                    onClick={() => moveImage(imgIndex, "right")}
-                    aria-label="Mover para a direita"
-                    className="flex h-6 w-6 items-center justify-center rounded text-text-muted hover:bg-muted disabled:opacity-30"
-                  >
-                    →
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
         <input
@@ -277,7 +310,14 @@ export function VariantBlock({
           disabled={imageQueue.isUploading}
           className="text-sm text-text-muted file:mr-3 file:rounded-full file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-text"
         />
-        <ImageUploadQueueList items={imageQueue.items} onRetry={imageQueue.retry} onRemove={imageQueue.removeItem} />
+        {/* Item "done" já apareceu no grid principal (com Principal/★/←→/✕)
+            assim que a foto entrou em block.images — mostrar de novo aqui
+            seria uma miniatura duplicada e sem nenhum controle, só confusão. */}
+        <ImageUploadQueueList
+          items={imageQueue.items.filter((i) => i.status !== "done")}
+          onRetry={imageQueue.retry}
+          onRemove={imageQueue.removeItem}
+        />
       </div>
 
       <div className="flex flex-col gap-1.5">
