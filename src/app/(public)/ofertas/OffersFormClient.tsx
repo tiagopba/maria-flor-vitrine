@@ -12,6 +12,7 @@ import { EMAIL_OTP_LENGTH } from "@/lib/leads/otp-constants";
 import { submitOfferLead, type OfferLeadFieldErrors } from "@/lib/leads/actions";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
+import { trackPixelEvent } from "@/lib/analytics/meta-pixel";
 
 const RESEND_COOLDOWN_SECONDS = 30;
 const RESUME_TOKEN_STORAGE_KEY = "mf_ofertas_resume_token";
@@ -160,6 +161,8 @@ export function OffersFormClient({
       return;
     }
 
+    trackPixelEvent("Lead", { content_name: "Grupo de Ofertas" });
+
     writeResumeToken(result.resumeToken);
     setResumeToken(result.resumeToken);
     setOtpCode("");
@@ -196,6 +199,7 @@ export function OffersFormClient({
     }
 
     clearResumeToken();
+    trackPixelEvent("CompleteRegistration", { content_name: "Grupo de Ofertas", status: true });
     setStep("done");
   }
 

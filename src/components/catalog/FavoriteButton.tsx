@@ -7,6 +7,7 @@ import { useIsFavorited } from "@/lib/favorites/useFavorites";
 import { recordFavoriteEvent } from "@/lib/favorites/analytics";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { getPersistedUtm } from "@/lib/utm/persist";
+import { trackPixelEvent } from "@/lib/analytics/meta-pixel";
 
 /**
  * Coração de favoritar — usado no ProductCard (dentro de um <Link>, por
@@ -32,6 +33,10 @@ export function FavoriteButton({
     e.stopPropagation();
 
     const nowFavorited = toggleFavorite(productId);
+
+    if (nowFavorited) {
+      trackPixelEvent("AddToWishlist", { content_ids: [productId], content_type: "product" });
+    }
 
     startTransition(() => {
       const utm = getPersistedUtm();

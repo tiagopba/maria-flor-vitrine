@@ -13,6 +13,7 @@ import { useFavoritesList } from "@/lib/favorites/useFavorites";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
 import { submitFavoritesWhatsAppClick } from "@/lib/whatsapp/favorites-click-action";
+import { trackPixelEvent } from "@/lib/analytics/meta-pixel";
 import type { ProductDetail } from "@/lib/db/products";
 import type { PaymentSettings } from "@/lib/site-settings/payments";
 
@@ -159,6 +160,7 @@ export function FavoritesPageClient({
       }
 
       markJustContactedSeller();
+      trackPixelEvent("Contact");
       window.location.href = result.url;
     } catch {
       setSellerError("Não foi possível abrir o WhatsApp. Tente novamente.");

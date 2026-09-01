@@ -10,6 +10,7 @@ import { groupProductsForDisplay } from "@/lib/catalog/group-products-for-displa
 import { getCategoryBySlugPublic, getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { getAvailableSizesPublic, listPublishedProductsFiltered } from "@/lib/db/products";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
+import { SearchTracker } from "@/components/analytics/SearchTracker";
 
 // Resultado de busca interna — Google recomenda não indexar essas páginas
 // (conteúdo é só um recorte de outras páginas já indexadas, muda a cada
@@ -65,6 +66,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/busca">) 
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
+      <SearchTracker active={shouldSearch} query={query} resultsCount={products.length} />
       <h1 className="mb-1 text-center font-display text-xl text-text sm:text-2xl">
         Viu no Instagram? Encontre aqui.
       </h1>

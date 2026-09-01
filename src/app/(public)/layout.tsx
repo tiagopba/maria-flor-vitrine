@@ -5,6 +5,8 @@ import { SiteFooter } from "@/components/layout/SiteFooter";
 import { FavoritesDiscoveryTip } from "@/components/catalog/FavoritesDiscoveryTip";
 import { PostContactPrompt } from "@/components/catalog/PostContactPrompt";
 import { JsonLd } from "@/components/seo/JsonLd";
+import { MetaPixel } from "@/components/analytics/MetaPixel";
+import { PageViewTracker } from "@/components/analytics/PageViewTracker";
 import { getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { getInstitutionalInfo } from "@/lib/site-settings/institutional";
 import { buildStoreJsonLd } from "@/lib/seo/structured-data";
@@ -27,6 +29,8 @@ export default async function PublicLayout({ children }: { children: React.React
           nesse componente invisível, não afeta o resto do layout. */}
       <Suspense fallback={null}>
         <NavigationTracker />
+        <PageViewTracker />
+        <MetaPixel />
       </Suspense>
       <SiteHeader categories={categories} />
       <FavoritesDiscoveryTip />

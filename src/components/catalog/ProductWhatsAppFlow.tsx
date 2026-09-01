@@ -15,6 +15,7 @@ import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
 import { submitWhatsAppClick } from "@/lib/whatsapp/click-action";
 import { submitFavoritesWhatsAppClick } from "@/lib/whatsapp/favorites-click-action";
+import { trackPixelEvent } from "@/lib/analytics/meta-pixel";
 import type { ProductStatus } from "@/types/database";
 
 /**
@@ -69,6 +70,7 @@ export function ProductWhatsAppFlow({
         return;
       }
 
+      trackPixelEvent("Contact");
       window.location.href = result.url;
     } catch {
       setSoldOutError("Não foi possível abrir o WhatsApp. Tente novamente.");
@@ -118,6 +120,8 @@ export function ProductWhatsAppFlow({
       referrer: utm.referrer ?? null,
       metadata: { size },
     }).catch(() => {});
+
+    trackPixelEvent("AddToWishlist", { content_ids: [productId], content_type: "product" });
 
     setSizeSheetOpen(false);
     setAddedSheetOpen(true);
@@ -218,6 +222,7 @@ export function ProductWhatsAppFlow({
       }
 
       markJustContactedSeller();
+      trackPixelEvent("Contact");
       window.location.href = result.url;
     } catch {
       setSellerError("Não foi possível abrir o WhatsApp. Tente novamente.");
