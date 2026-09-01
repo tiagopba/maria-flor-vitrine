@@ -3,6 +3,7 @@ import { NavigationTracker } from "@/components/layout/NavigationTracker";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { FavoritesDiscoveryTip } from "@/components/catalog/FavoritesDiscoveryTip";
+import { PostContactPrompt } from "@/components/catalog/PostContactPrompt";
 import { getVisibleCategoriesPublic } from "@/lib/db/categories";
 
 export default async function PublicLayout({ children }: { children: React.ReactNode }) {
@@ -18,6 +19,7 @@ export default async function PublicLayout({ children }: { children: React.React
       </Suspense>
       <SiteHeader categories={categories} />
       <FavoritesDiscoveryTip />
+      <PostContactPrompt />
       {children}
       <SiteFooter />
     </>

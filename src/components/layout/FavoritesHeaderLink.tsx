@@ -16,8 +16,9 @@ export function FavoritesHeaderLink() {
     <Link
       href="/favoritos"
       aria-label={count > 0 ? `Minha seleção, ${count} ${count === 1 ? "peça salva" : "peças salvas"}` : "Minha seleção"}
-      className="flex h-9 items-center justify-center gap-1 rounded-full px-2 text-text-muted hover:bg-muted"
+      className="flex h-9 items-center justify-center gap-1 whitespace-nowrap rounded-full px-2 text-text-muted hover:bg-muted"
     >
+      <span className="text-xs font-semibold text-text">Minha Seleção</span>
       <HeartIcon filled={count > 0} />
       {count > 0 && <span className="text-xs font-medium text-text">{count}</span>}
     </Link>
