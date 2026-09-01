@@ -11,7 +11,16 @@ import { getCategoryBySlugPublic, getVisibleCategoriesPublic } from "@/lib/db/ca
 import { getAvailableSizesPublic, listPublishedProductsFiltered } from "@/lib/db/products";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 
-export const metadata: Metadata = { title: "Busca" };
+// Resultado de busca interna — Google recomenda não indexar essas páginas
+// (conteúdo é só um recorte de outras páginas já indexadas, muda a cada
+// termo digitado). `follow` continua true: os links pros produtos dentro do
+// resultado seguem sendo rastreados normalmente.
+export const metadata: Metadata = {
+  title: "Busca",
+  description: "Busque peças da Maria Flor por nome ou código — moda feminina em Paranaíba, MS.",
+  alternates: { canonical: "/busca" },
+  robots: { index: false, follow: true },
+};
 
 export default async function SearchPage({ searchParams }: PageProps<"/busca">) {
   const params = await searchParams;

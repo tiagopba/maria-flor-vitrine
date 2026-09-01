@@ -10,6 +10,7 @@ import { buildFilterQueryString, hasActiveFilters, parsePublicFilters } from "@/
 import { getCategoryBySlugPublic, getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { getAvailableSizesPublic, listPublishedProductsFiltered } from "@/lib/db/products";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
+import { buildCategoryDescription, buildCategoryTitle } from "@/lib/seo/local";
 
 // "novidades" é seção especial (rota própria /novidades), não uma
 // categoria de catálogo comum — ver lib/db/categories.ts. Continua
@@ -21,6 +22,7 @@ const SPECIAL_CATEGORY_REDIRECTS: Record<string, string> = {
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: PageProps<"/categoria/[slug]">): Promise<Metadata> {
   const { slug } = await params;
   if (SPECIAL_CATEGORY_REDIRECTS[slug]) redirect(SPECIAL_CATEGORY_REDIRECTS[slug]);
@@ -29,15 +31,22 @@ export async function generateMetadata({
 
   if (!category) return {};
 
-  const description =
-    category.description ??
-    `As novidades em ${category.name.toLowerCase()} da Maria Flor aparecem aqui.`;
+  const rawParams = await searchParams;
+  const hasFilters = hasActiveFilters(parsePublicFilters(rawParams));
+
+  const title = buildCategoryTitle(category.name);
+  const description = category.description ?? buildCategoryDescription(category.name);
 
   return {
-    title: category.name,
+    title,
     description,
+    alternates: { canonical: `/categoria/${slug}` },
+    // Combinações filtradas (tamanho/preço) não viram URL própria indexável
+    // — evita dezenas de variações quase idênticas competindo com a
+    // categoria "limpa" nos resultados de busca (item 8: evitar duplicidade).
+    ...(hasFilters ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
-      title: category.name,
+      title,
       description,
       images: category.cover_image ? [category.cover_image] : undefined,
     },

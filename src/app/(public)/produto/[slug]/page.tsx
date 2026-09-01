@@ -14,6 +14,10 @@ import {
 import { resolveProductSlugRedirect } from "@/lib/db/product-slug";
 import { getActiveSellersForModal } from "@/lib/db/sellers";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
+import { buildProductDescription, titleCase } from "@/lib/seo/local";
+import { buildProductJsonLd } from "@/lib/seo/structured-data";
+import { JsonLd } from "@/components/seo/JsonLd";
+import { getSiteUrl } from "@/lib/site";
 
 export async function generateMetadata({
   params,
@@ -23,12 +27,15 @@ export async function generateMetadata({
 
   if (!product) return {};
 
-  const title = `${product.name} | Maria Flor`;
-  const description = product.description ?? `${product.name} — Código ${product.code}. Confira na Vitrine Maria Flor.`;
+  // `absolute` — "Maria Flor Paranaíba MS" já é o sufixo completo desejado
+  // aqui; o template padrão do layout raiz só acrescentaria "| Maria Flor"
+  // de novo em cima disso.
+  const title = `${titleCase(product.name)} | Maria Flor Paranaíba MS`;
+  const description = product.description ?? buildProductDescription(product.name, product.code);
   const image = product.images[0]?.url;
 
   return {
-    title: product.name,
+    title: { absolute: title },
     description,
     alternates: { canonical: `/produto/${product.slug}` },
     openGraph: {
@@ -70,6 +77,7 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6">
+      <JsonLd data={buildProductJsonLd(product, paymentSettings, getSiteUrl())} />
       <BackButton fallbackHref="/novidades" className="mb-4" />
 
       <ProductDetailView members={members} initialActiveId={product.id} paymentSettings={paymentSettings} sellers={sellers} />
