@@ -18,10 +18,10 @@ import { EMAIL_OTP_LENGTH } from "@/lib/leads/otp-constants";
  *
  * `shouldCreateUser: false`: a conta master é criada uma única vez, de
  * forma controlada, ANTES de o login ser ativado (fora deste fluxo) — este
- * login nunca cria conta nenhuma sozinho. Se `master@modamariaflor.com.br`
- * ainda não existir no Supabase Auth, `signInWithOtp` simplesmente falha
- * (nenhum e-mail é enviado) — e essa falha é tratada exatamente como
- * qualquer outra abaixo, pra nunca revelar se a conta existe ou não.
+ * login nunca cria conta nenhuma sozinho. Se `MASTER_EMAIL` ainda não
+ * existir no Supabase Auth, `signInWithOtp` simplesmente falha (nenhum
+ * e-mail é enviado) — e essa falha é tratada exatamente como qualquer
+ * outra abaixo, pra nunca revelar se a conta existe ou não.
  */
 
 const RATE_LIMIT_KEY = "master-login-otp";
