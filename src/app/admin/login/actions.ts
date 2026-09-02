@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { MASTER_EMAIL } from "@/lib/auth/master";
 
 export interface LoginState {
   error?: string;
@@ -14,6 +15,15 @@ export async function login(_prevState: LoginState, formData: FormData): Promise
 
   if (!email || !password) {
     return { error: "Informe e-mail e senha." };
+  }
+
+  // A conta master nunca loga por senha — mesmo que uma senha exista de
+  // alguma forma nesse registro do Supabase Auth (ex: definida sem querer
+  // pelo painel do Supabase), este caminho recusa antes de sequer tentar
+  // autenticar. O único jeito de entrar como master é /admin/login/master
+  // (código por e-mail, sem senha nenhuma envolvida).
+  if (email.toLowerCase() === MASTER_EMAIL) {
+    return { error: "Esta conta usa login por código enviado por e-mail — acesse /admin/login/master." };
   }
 
   const supabase = await createClient();

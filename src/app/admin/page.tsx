@@ -16,6 +16,7 @@ const ROLE_LABEL: Record<string, string> = {
   admin: "Administradora",
   catalog_editor: "Editora de catálogo",
   seller: "Vendedora",
+  master: "Master",
 };
 
 const VALID_PERIODS: DashboardPeriod[] = ["today", "7d", "30d", "month"];
