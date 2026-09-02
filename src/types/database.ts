@@ -401,6 +401,23 @@ export interface Database {
           removed_image_paths: string[];
         };
       };
+      try_claim_otp_send: {
+        Args: {
+          p_key: string;
+          p_cooldown_seconds: number;
+          p_window_seconds: number;
+          p_max_per_window: number;
+        };
+        Returns: boolean;
+      };
+      try_claim_otp_verify_attempt: {
+        Args: {
+          p_key: string;
+          p_window_seconds: number;
+          p_max_attempts: number;
+        };
+        Returns: boolean;
+      };
     };
   };
 }

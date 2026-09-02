@@ -20,6 +20,7 @@ export function MasterLoginForm() {
   const [step, setStep] = useState<"start" | "code">("start");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [sendMessage, setSendMessage] = useState<string | null>(null);
 
   const [code, setCode] = useState("");
   const [verifying, setVerifying] = useState(false);
@@ -37,6 +38,7 @@ export function MasterLoginForm() {
       return;
     }
 
+    setSendMessage(result.message);
     setCode("");
     setStep("code");
     setResendCooldown(RESEND_COOLDOWN_SECONDS);
@@ -83,7 +85,7 @@ export function MasterLoginForm() {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-center text-sm text-text-muted">
-        Digite o código de {EMAIL_OTP_LENGTH} dígitos enviado para o e-mail master.
+        {sendMessage ?? `Digite o código de ${EMAIL_OTP_LENGTH} dígitos que enviamos.`}
       </p>
 
       <OtpInput
