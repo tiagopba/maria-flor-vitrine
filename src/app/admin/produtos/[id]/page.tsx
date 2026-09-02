@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SuccessToast } from "@/components/admin/SuccessToast";
+import { getCurrentAdmin } from "@/lib/auth/permissions";
 import { getActiveCategoriesPublic } from "@/lib/db/categories";
 import { listActiveColorsAdmin } from "@/lib/db/colors";
 import { getProductByIdAdmin, listGroupMemberIdsAdmin, type ProductDetail } from "@/lib/db/products";
 import { listActiveSizeOptionsAdmin, listSizeOptionsForVariantEdit } from "@/lib/db/sizes";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { ProductForm } from "../ProductForm";
+import { DangerZoneDelete } from "../DangerZoneDelete";
 import type { VariantBlockData } from "../VariantBlock";
 
 export const metadata: Metadata = { title: "Editar produto" };
@@ -35,7 +37,8 @@ export default async function EditProductPage({
 }: PageProps<"/admin/produtos/[id]">) {
   const { id } = await params;
 
-  const [product, categories, colors, paymentSettings, activeSizeOptions] = await Promise.all([
+  const [admin, product, categories, colors, paymentSettings, activeSizeOptions] = await Promise.all([
+    getCurrentAdmin(),
     getProductByIdAdmin(id),
     getActiveCategoriesPublic(),
     listActiveColorsAdmin(),
@@ -84,6 +87,10 @@ export default async function EditProductPage({
         }}
         variantDefaults={variantDefaults}
       />
+
+      {admin?.role === "master" && (
+        <DangerZoneDelete productId={product.id} productName={product.name} productCode={product.code} />
+      )}
     </div>
   );
 }

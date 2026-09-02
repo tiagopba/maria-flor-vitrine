@@ -17,7 +17,14 @@ export type ProductStatus =
   | "SOLD_OUT"
   | "ARCHIVED";
 
-export type UserRole = "admin" | "catalog_editor" | "seller";
+// "master" — acesso total ao Admin (tudo que "admin" já tem) e único papel
+// autorizado a excluir produto permanentemente (ver
+// deleteProductPermanentlyAction em app/admin/produtos/actions.ts).
+// Migration aditiva pro enum `user_role` do banco: ver
+// supabase/migrations/20260902100000_add_master_role.sql — preparada, não
+// aplicada; NINGUÉM tem esse papel de verdade até essa migration rodar E
+// uma conta específica ser promovida manualmente (nunca automático).
+export type UserRole = "admin" | "catalog_editor" | "seller" | "master";
 
 export type ProvadorStatus = "DRAFT" | "PUBLISHED";
 
@@ -393,6 +400,23 @@ export interface Database {
           variants: { id: string; code: string; slug: string }[];
           removed_image_paths: string[];
         };
+      };
+      try_claim_otp_send: {
+        Args: {
+          p_key: string;
+          p_cooldown_seconds: number;
+          p_window_seconds: number;
+          p_max_per_window: number;
+        };
+        Returns: boolean;
+      };
+      try_claim_otp_verify_attempt: {
+        Args: {
+          p_key: string;
+          p_window_seconds: number;
+          p_max_attempts: number;
+        };
+        Returns: boolean;
       };
     };
   };

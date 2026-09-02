@@ -6,13 +6,13 @@ import { moveSizeOption, renameSizeOption, setSizeOptionActive, SizeLabelInUseEr
 import { sizeOptionSchema } from "@/lib/validation/size";
 
 export async function toggleSizeOptionActiveAction(id: string, active: boolean) {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
   await setSizeOptionActive(id, active);
   revalidatePath("/admin/tamanhos");
 }
 
 export async function moveSizeOptionAction(id: string, direction: "up" | "down") {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
   await moveSizeOption(id, direction);
   revalidatePath("/admin/tamanhos");
 }
@@ -27,7 +27,7 @@ export async function renameSizeOptionAction(
   id: string,
   label: string
 ): Promise<{ size: SizeOption } | { error: string }> {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
 
   const parsed = sizeOptionSchema.safeParse({ label });
   if (!parsed.success) {

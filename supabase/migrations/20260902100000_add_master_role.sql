@@ -1,0 +1,33 @@
+-- ============================================================================
+-- PREPARADA, NÃO APLICADA — aguardando aprovação explícita do usuário
+-- (regra do projeto: qualquer migration passa por aprovação antes de
+-- rodar contra o banco compartilhado entre Preview e Production).
+--
+-- Adiciona o valor 'master' ao enum `user_role` (profiles.role). Puramente
+-- aditivo: nenhum valor existente é removido ou alterado, nenhuma linha de
+-- `profiles` é tocada — depois de aplicada, toda conta existente continua
+-- exatamente com a role que já tinha.
+--
+-- "master" é o novo teto de acesso: tudo que "admin" já podia fazer, mais
+-- a exclusão permanente de produto (ver
+-- deleteProductPermanentlyAction em src/app/admin/produtos/actions.ts).
+--
+-- Esta migration só cria o VALOR do enum. Nenhuma conta recebe a role
+-- master aqui — isso é deliberado: promover alguém a master é uma decisão
+-- de negócio que só o usuário pode tomar, identificando manualmente qual
+-- conta específica deve virar master, por exemplo:
+--
+--   update profiles set role = 'master' where id = '<uuid da conta>';
+--
+-- (rode isso separadamente, depois de aplicar esta migration, só quando
+-- tiver decidido quem deve ser master).
+--
+-- `ALTER TYPE ... ADD VALUE` precisa ser a única coisa nova sendo usada
+-- nesta transação (não dá pra criar o valor e já usá-lo em outro comando
+-- na mesma migration) — por isso a atualização das funções is_admin()/
+-- is_catalog_editor_or_admin() para reconhecer 'master' está num arquivo
+-- separado (20260902100100_master_role_rls_functions.sql), aplicado
+-- DEPOIS deste.
+-- ============================================================================
+
+alter type user_role add value if not exists 'master';

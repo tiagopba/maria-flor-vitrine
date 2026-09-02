@@ -2,8 +2,10 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { attachColorInfo } from "@/lib/db/colors";
 import { publicImageUrl } from "@/lib/images/url";
+import { deleteImage } from "@/lib/images/provider";
 import type { Database } from "@/types/database";
 
 export type Product = Database["public"]["Tables"]["products"]["Row"];
@@ -431,14 +433,118 @@ export async function listGroupMemberIdsAdmin(groupId: string): Promise<string[]
   return (data ?? []).map((row) => row.id);
 }
 
+/**
+ * CAUSA REAL do bug "Arquivar aparentemente não faz nada": este `.update()`
+ * nunca checava se alguma linha foi de fato afetada. Se a RLS bloqueasse a
+ * escrita (ou o id não existisse mais), o Postgres/PostgREST devolve
+ * `error: null` e `data` vazio — sucesso "silencioso" que não muda nada no
+ * banco, sem nenhum jeito de a chamadora perceber. Agora exige `.select()`
+ * de volta e lança um erro real se nenhuma linha voltou, pra qualquer falha
+ * futura (permissão, id inválido) virar um erro visível na tela em vez de
+ * um clique que parece não fazer nada.
+ */
 export async function setProductStatus(id: string, status: Product["status"]): Promise<void> {
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("products")
     .update({ status, archived_at: status === "ARCHIVED" ? new Date().toISOString() : null })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
+  if (!data) {
+    throw new Error("Não foi possível atualizar o status do produto — atualize a página e tente novamente.");
+  }
+}
+
+export interface ProductDeletionCheck {
+  canDelete: boolean;
+  reason: string | null;
+}
+
+/**
+ * Exclusão física real de produto: item 4 da correção de arquivamento.
+ * Nunca chamada diretamente por uma role comum — só depois de
+ * `admin.role === "MASTER"` (papel que ainda não existe na arquitetura,
+ * ver actions.ts) E desta checagem. Usa o client admin (service role)
+ * porque `shared_selections` não tem nenhuma policy de leitura pra sessão
+ * autenticada (só service_role) — as outras tabelas checadas aqui até
+ * teriam policy pra admin/catalog_editor, mas um client só simplifica.
+ *
+ * "Seleções" (favoritos) em si não têm tabela própria — vivem só no
+ * localStorage do navegador da cliente; o rastro server-side desse produto
+ * ter sido favoritado é o próprio FAVORITE_ADDED em analytics_events, já
+ * coberto pela checagem abaixo.
+ */
+export async function canDeleteProductPermanently(id: string): Promise<ProductDeletionCheck> {
+  const supabase = createAdminClient();
+
+  const { data: product } = await supabase
+    .from("products")
+    .select("id, product_group_id")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!product) return { canDelete: false, reason: "Produto não encontrado." };
+
+  // Item 6: nunca decidir sozinho o que fazer com o grupo/siblings de uma
+  // variante — bloqueia e deixa a admin desfazer o agrupamento pela edição
+  // normal do produto antes de excluir.
+  if (product.product_group_id) {
+    return {
+      canDelete: false,
+      reason:
+        "Esta peça faz parte de um grupo de cores. Remova-a do grupo (editar produto → remover esta cor) antes de excluir permanentemente.",
+    };
+  }
+
+  const BLOCK_REASON = "Este produto possui histórico e não pode ser excluído. Arquive-o para preservar os dados.";
+
+  const [analytics, leadInterests, sharedSelections, looks, collections, redirects] = await Promise.all([
+    supabase.from("analytics_events").select("id", { count: "exact", head: true }).eq("product_id", id),
+    supabase.from("lead_interests").select("id", { count: "exact", head: true }).eq("product_id", id),
+    supabase.from("shared_selections").select("token", { count: "exact", head: true }).contains("items", [{ product_id: id }]),
+    supabase.from("provador_look_products").select("id", { count: "exact", head: true }).eq("product_id", id),
+    supabase.from("collection_products").select("id", { count: "exact", head: true }).eq("product_id", id),
+    supabase.from("product_slug_redirects").select("id", { count: "exact", head: true }).eq("product_id", id),
+  ]);
+
+  const hasHistory = [analytics, leadInterests, sharedSelections, looks, collections, redirects].some(
+    (result) => (result.count ?? 0) > 0
+  );
+
+  if (hasHistory) return { canDelete: false, reason: BLOCK_REASON };
+
+  return { canDelete: true, reason: null };
+}
+
+/**
+ * Só chamar depois de `canDeleteProductPermanently` confirmar `canDelete:
+ * true` na MESMA requisição (a Server Action em actions.ts refaz a
+ * checagem logo antes de chamar isto, nunca confia em um resultado
+ * calculado antes). `product_images`/`product_sizes` têm `on delete
+ * cascade` — a própria constraint do banco já limpa essas linhas; só os
+ * arquivos no Storage (que a constraint não alcança) precisam ser
+ * apagados manualmente aqui.
+ */
+export async function deleteProductPermanently(id: string): Promise<void> {
+  const supabase = createAdminClient();
+
+  const { data: images } = await supabase.from("product_images").select("storage_path").eq("product_id", id);
+
+  const { error } = await supabase.from("products").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+
+  for (const img of images ?? []) {
+    try {
+      await deleteImage(PRODUCTS_BUCKET, img.storage_path);
+    } catch (err) {
+      // Produto já foi excluído com sucesso — um arquivo órfão no Storage
+      // é um problema muito menor do que travar a exclusão por causa dele.
+      console.error(`[deleteProductPermanently] falha ao remover imagem do Storage (${img.storage_path}):`, err);
+    }
+  }
 }
 
 export interface ProductSearchResult {

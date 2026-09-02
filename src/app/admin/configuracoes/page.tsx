@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Configurações do Site" };
 export default async function ConfiguracoesPage() {
   // Só ADMIN acessa a tela — catalog_editor é redirecionada, mesmo padrão
   // de allowedRoles já usado nas outras telas do painel.
-  await requireAdmin(["admin"]);
+  await requireAdmin(["admin", "master"]);
 
   const [info, paymentSettings] = await Promise.all([getInstitutionalInfo(), getPaymentSettings()]);
 

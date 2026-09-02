@@ -6,7 +6,7 @@ import { updateColor, setColorActive, type Color } from "@/lib/db/colors";
 import { colorSchema } from "@/lib/validation/color";
 
 export async function toggleColorActiveAction(id: string, active: boolean) {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
   await setColorActive(id, active);
   revalidatePath("/admin/cores");
 }
@@ -16,7 +16,7 @@ export async function updateColorAction(
   name: string,
   hexColor: string | null
 ): Promise<{ color: Color } | { error: string }> {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
 
   const parsed = colorSchema.safeParse({ name, hex_color: hexColor ?? undefined });
   if (!parsed.success) {

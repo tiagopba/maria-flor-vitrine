@@ -30,7 +30,7 @@ export async function updateSiteSettingsAction(
   // Só ADMIN — não ["admin", "catalog_editor"] como o resto do painel.
   // Configurações institucionais (endereço, textos públicos, WhatsApp da
   // loja) ficam de fora do escopo de catalog_editor de propósito.
-  await requireAdmin(["admin"]);
+  await requireAdmin(["admin", "master"]);
 
   const parsed = siteSettingsSchema.safeParse({
     city: formData.get("city"),
@@ -98,7 +98,7 @@ export async function updatePaymentSettingsAction(
   _prevState: PaymentSettingsFormState,
   formData: FormData,
 ): Promise<PaymentSettingsFormState> {
-  await requireAdmin(["admin"]);
+  await requireAdmin(["admin", "master"]);
 
   const parsed = paymentSettingsSchema.safeParse({
     defaultMaxInstallments: formData.get("defaultMaxInstallments"),

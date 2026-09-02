@@ -8,7 +8,7 @@ import { listCategoriesAdmin } from "@/lib/db/categories";
 import { listProductsAdmin, type ListProductsAdminFilters } from "@/lib/db/products";
 import { PRODUCT_STATUS_LABELS } from "@/lib/catalog/status";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
-import { toggleArchiveProductAction } from "./actions";
+import { ArchiveToggleButton } from "./ArchiveToggleButton";
 
 export const metadata: Metadata = { title: "Produtos" };
 
@@ -137,14 +137,11 @@ export default async function ProductsPage({
                 >
                   Duplicar
                 </Link>
-                <form action={toggleArchiveProductAction.bind(null, product.id, product.status !== "ARCHIVED")}>
-                  <button
-                    type="submit"
-                    className="rounded-full border border-border px-3 py-1.5 text-sm font-medium text-text-muted hover:bg-muted"
-                  >
-                    {product.status === "ARCHIVED" ? "Reativar" : "Arquivar"}
-                  </button>
-                </form>
+                <ArchiveToggleButton
+                  productId={product.id}
+                  productName={product.name}
+                  isArchived={product.status === "ARCHIVED"}
+                />
               </div>
             </li>
           ))}
