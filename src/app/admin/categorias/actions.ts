@@ -57,7 +57,7 @@ export async function createCategoryAction(
   _prevState: CategoryFormState,
   formData: FormData
 ): Promise<CategoryFormState> {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
 
   const parsed = parseCategoryFormData(formData);
   if (!parsed.success) {
@@ -79,7 +79,7 @@ export async function updateCategoryAction(
   _prevState: CategoryFormState,
   formData: FormData
 ): Promise<CategoryFormState> {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
 
   const parsed = parseCategoryFormData(formData);
   if (!parsed.success) {
@@ -104,7 +104,7 @@ export async function updateCategoryAction(
 }
 
 export async function toggleCategoryActiveAction(id: string, active: boolean) {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
   await setCategoryActive(id, active);
 
   const category = await getCategoryByIdAdmin(id);
@@ -113,7 +113,7 @@ export async function toggleCategoryActiveAction(id: string, active: boolean) {
 }
 
 export async function moveCategoryAction(id: string, direction: "up" | "down") {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
   await moveCategory(id, direction);
   revalidatePath("/admin/categorias");
 }
@@ -128,7 +128,7 @@ export async function moveCategoryAction(id: string, direction: "up" | "down") {
 export async function createCategoryQuickAction(
   formData: FormData
 ): Promise<{ category: Category } | { error: string; fieldErrors?: Record<string, string> }> {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
 
   const parsed = parseCategoryFormData(formData);
   if (!parsed.success) {

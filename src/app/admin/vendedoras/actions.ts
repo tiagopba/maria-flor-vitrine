@@ -34,7 +34,7 @@ export async function createSellerAction(
   _prevState: SellerFormState,
   formData: FormData
 ): Promise<SellerFormState> {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
 
   const parsed = parseSellerFormData(formData);
   if (!parsed.success) return { fieldErrors: fieldErrorsFrom(parsed) };
@@ -54,7 +54,7 @@ export async function updateSellerAction(
   _prevState: SellerFormState,
   formData: FormData
 ): Promise<SellerFormState> {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
 
   const parsed = parseSellerFormData(formData);
   if (!parsed.success) return { fieldErrors: fieldErrorsFrom(parsed) };
@@ -70,13 +70,13 @@ export async function updateSellerAction(
 }
 
 export async function toggleSellerActiveAction(id: string, active: boolean) {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
   await setSellerActive(id, active);
   revalidatePath("/admin/vendedoras");
 }
 
 export async function moveSellerAction(id: string, direction: "up" | "down") {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
   await moveSeller(id, direction);
   revalidatePath("/admin/vendedoras");
 }

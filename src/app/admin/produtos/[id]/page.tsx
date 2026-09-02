@@ -11,12 +11,6 @@ import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { ProductForm } from "../ProductForm";
 import { DangerZoneDelete } from "../DangerZoneDelete";
 import type { VariantBlockData } from "../VariantBlock";
-import type { UserRole } from "@/types/database";
-
-// Ver actions.ts: "MASTER" ainda não existe na arquitetura de papéis —
-// nenhuma conta pode ter esse valor hoje, então a comparação abaixo nunca
-// é verdadeira e a Zona de Perigo nunca renderiza pra ninguém ainda.
-const MASTER_ROLE = "MASTER" as UserRole;
 
 export const metadata: Metadata = { title: "Editar produto" };
 
@@ -94,7 +88,7 @@ export default async function EditProductPage({
         variantDefaults={variantDefaults}
       />
 
-      {admin?.role === MASTER_ROLE && (
+      {admin?.role === "master" && (
         <DangerZoneDelete productId={product.id} productName={product.name} productCode={product.code} />
       )}
     </div>

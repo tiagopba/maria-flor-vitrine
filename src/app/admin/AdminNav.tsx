@@ -55,7 +55,7 @@ export function AdminNav({ role }: { role: UserRole }) {
         const isActive =
           item.href === "/admin" ? pathname === item.href : pathname.startsWith(item.href);
 
-        const locked = item.adminOnly && role !== "admin";
+        const locked = item.adminOnly && role !== "admin" && role !== "master";
         const Icon = item.icon;
 
         if (!item.available || locked) {

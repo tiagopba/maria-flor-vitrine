@@ -5,13 +5,13 @@ import { useRouter } from "next/navigation";
 import { deleteProductPermanentlyAction } from "./actions";
 
 /**
- * Exclusão permanente — item 3/5 da correção. Este componente só é
- * renderizado pela página quando `admin.role === "MASTER"` (ver
- * [id]/page.tsx), papel que ainda não existe na arquitetura — na prática
- * ninguém vê isto hoje. A Server Action refaz a checagem de role e de
- * histórico de qualquer forma (nunca confia só no fato deste componente
- * ter sido renderizado), então mesmo se essa condição um dia ficar
- * inconsistente por engano, a ação continua bloqueada no servidor.
+ * Exclusão permanente. Este componente só é renderizado pela página quando
+ * `admin.role === "master"` (ver [id]/page.tsx). A role existe no tipo
+ * `UserRole` e (depois da migration aditiva ser aplicada) no enum do
+ * banco, mas nenhuma conta é promovida a ela automaticamente — só aparece
+ * pra quem for manualmente designado master no banco. A Server Action
+ * refaz a checagem de role e de histórico de qualquer forma (nunca confia
+ * só no fato deste componente ter sido renderizado).
  */
 export function DangerZoneDelete({
   productId,

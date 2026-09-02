@@ -18,17 +18,6 @@ import { deleteImage } from "@/lib/images/provider";
 import { colorSchema } from "@/lib/validation/color";
 import { sizeOptionSchema } from "@/lib/validation/size";
 import { saveProductVariantsPayloadSchema } from "@/lib/validation/product-variants";
-import type { UserRole } from "@/types/database";
-
-/**
- * A role `MASTER` ainda não existe na arquitetura (`UserRole` só tem
- * "admin" | "catalog_editor" | "seller" — nenhuma migration cria nem
- * atribui "MASTER" a ninguém). Este cast é só pra comparar contra ela sem
- * quebrar o TypeScript; na prática `admin.role` nunca vai ser igual a isto
- * hoje, então `deleteProductPermanentlyAction` fica permanentemente
- * bloqueada até essa role existir de verdade e alguém ser promovido a ela.
- */
-const MASTER_ROLE = "MASTER" as UserRole;
 
 export type SaveProductVariantsActionResult =
   | { ok: true; productId: string }
@@ -81,7 +70,7 @@ function friendlySaveError(err: SaveProductWithVariantsError): { error: string }
  * tradicional, porque a estrutura é aninhada demais para FormData.
  */
 export async function saveProductWithVariantsAction(rawPayload: unknown): Promise<SaveProductVariantsActionResult> {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
 
   const parsed = saveProductVariantsPayloadSchema.safeParse(rawPayload);
   if (!parsed.success) {
@@ -119,7 +108,7 @@ export async function createColorQuickAction(
   name: string,
   hexColor: string | null
 ): Promise<{ color: Color } | { error: string }> {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
 
   const parsed = colorSchema.safeParse({ name, hex_color: hexColor ?? undefined });
   if (!parsed.success) {
@@ -142,7 +131,7 @@ export async function createColorQuickAction(
  * /admin/tamanhos), entra ativo e disponível pra qualquer produto futuro.
  */
 export async function createSizeQuickAction(label: string): Promise<{ size: SizeOption } | { error: string }> {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
 
   const parsed = sizeOptionSchema.safeParse({ label });
   if (!parsed.success) {
@@ -163,7 +152,7 @@ export async function searchProductsForRelateAction(
   query: string,
   excludeProductId: string
 ): Promise<ProductSearchResult[]> {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
   return searchProductsForRelate(query, excludeProductId);
 }
 
@@ -180,7 +169,7 @@ export async function relateProductToGroupAction(
   currentProductId: string,
   targetProductId: string
 ): Promise<{ ok: true } | { error: string }> {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
 
   try {
     await relateProductToGroup(currentProductId, targetProductId);
@@ -202,7 +191,7 @@ export async function relateProductToGroupAction(
  * pela reconciliação da RPC no próximo salvamento.
  */
 export async function discardUnusedUploadAction(storagePath: string): Promise<void> {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
   try {
     await deleteImage("products", storagePath);
   } catch (err) {
@@ -222,7 +211,7 @@ export type ToggleArchiveResult = { ok: true } | { error: string };
  * de desaparecer silenciosamente.
  */
 export async function toggleArchiveProductAction(id: string, archive: boolean): Promise<ToggleArchiveResult> {
-  await requireAdmin(["admin", "catalog_editor"]);
+  await requireAdmin(["admin", "catalog_editor", "master"]);
 
   const existing = await getProductByIdAdmin(id);
   if (!existing) return { error: "Produto não encontrado — atualize a página e tente novamente." };
@@ -243,22 +232,24 @@ export async function toggleArchiveProductAction(id: string, archive: boolean): 
 export type DeleteProductPermanentlyResult = { ok: true } | { error: string };
 
 /**
- * Exclusão física — item 3/4/5 da correção. Dupla trava: `requireAdmin`
- * garante sessão válida de staff primeiro; a checagem de `MASTER` logo
- * depois é o que efetivamente desliga esta ação pra qualquer papel real
- * hoje (ver MASTER_ROLE acima). Confirmação por texto ("EXCLUIR") e a
- * checagem de histórico (`canDeleteProductPermanently`) são refeitas aqui
- * no servidor — nunca confia em nada calculado no client.
+ * Exclusão física — item 3/4/5 da correção original + role `master` (ver
+ * migration 20260902100000_add_master_role.sql). Dupla trava:
+ * `requireAdmin` garante sessão válida de staff primeiro; a checagem de
+ * `role === "master"` logo depois é o que realmente restringe a ação só a
+ * quem tiver esse papel — nenhuma outra role passa, mesmo admin.
+ * Confirmação por texto ("EXCLUIR") e a checagem de histórico
+ * (`canDeleteProductPermanently`) são refeitas aqui no servidor — nunca
+ * confia em nada calculado no client.
  */
 export async function deleteProductPermanentlyAction(
   id: string,
   confirmationText: string
 ): Promise<DeleteProductPermanentlyResult> {
-  const admin = await requireAdmin(["admin", "catalog_editor"]);
+  const admin = await requireAdmin(["admin", "catalog_editor", "master"]);
 
-  if (admin.role !== MASTER_ROLE) {
+  if (admin.role !== "master") {
     return {
-      error: "Exclusão permanente disponível só para o papel MASTER, que ainda não existe nesta versão do sistema.",
+      error: "Exclusão permanente disponível só para o papel master.",
     };
   }
 
