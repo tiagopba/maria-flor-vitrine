@@ -58,13 +58,16 @@ export async function startMasterOtpAction(): Promise<StartMasterOtpResult> {
     p_max_per_window: SEND_MAX_PER_WINDOW,
   });
 
+  // Fail-closed: se a checagem de rate limit não puder ser feita de
+  // verdade (migration ainda não aplicada, erro de infraestrutura), o
+  // login master trata isso como bloqueio — nunca envia o código sem
+  // saber se o limite foi respeitado. Diferente do fluxo público de leads
+  // (email-otp.ts), que continua fail-open de propósito lá.
   if (claimError) {
-    // Migration de rate limit ainda não aplicada, ou outra falha de
-    // infraestrutura — nunca deixa isso derrubar o login com um erro
-    // técnico; só loga pra investigação e segue sem o rate limit extra
-    // (o próprio Supabase Auth ainda aplica o limite dele por baixo).
-    console.error("[startMasterOtpAction] falha ao checar rate limit:", claimError.message);
-  } else if (!claimed) {
+    console.error("[startMasterOtpAction] falha ao checar rate limit — bloqueando por segurança:", claimError.message);
+    return { error: GENERIC_THROTTLE_MESSAGE };
+  }
+  if (!claimed) {
     return { error: GENERIC_THROTTLE_MESSAGE };
   }
 
@@ -108,9 +111,13 @@ export async function verifyMasterOtpAction(code: string): Promise<VerifyMasterO
     p_max_attempts: VERIFY_MAX_ATTEMPTS,
   });
 
+  // Fail-closed: mesmo motivo de startMasterOtpAction acima — sem
+  // confirmar o rate limit de verdade, nunca chama verifyOtp.
   if (claimError) {
-    console.error("[verifyMasterOtpAction] falha ao checar rate limit:", claimError.message);
-  } else if (!claimed) {
+    console.error("[verifyMasterOtpAction] falha ao checar rate limit — bloqueando por segurança:", claimError.message);
+    return { error: GENERIC_THROTTLE_MESSAGE };
+  }
+  if (!claimed) {
     return { error: GENERIC_THROTTLE_MESSAGE };
   }
 
