@@ -2,7 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/permissions";
-import { getProductByIdAdmin, searchProductsForRelate, setProductStatus, type ProductSearchResult } from "@/lib/db/products";
+import {
+  canDeleteProductPermanently,
+  deleteProductPermanently,
+  getProductByIdAdmin,
+  searchProductsForRelate,
+  setProductStatus,
+  type ProductSearchResult,
+} from "@/lib/db/products";
 import { createColor, type Color } from "@/lib/db/colors";
 import { createSizeOption, type SizeOption } from "@/lib/db/sizes";
 import { relateProductToGroup } from "@/lib/db/product-groups";
@@ -11,6 +18,17 @@ import { deleteImage } from "@/lib/images/provider";
 import { colorSchema } from "@/lib/validation/color";
 import { sizeOptionSchema } from "@/lib/validation/size";
 import { saveProductVariantsPayloadSchema } from "@/lib/validation/product-variants";
+import type { UserRole } from "@/types/database";
+
+/**
+ * A role `MASTER` ainda não existe na arquitetura (`UserRole` só tem
+ * "admin" | "catalog_editor" | "seller" — nenhuma migration cria nem
+ * atribui "MASTER" a ninguém). Este cast é só pra comparar contra ela sem
+ * quebrar o TypeScript; na prática `admin.role` nunca vai ser igual a isto
+ * hoje, então `deleteProductPermanentlyAction` fica permanentemente
+ * bloqueada até essa role existir de verdade e alguém ser promovido a ela.
+ */
+const MASTER_ROLE = "MASTER" as UserRole;
 
 export type SaveProductVariantsActionResult =
   | { ok: true; productId: string }
@@ -192,15 +210,78 @@ export async function discardUnusedUploadAction(storagePath: string): Promise<vo
   }
 }
 
-export async function toggleArchiveProductAction(id: string, archive: boolean) {
+export type ToggleArchiveResult = { ok: true } | { error: string };
+
+/**
+ * Arquivar/restaurar — separado de save_product_with_variants de propósito
+ * (arquitetura já aprovada, preservada aqui). Agora devolve um resultado de
+ * verdade (`error`) em vez de void: ver o comentário em
+ * `setProductStatus` (lib/db/products.ts) sobre a causa real do bug de
+ * "clicar em Arquivar não faz nada" — qualquer falha (permissão, produto
+ * removido enquanto a lista estava aberta) agora chega até o botão em vez
+ * de desaparecer silenciosamente.
+ */
+export async function toggleArchiveProductAction(id: string, archive: boolean): Promise<ToggleArchiveResult> {
   await requireAdmin(["admin", "catalog_editor"]);
 
   const existing = await getProductByIdAdmin(id);
-  if (!existing) return;
+  if (!existing) return { error: "Produto não encontrado — atualize a página e tente novamente." };
 
-  await setProductStatus(id, archive ? "ARCHIVED" : "ACTIVE");
+  try {
+    await setProductStatus(id, archive ? "ARCHIVED" : "ACTIVE");
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Não foi possível atualizar o status do produto." };
+  }
 
   revalidatePath("/admin/produtos");
   revalidatePath("/novidades");
+  revalidatePath("/categoria");
   revalidatePath(`/produto/${existing.slug}`);
+  return { ok: true };
+}
+
+export type DeleteProductPermanentlyResult = { ok: true } | { error: string };
+
+/**
+ * Exclusão física — item 3/4/5 da correção. Dupla trava: `requireAdmin`
+ * garante sessão válida de staff primeiro; a checagem de `MASTER` logo
+ * depois é o que efetivamente desliga esta ação pra qualquer papel real
+ * hoje (ver MASTER_ROLE acima). Confirmação por texto ("EXCLUIR") e a
+ * checagem de histórico (`canDeleteProductPermanently`) são refeitas aqui
+ * no servidor — nunca confia em nada calculado no client.
+ */
+export async function deleteProductPermanentlyAction(
+  id: string,
+  confirmationText: string
+): Promise<DeleteProductPermanentlyResult> {
+  const admin = await requireAdmin(["admin", "catalog_editor"]);
+
+  if (admin.role !== MASTER_ROLE) {
+    return {
+      error: "Exclusão permanente disponível só para o papel MASTER, que ainda não existe nesta versão do sistema.",
+    };
+  }
+
+  if (confirmationText.trim().toUpperCase() !== "EXCLUIR") {
+    return { error: 'Digite "EXCLUIR" para confirmar.' };
+  }
+
+  const existing = await getProductByIdAdmin(id);
+  if (!existing) return { error: "Produto não encontrado — atualize a página." };
+
+  const check = await canDeleteProductPermanently(id);
+  if (!check.canDelete) {
+    return { error: check.reason ?? "Não é possível excluir este produto." };
+  }
+
+  try {
+    await deleteProductPermanently(id);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Não foi possível excluir o produto." };
+  }
+
+  revalidatePath("/admin/produtos");
+  revalidatePath("/novidades");
+  revalidatePath("/categoria");
+  return { ok: true };
 }
