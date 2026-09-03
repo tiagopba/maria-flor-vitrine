@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 
 const PLACEHOLDER_SUGGESTIONS = [
-  "Buscar por vestido tamanho M",
-  "Buscar por peças até R$ 99",
-  "Buscar por look tamanho 38",
-  "Buscar por blusas até R$ 149",
-  "Buscar por Look Eliara",
+  "Buscar por vestido, calça ou blusa...",
+  "Buscar por tamanho M...",
+  "Buscar por tamanho 38...",
+  "Buscar por até R$ 99...",
+  "Buscar por jeans...",
+  "Buscar por novidades...",
 ];
 
 /**
