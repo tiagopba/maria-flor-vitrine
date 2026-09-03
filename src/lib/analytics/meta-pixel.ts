@@ -31,3 +31,19 @@ export function trackPixelEvent(eventName: string, params?: Record<string, unkno
     // Nunca deixa uma falha do Pixel afetar o fluxo real.
   }
 }
+
+/**
+ * Dispara um evento *custom* do Meta Pixel (`fbq('trackCustom', ...)`) —
+ * diferente de `trackPixelEvent`, que é só pros eventos padrão do catálogo
+ * do Meta (ViewContent, Lead, Contact, etc.). Eventos com nome que o Meta
+ * não reconhece como padrão (ex.: "ViewCategory") precisam ir por
+ * `trackCustom`, senão o Events Manager não os classifica corretamente.
+ * Mesmo comportamento fire-and-forget/silencioso do `trackPixelEvent`.
+ */
+export function trackPixelCustomEvent(eventName: string, params?: Record<string, unknown>): void {
+  try {
+    window.fbq?.("trackCustom", eventName, params);
+  } catch {
+    // Nunca deixa uma falha do Pixel afetar o fluxo real.
+  }
+}

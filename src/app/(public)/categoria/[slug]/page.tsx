@@ -104,7 +104,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps<"
       )}
 
       <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-        <CategoryViewTracker categoryId={category.id} />
+        <CategoryViewTracker categoryId={category.id} categoryName={category.name} categorySlug={category.slug} />
         <h1 className="mb-6 font-display text-2xl text-text sm:text-3xl">{category.name}</h1>
 
         <div className="mb-6">
