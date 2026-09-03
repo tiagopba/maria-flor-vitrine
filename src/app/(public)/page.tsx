@@ -53,28 +53,37 @@ export default async function Home() {
       {/* Hero — H1 real é "Moda Feminina em Paranaíba MS" (item 1 do SEO
           local), mas visualmente quase idêntico ao anterior: só ganha uma
           linha pequena em cima da mesma frase de sempre, sem texto
-          escondido nem mudança de estilo do hero. */}
-      <section className="px-4 py-10 text-center sm:py-14">
-        <h1 className="mx-auto max-w-md font-display text-text">
+          escondido nem mudança de estilo do hero. Padding vertical
+          reduzido de propósito (era py-10/py-14) — a primeira tela do
+          celular deve chegar mais rápido em busca/categorias/produtos. */}
+      <section className="px-4 py-6 text-center sm:py-8">
+        <h1 className="mx-auto max-w-sm font-display text-text">
           <span className="block text-xs font-semibold uppercase tracking-wide text-primary sm:text-sm">
             Moda Feminina em Paranaíba MS
           </span>
-          <span className="mt-2 block text-xl sm:text-3xl">
+          <span className="mt-2 block text-2xl leading-snug sm:text-4xl">
             Tudo o que você viu nos nossos Stories, agora em um só lugar.
           </span>
         </h1>
       </section>
 
       {/* Busca */}
-      <section className="border-y border-border bg-muted/50 px-4 py-8 sm:px-6">
+      <section className="border-y border-border bg-muted/50 px-4 py-6 sm:px-6 sm:py-8">
         <h2 className="mb-4 text-center font-display text-lg text-text sm:text-xl">
           Viu no Instagram? Encontre aqui.
         </h2>
         <HomeSearch />
       </section>
 
+      {/* Explore por categoria */}
+      <section className="px-4 py-6 sm:px-6 sm:py-8">
+        <h2 className="mb-1 font-display text-lg text-text sm:text-xl">Explore por categoria</h2>
+        <p className="mb-4 text-sm text-text-muted">Encontre o que combina com você</p>
+        <CategoryCarousel items={exploreCategories} variant="grid" />
+      </section>
+
       {/* Acabaram de chegar */}
-      <section className="px-4 py-8 sm:px-6">
+      <section className="px-4 py-6 sm:px-6 sm:py-8">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-display text-lg text-text sm:text-xl">Acabaram de chegar</h2>
           <Link href="/novidades" className="text-sm font-medium text-primary">
@@ -89,13 +98,6 @@ export default async function Home() {
         ) : (
           <ProductGrid products={novidades} paymentSettings={paymentSettings} />
         )}
-      </section>
-
-      {/* Explore por categoria */}
-      <section className="px-4 py-8 sm:px-6">
-        <h2 className="mb-1 font-display text-lg text-text sm:text-xl">Explore por categoria</h2>
-        <p className="mb-4 text-sm text-text-muted">Encontre o que combina com você</p>
-        <CategoryCarousel items={exploreCategories} />
       </section>
 
       {/* Chamadas institucionais — discretas, sem popup nem virar página de banners */}

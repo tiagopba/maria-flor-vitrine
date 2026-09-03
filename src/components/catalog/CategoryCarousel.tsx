@@ -23,8 +23,22 @@ export type CategoryCarouselItem = ExploreCategoryItem;
  * A chave é resolvida pro componente de verdade aqui dentro, via
  * CATEGORY_ICON_REGISTRY (lib/catalog/category-icons.ts) — único lugar
  * que conhece a lista de ícones disponíveis.
+ *
+ * `variant="grid"` é só usado na Home (logo abaixo da busca): em vez do
+ * carrossel de uma linha só com scroll/setas, os chips formam uma grade
+ * responsiva (2 colunas no mobile comum, 3 em telas mobile maiores, mais
+ * no desktop) — sem scroll horizontal, sem os botões de seta, mostrando
+ * várias categorias de imediato. As outras páginas que reaproveitam este
+ * componente (produto, categoria, busca, novidades, favoritos) continuam
+ * com `variant="scroll"` (padrão), comportamento inalterado.
  */
-export function CategoryCarousel({ items }: { items: CategoryCarouselItem[] }) {
+export function CategoryCarousel({
+  items,
+  variant = "scroll",
+}: {
+  items: CategoryCarouselItem[];
+  variant?: "scroll" | "grid";
+}) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -59,6 +73,26 @@ export function CategoryCarousel({ items }: { items: CategoryCarouselItem[] }) {
   }
 
   if (items.length === 0) return null;
+
+  if (variant === "grid") {
+    return (
+      <div className="grid grid-cols-2 gap-2.5 min-[430px]:grid-cols-3 sm:grid-cols-4 lg:grid-cols-5">
+        {items.map((item) => {
+          const Icon = CATEGORY_ICON_REGISTRY[item.icon].Icon;
+          return (
+            <Link
+              key={item.key}
+              href={item.href}
+              className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-accent/40 bg-accent/10 px-3 py-2.5 text-center text-sm font-medium text-primary transition-colors hover:bg-accent/20 hover:border-accent/60"
+            >
+              <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+              {item.name}
+            </Link>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-w-0">
