@@ -18,10 +18,18 @@ import { trackPixelEvent } from "@/lib/analytics/meta-pixel";
  */
 export function FavoriteButton({
   productId,
+  productCode,
   className,
   size = "md",
 }: {
   productId: string;
+  /**
+   * Só para o Meta Pixel (`content_ids`) — nunca usado pro
+   * armazenamento/toggle de favoritos em si, que continua inteiramente
+   * baseado em `productId` (mesma chave já usada em Minha Seleção,
+   * localStorage e analytics interno).
+   */
+  productCode: string;
   className?: string;
   size?: "sm" | "md";
 }) {
@@ -35,7 +43,7 @@ export function FavoriteButton({
     const nowFavorited = toggleFavorite(productId);
 
     if (nowFavorited) {
-      trackPixelEvent("AddToWishlist", { content_ids: [productId], content_type: "product" });
+      trackPixelEvent("AddToWishlist", { content_ids: [productCode], content_type: "product" });
     }
 
     startTransition(() => {
