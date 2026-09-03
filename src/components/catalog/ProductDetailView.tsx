@@ -340,7 +340,11 @@ export function ProductDetailView({
 
         <div className="flex items-start justify-between gap-3">
           <h1 className="font-display text-2xl text-text sm:text-3xl">{active.name}</h1>
-          <FavoriteButton productId={active.id} className="shrink-0 bg-muted hover:bg-border" />
+          <FavoriteButton
+            productId={active.id}
+            productCode={active.code}
+            className="shrink-0 bg-muted hover:bg-border"
+          />
         </div>
 
         <div className="flex items-start gap-2">
@@ -411,6 +415,7 @@ export function ProductDetailView({
           <ProductWhatsAppFlow
             key={active.id}
             productId={active.id}
+            productCode={active.code}
             status={active.status}
             sizes={active.sizes}
             sellers={sellers}

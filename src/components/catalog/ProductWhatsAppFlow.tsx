@@ -29,11 +29,18 @@ import type { ProductStatus } from "@/types/database";
  */
 export function ProductWhatsAppFlow({
   productId,
+  productCode,
   status,
   sizes,
   sellers,
 }: {
   productId: string;
+  /**
+   * Só para o Meta Pixel (`content_ids`) — o restante do fluxo (Favoritos/
+   * Seleção, localStorage, analytics interno) continua inteiramente
+   * baseado em `productId`.
+   */
+  productCode: string;
   status: ProductStatus;
   sizes: string[];
   sellers: { id: string; name: string }[];
@@ -121,7 +128,7 @@ export function ProductWhatsAppFlow({
       metadata: { size },
     }).catch(() => {});
 
-    trackPixelEvent("AddToWishlist", { content_ids: [productId], content_type: "product" });
+    trackPixelEvent("AddToWishlist", { content_ids: [productCode], content_type: "product" });
 
     setSizeSheetOpen(false);
     setAddedSheetOpen(true);

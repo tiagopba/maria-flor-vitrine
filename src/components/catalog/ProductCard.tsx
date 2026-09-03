@@ -41,7 +41,12 @@ export function ProductCard({
           </div>
         )}
 
-        <FavoriteButton productId={product.id} size="sm" className="absolute right-2 top-2" />
+        <FavoriteButton
+          productId={product.id}
+          productCode={product.code}
+          size="sm"
+          className="absolute right-2 top-2"
+        />
 
         {badge && (
           <Badge tone="warning" className="absolute bottom-2 left-2">
