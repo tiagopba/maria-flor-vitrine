@@ -98,11 +98,13 @@ export interface DashboardData {
     pageViews: MetricComparison;
     /** Sessões únicas (COUNT DISTINCT session_id) que tiveram PAGE_VIEW —
      * mesma base de "visita" usada no funil. Deliberadamente rotulada
-     * "Sessões únicas", nunca "visitantes únicos": `session_id` é um id
-     * persistido no localStorage do navegador (ver
-     * lib/session/visitor-id.ts), não uma sessão clássica com expiração —
-     * então em janelas longas (30 dias/mês) conta navegadores distintos
-     * ativos no período, não "visitas" no sentido de sessão curta. */
+     * "Sessões únicas", nunca "visitantes únicos": `session_id` expira
+     * depois de ~30min de inatividade (ver lib/session/visitor-id.ts),
+     * então uma sessão aqui já é uma sessão real, não um navegador
+     * distinto genérico. Eventos gravados antes dessa mudança foram
+     * produzidos sob a semântica antiga (session_id sem expiração) — a
+     * contagem em períodos que misturam dado antigo e novo reflete essa
+     * diferença, não é reescrita. */
     uniqueSessions: MetricComparison;
     productViews: MetricComparison;
     favoritesAdded: MetricComparison;
@@ -196,11 +198,11 @@ type TrafficBucket = (typeof TRAFFIC_BUCKETS)[number];
  * utm_medium pago — sem essa ordem cairia em "Instagram" (errado, é Meta
  * Ads pago).
  *
- * Limitação de dados conhecida: `referrer` só é gravado quando a página de
- * entrada também trazia algum parâmetro utm_* (ver captureAndPersistUtm) —
- * uma visita orgânica sem nenhum utm (ex.: link direto do Instagram sem
- * marcação) não tem `referrer` salvo e cai em "Direto" por falta de sinal,
- * não porque a sessão realmente veio direto.
+ * `referrer` é gravado no primeiro toque de cada sessão mesmo sem UTM na
+ * URL (ver captureAndPersistUtm) — cobre visita orgânica sem nenhuma
+ * marcação (ex.: link direto do Instagram sem utm). Só cai em "Direto"
+ * quando não existe nenhum sinal mesmo (nem utm, nem `document.referrer`
+ * — ex.: digitou a URL, abriu um favorito salvo).
  */
 function classifyTrafficSource(row: Pick<RawEvent, "utm_source" | "utm_medium" | "referrer">): TrafficBucket {
   const source = row.utm_source?.toLowerCase() ?? "";
@@ -251,25 +253,59 @@ function extractSize(row: RawEvent): string | null {
   return typeof metaSize === "string" && metaSize ? metaSize : null;
 }
 
+const EVENT_COLUMNS =
+  "event_type, session_id, product_id, category_id, size, utm_source, utm_medium, referrer, device_type, metadata, created_at";
+
+/**
+ * `.limit(MAX_EVENTS)` sozinho não bastava: o PostgREST do projeto tem um
+ * teto de resposta de 1000 linhas por request, então qualquer período com
+ * mais de 1000 eventos vinha silenciosamente truncado (sem erro nenhum —
+ * só faltavam linhas). Paginação real em blocos de PAGE_SIZE (o próprio
+ * teto do servidor) resolve isso sem depender de mudar configuração
+ * nenhuma do Supabase; `MAX_EVENTS` continua como teto de segurança total
+ * (generoso pro volume real de uma boutique), agora contra a soma de
+ * todas as páginas, não uma única chamada.
+ */
+const PAGE_SIZE = 1000;
+
+async function fetchAllAnalyticsEvents(
+  supabase: ReturnType<typeof createAdminClient>,
+  startIso: string,
+  endIso: string
+): Promise<RawEvent[]> {
+  const allRows: RawEvent[] = [];
+  let from = 0;
+
+  while (allRows.length < MAX_EVENTS) {
+    const { data, error } = await supabase
+      .from("analytics_events")
+      .select(EVENT_COLUMNS)
+      .in("event_type", RELEVANT_EVENT_TYPES)
+      .gte("created_at", startIso)
+      .lte("created_at", endIso)
+      .order("created_at", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      console.error("[getDashboardData] falha ao consultar analytics_events:", error.message);
+      break;
+    }
+
+    const page = (data ?? []) as RawEvent[];
+    allRows.push(...page);
+
+    if (page.length < PAGE_SIZE) break; // última página
+    from += PAGE_SIZE;
+  }
+
+  return allRows;
+}
+
 export async function getDashboardData(period: DashboardPeriod): Promise<DashboardData> {
   const { current, previous } = resolvePeriodRanges(period);
   const supabase = createAdminClient();
 
-  const { data, error } = await supabase
-    .from("analytics_events")
-    .select(
-      "event_type, session_id, product_id, category_id, size, utm_source, utm_medium, referrer, device_type, metadata, created_at"
-    )
-    .in("event_type", RELEVANT_EVENT_TYPES)
-    .gte("created_at", previous.start.toISOString())
-    .lte("created_at", current.end.toISOString())
-    .limit(MAX_EVENTS);
-
-  if (error) {
-    console.error("[getDashboardData] falha ao consultar analytics_events:", error.message);
-  }
-
-  const rows = (data ?? []) as RawEvent[];
+  const rows = await fetchAllAnalyticsEvents(supabase, previous.start.toISOString(), current.end.toISOString());
   const currentStartIso = current.start.toISOString();
   const currentRows = rows.filter((r) => r.created_at >= currentStartIso);
   const previousRows = rows.filter((r) => r.created_at < currentStartIso);
