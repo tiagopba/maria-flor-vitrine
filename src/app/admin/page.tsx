@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { Eye, Heart, MessageCircle, MousePointerClick, ShoppingBag, UserPlus } from "lucide-react";
+import { Eye, Heart, MessageCircle, MousePointerClick, Percent, ShoppingBag, UserPlus, Users } from "lucide-react";
 import { getCurrentAdmin } from "@/lib/auth/permissions";
 import { getDashboardData, type DashboardPeriod } from "@/lib/analytics/dashboard";
 import { DashboardPeriodFilter } from "./DashboardPeriodFilter";
 import { DashboardCard } from "./DashboardCard";
 import { DailyEvolutionChart, RankingList } from "./DashboardCharts";
+import { ConversionFunnel, DeviceBreakdown } from "./DashboardFunnel";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -73,26 +74,46 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
 
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <DashboardCard label="Visualizações da vitrine" comparison={data.cards.pageViews} icon={Eye} />
+        <DashboardCard label="Sessões únicas" comparison={data.cards.uniqueSessions} icon={Users} />
         <DashboardCard label="Visualizações de produtos" comparison={data.cards.productViews} icon={ShoppingBag} />
         <DashboardCard label="Adições à Minha Seleção" comparison={data.cards.favoritesAdded} icon={Heart} />
         <DashboardCard label="Conversas iniciadas no WhatsApp" comparison={data.cards.whatsappStarted} icon={MessageCircle} />
-        <DashboardCard
-          label="Taxa de clique para WhatsApp"
-          comparison={data.cards.whatsappClickRate}
-          icon={MousePointerClick}
-          formatValue={formatPercent}
-          hint="Conversas iniciadas ÷ visualizações de produto"
-        />
         <DashboardCard
           label="Cadastros no Grupo de Ofertas"
           comparison={data.cards.offersLeadsConfirmed}
           icon={UserPlus}
           hint="E-mail confirmado"
         />
+        <DashboardCard
+          label="Taxa de visualização de produto"
+          comparison={data.cards.productViewRate}
+          icon={Percent}
+          formatValue={formatPercent}
+          hint="Sessões com produto ÷ sessões únicas"
+        />
+        <DashboardCard
+          label="Taxa de seleção"
+          comparison={data.cards.selectionRate}
+          icon={Percent}
+          formatValue={formatPercent}
+          hint="Sessões com seleção ÷ sessões únicas"
+        />
+        <DashboardCard
+          label="Taxa de WhatsApp"
+          comparison={data.cards.whatsappClickRate}
+          icon={MousePointerClick}
+          formatValue={formatPercent}
+          hint="Sessões com WhatsApp ÷ sessões únicas"
+        />
       </div>
 
       <div className="mt-6">
         <DailyEvolutionChart points={data.dailyEvolution} />
+      </div>
+
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <ConversionFunnel funnel={data.funnel} />
+        <DeviceBreakdown devices={data.devices} />
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
@@ -110,7 +131,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
           emptyLabel="Sem visualizações neste período."
           withAvatar
         />
-        <RankingList title="Origem do tráfego" rows={data.trafficSources} emptyLabel="Sem visualizações neste período." />
+        <RankingList title="Origem do tráfego (sessões)" rows={data.trafficSources} emptyLabel="Sem sessões neste período." />
       </div>
     </div>
   );

@@ -50,10 +50,14 @@ export function resolvePeriodRanges(period: DashboardPeriod, now = new Date()): 
 
 interface RawEvent {
   event_type: string;
+  session_id: string | null;
   product_id: string | null;
   category_id: string | null;
   size: string | null;
   utm_source: string | null;
+  utm_medium: string | null;
+  referrer: string | null;
+  device_type: string | null;
   metadata: Record<string, unknown> | null;
   created_at: string;
 }
@@ -82,21 +86,55 @@ export interface DailyPoint {
   productViews: number;
 }
 
+export interface FunnelData {
+  visitSessions: number;
+  productViewSessions: number;
+  selectionSessions: number;
+  whatsappSessions: number;
+}
+
 export interface DashboardData {
   cards: {
     pageViews: MetricComparison;
+    /** Sessões únicas (COUNT DISTINCT session_id) que tiveram PAGE_VIEW —
+     * mesma base de "visita" usada no funil. Deliberadamente rotulada
+     * "Sessões únicas", nunca "visitantes únicos": `session_id` expira
+     * depois de ~30min de inatividade (ver lib/session/visitor-id.ts),
+     * então uma sessão aqui já é uma sessão real, não um navegador
+     * distinto genérico. Eventos gravados antes dessa mudança foram
+     * produzidos sob a semântica antiga (session_id sem expiração) — a
+     * contagem em períodos que misturam dado antigo e novo reflete essa
+     * diferença, não é reescrita. */
+    uniqueSessions: MetricComparison;
     productViews: MetricComparison;
     favoritesAdded: MetricComparison;
     whatsappStarted: MetricComparison;
-    /** % de visualizações de produto que viraram conversa no WhatsApp (proxy de conversão). */
+    /** Sessões com evento de WhatsApp ÷ sessões únicas (visita) — nunca
+     * dividido pela quantidade bruta de PRODUCT_VIEW. */
     whatsappClickRate: MetricComparison;
+    /** Sessões com PRODUCT_VIEW ÷ sessões únicas (visita). */
+    productViewRate: MetricComparison;
+    /** Sessões com FAVORITE_ADDED ÷ sessões únicas (visita). */
+    selectionRate: MetricComparison;
     offersLeadsConfirmed: MetricComparison;
   };
+  /** Funil da Vitrine — cada etapa conta sessões distintas que tiveram pelo
+   * menos um evento daquele tipo no período atual (não quantidade bruta de
+   * eventos, e as etapas não exigem ordem entre si). */
+  funnel: FunnelData;
+  /** Mobile / Desktop / Outros (tablet + desconhecido) — sessões distintas,
+   * classificadas pelo `device_type` do primeiro PAGE_VIEW de cada sessão
+   * no período. */
+  devices: RankingRow[];
   dailyEvolution: DailyPoint[];
   topViewedProducts: RankingRow[];
   topAddedProducts: RankingRow[];
   topCategories: RankingRow[];
   topSizes: RankingRow[];
+  /** Meta Ads / Instagram / Google / WhatsApp / Direto / Outros — sessões
+   * distintas (não eventos), classificadas por utm_source/utm_medium/
+   * referrer do primeiro PAGE_VIEW de cada sessão no período (ver
+   * classifyTrafficSource). */
   trafficSources: RankingRow[];
 }
 
@@ -110,9 +148,80 @@ const RELEVANT_EVENT_TYPES = [
   "OFFER_LEAD_CONFIRMED",
 ] as const;
 
+/** Mesmo par de eventos que já define "Conversas iniciadas no WhatsApp" —
+ * reaproveitado por qualquer métrica nova que precise de "sessão com
+ * WhatsApp" (funil, taxa, card), nunca uma lista divergente. */
+const WHATSAPP_EVENT_TYPES = ["WHATSAPP_CLICK", "FAVORITES_WHATSAPP_CLICK"] as const;
+
 // Teto de segurança — generoso pro volume real de uma boutique, evita uma
 // consulta sem limite nenhum se o período for muito longo.
 const MAX_EVENTS = 50_000;
+
+/** Sessões distintas (session_id) que tiveram pelo menos um evento de
+ * algum dos `types` — base de todo o funil/taxas novos, sempre contagem
+ * de sessão, nunca de evento bruto. */
+function distinctSessionIds(rows: RawEvent[], types: readonly string[]): Set<string> {
+  const ids = new Set<string>();
+  for (const row of rows) {
+    if (row.session_id && types.includes(row.event_type)) ids.add(row.session_id);
+  }
+  return ids;
+}
+
+function ratePct(numerator: number, denominator: number): number {
+  return denominator > 0 ? (numerator / denominator) * 100 : 0;
+}
+
+const DEVICE_BUCKETS = ["Mobile", "Desktop", "Outros"] as const;
+
+/** Mobile/Desktop exatos; tablet e qualquer valor ausente/desconhecido
+ * (eventos antigos de antes da coluna existir) caem em "Outros" — nunca
+ * inventa um valor que o evento não registrou. */
+function classifyDevice(deviceType: string | null): (typeof DEVICE_BUCKETS)[number] {
+  if (deviceType === "mobile") return "Mobile";
+  if (deviceType === "desktop") return "Desktop";
+  return "Outros";
+}
+
+const TRAFFIC_BUCKETS = ["Meta Ads", "Instagram", "Google", "WhatsApp", "Direto", "Outros"] as const;
+type TrafficBucket = (typeof TRAFFIC_BUCKETS)[number];
+
+/**
+ * Classificação de origem por sessão — regra fixa e documentada, só com
+ * dados reais já capturados (utm_source/utm_medium/referrer, ver
+ * lib/utm/persist.ts). Nunca inventa origem: sem nenhum sinal (utm E
+ * referrer ausentes) é "Direto"; com sinal mas que não bate em nenhuma
+ * regra abaixo é "Outros".
+ *
+ * Ordem importa: paga (Meta Ads) é checada antes de orgânico Instagram,
+ * porque um clique em anúncio no Instagram tem utm_source=instagram +
+ * utm_medium pago — sem essa ordem cairia em "Instagram" (errado, é Meta
+ * Ads pago).
+ *
+ * `referrer` é gravado no primeiro toque de cada sessão mesmo sem UTM na
+ * URL (ver captureAndPersistUtm) — cobre visita orgânica sem nenhuma
+ * marcação (ex.: link direto do Instagram sem utm). Só cai em "Direto"
+ * quando não existe nenhum sinal mesmo (nem utm, nem `document.referrer`
+ * — ex.: digitou a URL, abriu um favorito salvo).
+ */
+function classifyTrafficSource(row: Pick<RawEvent, "utm_source" | "utm_medium" | "referrer">): TrafficBucket {
+  const source = row.utm_source?.toLowerCase() ?? "";
+  const medium = row.utm_medium?.toLowerCase() ?? "";
+  const referrer = row.referrer?.toLowerCase() ?? "";
+
+  const isPaidMedium = /cpc|ppc|paid|ads?\b/.test(medium);
+  const isMetaSource = /facebook|instagram|meta|\bfb\b|\big\b/.test(source);
+  if (isPaidMedium && isMetaSource) return "Meta Ads";
+
+  if (source.includes("instagram") || referrer.includes("instagram.com")) return "Instagram";
+  if (source.includes("google") || referrer.includes("google.")) return "Google";
+  if (source.includes("whatsapp") || referrer.includes("whatsapp.com") || referrer.includes("wa.me")) {
+    return "WhatsApp";
+  }
+
+  if (!source && !referrer) return "Direto";
+  return "Outros";
+}
 
 function bucketCount(rows: RawEvent[], keyFn: (row: RawEvent) => string | null): Map<string, number> {
   const counts = new Map<string, number>();
@@ -144,23 +253,59 @@ function extractSize(row: RawEvent): string | null {
   return typeof metaSize === "string" && metaSize ? metaSize : null;
 }
 
+const EVENT_COLUMNS =
+  "event_type, session_id, product_id, category_id, size, utm_source, utm_medium, referrer, device_type, metadata, created_at";
+
+/**
+ * `.limit(MAX_EVENTS)` sozinho não bastava: o PostgREST do projeto tem um
+ * teto de resposta de 1000 linhas por request, então qualquer período com
+ * mais de 1000 eventos vinha silenciosamente truncado (sem erro nenhum —
+ * só faltavam linhas). Paginação real em blocos de PAGE_SIZE (o próprio
+ * teto do servidor) resolve isso sem depender de mudar configuração
+ * nenhuma do Supabase; `MAX_EVENTS` continua como teto de segurança total
+ * (generoso pro volume real de uma boutique), agora contra a soma de
+ * todas as páginas, não uma única chamada.
+ */
+const PAGE_SIZE = 1000;
+
+async function fetchAllAnalyticsEvents(
+  supabase: ReturnType<typeof createAdminClient>,
+  startIso: string,
+  endIso: string
+): Promise<RawEvent[]> {
+  const allRows: RawEvent[] = [];
+  let from = 0;
+
+  while (allRows.length < MAX_EVENTS) {
+    const { data, error } = await supabase
+      .from("analytics_events")
+      .select(EVENT_COLUMNS)
+      .in("event_type", RELEVANT_EVENT_TYPES)
+      .gte("created_at", startIso)
+      .lte("created_at", endIso)
+      .order("created_at", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      console.error("[getDashboardData] falha ao consultar analytics_events:", error.message);
+      break;
+    }
+
+    const page = (data ?? []) as RawEvent[];
+    allRows.push(...page);
+
+    if (page.length < PAGE_SIZE) break; // última página
+    from += PAGE_SIZE;
+  }
+
+  return allRows;
+}
+
 export async function getDashboardData(period: DashboardPeriod): Promise<DashboardData> {
   const { current, previous } = resolvePeriodRanges(period);
   const supabase = createAdminClient();
 
-  const { data, error } = await supabase
-    .from("analytics_events")
-    .select("event_type, product_id, category_id, size, utm_source, metadata, created_at")
-    .in("event_type", RELEVANT_EVENT_TYPES)
-    .gte("created_at", previous.start.toISOString())
-    .lte("created_at", current.end.toISOString())
-    .limit(MAX_EVENTS);
-
-  if (error) {
-    console.error("[getDashboardData] falha ao consultar analytics_events:", error.message);
-  }
-
-  const rows = (data ?? []) as RawEvent[];
+  const rows = await fetchAllAnalyticsEvents(supabase, previous.start.toISOString(), current.end.toISOString());
   const currentStartIso = current.start.toISOString();
   const currentRows = rows.filter((r) => r.created_at >= currentStartIso);
   const previousRows = rows.filter((r) => r.created_at < currentStartIso);
@@ -174,13 +319,58 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   const previousProductViews = countByType(previousRows, "PRODUCT_VIEW");
   const currentFavorites = countByType(currentRows, "FAVORITE_ADDED");
   const previousFavorites = countByType(previousRows, "FAVORITE_ADDED");
-  const currentWhatsapp = countByTypes(currentRows, ["WHATSAPP_CLICK", "FAVORITES_WHATSAPP_CLICK"]);
-  const previousWhatsapp = countByTypes(previousRows, ["WHATSAPP_CLICK", "FAVORITES_WHATSAPP_CLICK"]);
+  const currentWhatsapp = countByTypes(currentRows, [...WHATSAPP_EVENT_TYPES]);
+  const previousWhatsapp = countByTypes(previousRows, [...WHATSAPP_EVENT_TYPES]);
   const currentOffersConfirmed = countByType(currentRows, "OFFER_LEAD_CONFIRMED");
   const previousOffersConfirmed = countByType(previousRows, "OFFER_LEAD_CONFIRMED");
 
-  const currentClickRate = currentProductViews > 0 ? (currentWhatsapp / currentProductViews) * 100 : 0;
-  const previousClickRate = previousProductViews > 0 ? (previousWhatsapp / previousProductViews) * 100 : 0;
+  // Sessões distintas por etapa — base do funil, das taxas e do card de
+  // sessões únicas. Sempre COUNT DISTINCT session_id, nunca quantidade
+  // bruta de evento.
+  const currentVisitSessions = distinctSessionIds(currentRows, ["PAGE_VIEW"]);
+  const previousVisitSessions = distinctSessionIds(previousRows, ["PAGE_VIEW"]);
+  const currentProductViewSessions = distinctSessionIds(currentRows, ["PRODUCT_VIEW"]);
+  const previousProductViewSessions = distinctSessionIds(previousRows, ["PRODUCT_VIEW"]);
+  const currentSelectionSessions = distinctSessionIds(currentRows, ["FAVORITE_ADDED"]);
+  const previousSelectionSessions = distinctSessionIds(previousRows, ["FAVORITE_ADDED"]);
+  const currentWhatsappSessions = distinctSessionIds(currentRows, WHATSAPP_EVENT_TYPES);
+  const previousWhatsappSessions = distinctSessionIds(previousRows, WHATSAPP_EVENT_TYPES);
+
+  const currentClickRate = ratePct(currentWhatsappSessions.size, currentVisitSessions.size);
+  const previousClickRate = ratePct(previousWhatsappSessions.size, previousVisitSessions.size);
+  const currentProductViewRate = ratePct(currentProductViewSessions.size, currentVisitSessions.size);
+  const previousProductViewRate = ratePct(previousProductViewSessions.size, previousVisitSessions.size);
+  const currentSelectionRate = ratePct(currentSelectionSessions.size, currentVisitSessions.size);
+  const previousSelectionRate = ratePct(previousSelectionSessions.size, previousVisitSessions.size);
+
+  const funnel: FunnelData = {
+    visitSessions: currentVisitSessions.size,
+    productViewSessions: currentProductViewSessions.size,
+    selectionSessions: currentSelectionSessions.size,
+    whatsappSessions: currentWhatsappSessions.size,
+  };
+
+  // Dispositivo e origem de tráfego são atribuídos por SESSÃO, não por
+  // evento — usa o PAGE_VIEW mais antigo de cada sessão no período atual
+  // (primeiro toque), já que captureAndPersistUtm mantém o mesmo
+  // utm/referrer/device em todos os PAGE_VIEW de uma sessão.
+  const firstPageViewBySession = new Map<string, RawEvent>();
+  for (const row of currentRows) {
+    if (row.event_type !== "PAGE_VIEW" || !row.session_id) continue;
+    const existing = firstPageViewBySession.get(row.session_id);
+    if (!existing || row.created_at < existing.created_at) {
+      firstPageViewBySession.set(row.session_id, row);
+    }
+  }
+
+  const deviceCounts = new Map<string, number>(DEVICE_BUCKETS.map((b) => [b, 0]));
+  const trafficCounts = new Map<string, number>(TRAFFIC_BUCKETS.map((b) => [b, 0]));
+  for (const row of firstPageViewBySession.values()) {
+    const device = classifyDevice(row.device_type);
+    deviceCounts.set(device, (deviceCounts.get(device) ?? 0) + 1);
+    const traffic = classifyTrafficSource(row);
+    trafficCounts.set(traffic, (trafficCounts.get(traffic) ?? 0) + 1);
+  }
 
   // Evolução diária — só o período atual, um ponto por dia.
   const dailyMap = new Map<string, { pageViews: number; productViews: number }>();
@@ -214,12 +404,6 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
     const size = extractSize(row);
     if (size) sizeCounts.set(size, (sizeCounts.get(size) ?? 0) + 1);
   }
-  const trafficCounts = new Map<string, number>();
-  for (const row of currentRows) {
-    if (row.event_type !== "PAGE_VIEW") continue;
-    const source = row.utm_source?.trim() || "direto";
-    trafficCounts.set(source, (trafficCounts.get(source) ?? 0) + 1);
-  }
 
   // Nomes reais só pros produtos/categorias que aparecem no ranking (join
   // no momento da leitura, nunca snapshot no evento — nome/categoria de um
@@ -243,12 +427,17 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   return {
     cards: {
       pageViews: compare(currentPageViews, previousPageViews),
+      uniqueSessions: compare(currentVisitSessions.size, previousVisitSessions.size),
       productViews: compare(currentProductViews, previousProductViews),
       favoritesAdded: compare(currentFavorites, previousFavorites),
       whatsappStarted: compare(currentWhatsapp, previousWhatsapp),
       whatsappClickRate: compare(currentClickRate, previousClickRate),
+      productViewRate: compare(currentProductViewRate, previousProductViewRate),
+      selectionRate: compare(currentSelectionRate, previousSelectionRate),
       offersLeadsConfirmed: compare(currentOffersConfirmed, previousOffersConfirmed),
     },
+    funnel,
+    devices: DEVICE_BUCKETS.map((bucket) => ({ id: bucket, label: bucket, count: deviceCounts.get(bucket) ?? 0 })),
     dailyEvolution,
     topViewedProducts: topN(productViewCounts, productNameById, 10, "Produto removido"),
     topAddedProducts: topN(productAddCounts, productNameById, 10, "Produto removido"),
@@ -257,9 +446,10 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(([size, count]) => ({ id: size, label: size, count })),
-    trafficSources: [...trafficCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([source, count]) => ({ id: source, label: source, count })),
+    trafficSources: TRAFFIC_BUCKETS.map((bucket) => ({
+      id: bucket,
+      label: bucket,
+      count: trafficCounts.get(bucket) ?? 0,
+    })).sort((a, b) => b.count - a.count),
   };
 }
