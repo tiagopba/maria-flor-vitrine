@@ -126,7 +126,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps<"
         <section className="mt-12 min-w-0">
           <h2 className="mb-1 font-display text-lg text-text sm:text-xl">Explore por categoria</h2>
           <p className="mb-4 text-sm text-text-muted">Encontre o que combina com você</p>
-          <CategoryCarousel items={exploreCategories} />
+          <CategoryCarousel items={exploreCategories} variant="paged-grid" activeItemKey={category.id} />
         </section>
       </div>
     </main>

@@ -24,15 +24,17 @@ export type CategoryCarouselItem = ExploreCategoryItem;
  * CATEGORY_ICON_REGISTRY (lib/catalog/category-icons.ts) — único lugar
  * que conhece a lista de ícones disponíveis.
  *
- * `variant="grid"` é só usado na Home (logo abaixo da busca): em vez do
+ * `variant="paged-grid"` é só usado na Home (logo abaixo da busca): em vez do
  * carrossel de uma linha só com scroll/setas, os chips formam uma grade
  * responsiva (2 colunas no mobile comum, 3 em telas mobile maiores) —
  * paginada em blocos de GRID_PAGE_SIZE, com setas + pontinhos de página em
- * vez de scroll/expandir. As outras páginas que reaproveitam este
- * componente (produto, categoria, busca, novidades, favoritos) continuam
+ * vez de scroll/expandir. Reaproveitado também nas páginas de produto e de
+ * categoria (mesmo componente, mesmo padrão visual — só troca a prop
+ * `variant`, sem duplicar a lógica de paginação/swipe em outro lugar). As
+ * páginas que ainda não migraram (busca, novidades, favoritos) continuam
  * com `variant="scroll"` (padrão), comportamento inalterado.
  *
- * Só no `variant="grid"`: Novidades sempre primeiro (mesma chave especial
+ * Só no `variant="paged-grid"`: Novidades sempre primeiro (mesma chave especial
  * que buildExploreCategoriesItems já usa pra montar o item), as demais em
  * ordem alfabética pelo nome — puramente de exibição aqui, não reordena
  * nada vindo do banco/admin nem afeta a ordem usada pelo carrossel normal
@@ -41,6 +43,13 @@ export type CategoryCarouselItem = ExploreCategoryItem;
  * página tiver menos itens. Setas desabilitam nas pontas (sem loop);
  * swipe horizontal no touch é só matemática de deltaX/deltaY no
  * touchstart/touchend, sem lib nova.
+ *
+ * `activeItemKey` (opcional, só faz sentido com `variant="paged-grid"`) é
+ * a chave do item a destacar como "categoria atual" — usado na página de
+ * categoria (passa o id da categoria sendo vista) pra dar um estado visual
+ * ativo (fundo/borda rosa mais fortes) sem desabilitar o clique nem virar
+ * outro componente. Sem essa prop (Home, produto), nenhum item fica
+ * destacado — comportamento igual ao de antes.
  */
 const GRID_PAGE_SIZE = 6;
 const GRID_MIN_HEIGHT_CLASSES = "min-h-[152px] min-[430px]:min-h-[98px]";
@@ -49,9 +58,11 @@ const SWIPE_THRESHOLD_PX = 40;
 export function CategoryCarousel({
   items,
   variant = "scroll",
+  activeItemKey,
 }: {
   items: CategoryCarouselItem[];
-  variant?: "scroll" | "grid";
+  variant?: "scroll" | "paged-grid";
+  activeItemKey?: string;
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -104,7 +115,7 @@ export function CategoryCarousel({
 
   if (items.length === 0) return null;
 
-  if (variant === "grid") {
+  if (variant === "paged-grid") {
     const novidades = items.find((item) => item.key === "novidades");
     const rest = items
       .filter((item) => item.key !== "novidades")
@@ -144,11 +155,17 @@ export function CategoryCarousel({
         >
           {pageItems.map((item) => {
             const Icon = CATEGORY_ICON_REGISTRY[item.icon].Icon;
+            const isActive = activeItemKey === item.key;
             return (
               <Link
                 key={item.key}
                 href={item.href}
-                className="flex min-h-11 items-center justify-center gap-2 self-start rounded-full border border-accent/40 bg-accent/10 px-3 py-2.5 text-center text-sm font-medium text-primary transition-colors hover:bg-accent/20 hover:border-accent/60"
+                aria-current={isActive ? "page" : undefined}
+                className={`flex min-h-11 items-center justify-center gap-2 self-start rounded-full border px-3 py-2.5 text-center text-sm font-medium transition-colors ${
+                  isActive
+                    ? "border-primary bg-primary/15 text-primary"
+                    : "border-accent/40 bg-accent/10 text-primary hover:bg-accent/20 hover:border-accent/60"
+                }`}
               >
                 <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
                 {item.name}

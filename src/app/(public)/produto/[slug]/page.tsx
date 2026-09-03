@@ -103,7 +103,7 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
       <section className="mt-12 min-w-0">
         <h2 className="mb-1 font-display text-lg text-text sm:text-xl">Explorar categorias</h2>
         <p className="mb-4 text-sm text-text-muted">Acesse outras categorias</p>
-        <CategoryCarousel items={exploreCategories} />
+        <CategoryCarousel items={exploreCategories} variant="paged-grid" />
       </section>
     </main>
   );

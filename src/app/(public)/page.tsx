@@ -79,7 +79,7 @@ export default async function Home() {
       <section className="px-4 py-6 sm:px-6 sm:py-8">
         <h2 className="mb-1 font-display text-lg text-text sm:text-xl">Explore por categoria</h2>
         <p className="mb-4 text-sm text-text-muted">Encontre o que combina com você</p>
-        <CategoryCarousel items={exploreCategories} variant="grid" />
+        <CategoryCarousel items={exploreCategories} variant="paged-grid" />
       </section>
 
       {/* Acabaram de chegar */}
