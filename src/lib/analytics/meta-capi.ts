@@ -90,21 +90,9 @@ export async function sendCapiEvent(input: SendCapiEventInput): Promise<void> {
       signal: AbortSignal.timeout(5000),
     });
 
-    const responseBody = await response.json().catch(() => null);
-
-    // TEMP DEBUG — remover depois da validação manual. Só campos sanitizados:
-    // nunca token, IP, cookies, user-agent ou user_data.
-    console.log("[meta-capi][TEMP-DEBUG]", {
-      event_name: input.eventName,
-      event_id: input.eventId,
-      http_status: response.status,
-      events_received: responseBody?.events_received,
-      messages: responseBody?.messages,
-      fbtrace_id: responseBody?.fbtrace_id,
-    });
-
     if (!response.ok) {
-      console.error(`[meta-capi] evento "${input.eventName}" recusado pela Meta (HTTP ${response.status}):`, responseBody);
+      const body = await response.text().catch(() => "");
+      console.error(`[meta-capi] evento "${input.eventName}" recusado pela Meta (HTTP ${response.status}):`, body);
     }
   } catch (error) {
     console.error(
