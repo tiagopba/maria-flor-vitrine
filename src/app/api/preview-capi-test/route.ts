@@ -45,7 +45,14 @@ export async function POST() {
 
   if (!result) {
     return Response.json(
-      { ok: false, reason: "sendCapiEvent retornou null (token/pixel ausente ou falha antes de obter resposta HTTP)" },
+      {
+        ok: false,
+        reason: "sendCapiEvent retornou null (token/pixel ausente ou falha antes de obter resposta HTTP)",
+        // TEMP: só presença (boolean), nunca o valor — pra diagnosticar qual dos dois casos é.
+        has_pixel_id: Boolean(process.env.NEXT_PUBLIC_META_PIXEL_ID),
+        has_access_token: Boolean(process.env.META_CONVERSIONS_API_TOKEN),
+        has_test_event_code: Boolean(process.env.META_TEST_EVENT_CODE),
+      },
       { status: 502 }
     );
   }
