@@ -20,7 +20,7 @@ const ROLE_LABEL: Record<string, string> = {
   master: "Master",
 };
 
-const VALID_PERIODS: DashboardPeriod[] = ["today", "7d", "30d", "month"];
+const VALID_PERIODS: DashboardPeriod[] = ["today", "yesterday", "7d", "30d", "month"];
 
 function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`;
