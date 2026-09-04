@@ -77,13 +77,15 @@ function compare(current: number, previous: number): MetricComparison {
 export interface RankingRow {
   id: string;
   label: string;
+  /** Métrica principal do ranking — sessões distintas quando aplicável
+   * (ver topNBySessions), contagem simples nos que já eram por sessão
+   * (dispositivos, origem do tráfego). */
   count: number;
-}
-
-export interface DailyPoint {
-  date: string;
-  pageViews: number;
-  productViews: number;
+  /** Quantidade bruta de eventos por trás de `count`, mostrada de forma
+   * discreta (ex.: "31 sessões interessadas" + "43 visualizações"). Só
+   * presente nos rankings de produto/categoria/tamanho — ausente onde não
+   * faz sentido (dispositivos, origem do tráfego, que já são só sessão). */
+  secondaryCount?: number;
 }
 
 export interface FunnelData {
@@ -132,7 +134,9 @@ export interface DashboardData {
    * classificadas pelo `device_type` do primeiro PAGE_VIEW de cada sessão
    * no período. */
   devices: RankingRow[];
-  dailyEvolution: DailyPoint[];
+  /** Sessões distintas interessadas em cada produto (não visualizações
+   * brutas) — ver topNBySessions. `secondaryCount` traz o total bruto de
+   * eventos discretamente. */
   topViewedProducts: RankingRow[];
   topAddedProducts: RankingRow[];
   topCategories: RankingRow[];
@@ -229,25 +233,44 @@ function classifyTrafficSource(row: Pick<RawEvent, "utm_source" | "utm_medium" |
   return "Outros";
 }
 
-function bucketCount(rows: RawEvent[], keyFn: (row: RawEvent) => string | null): Map<string, number> {
-  const counts = new Map<string, number>();
+/** Por chave (produto/categoria/tamanho), acumula sessões distintas E
+ * quantidade bruta de evento — base dos rankings "sessões interessadas",
+ * nunca só evento bruto. */
+function bucketSessionsAndEvents(
+  rows: RawEvent[],
+  keyFn: (row: RawEvent) => string | null
+): Map<string, { sessions: Set<string>; events: number }> {
+  const buckets = new Map<string, { sessions: Set<string>; events: number }>();
   for (const row of rows) {
     const key = keyFn(row);
     if (!key) continue;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    const entry = buckets.get(key) ?? { sessions: new Set<string>(), events: 0 };
+    entry.events++;
+    if (row.session_id) entry.sessions.add(row.session_id);
+    buckets.set(key, entry);
   }
-  return counts;
+  return buckets;
 }
 
-function topN(counts: Map<string, number>, labelById: Map<string, string>, n: number, fallbackLabel = "Outro"): RankingRow[] {
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
+/** Ranking pelas sessões distintas interessadas (não pela quantidade
+ * bruta de evento) — a mesma sessão repetindo a mesma ação no mesmo item
+ * conta 1 vez. `secondaryCount` carrega o total bruto de eventos, exibido
+ * de forma discreta pela UI. */
+function topNBySessions(
+  buckets: Map<string, { sessions: Set<string>; events: number }>,
+  labelById: Map<string, string>,
+  n: number,
+  fallbackLabel = "Outro"
+): RankingRow[] {
+  return [...buckets.entries()]
+    .sort((a, b) => b[1].sessions.size - a[1].sessions.size)
     .slice(0, n)
-    .map(([id, count]) => ({ id, label: labelById.get(id) ?? fallbackLabel, count }));
-}
-
-function dayKey(iso: string): string {
-  return iso.slice(0, 10);
+    .map(([id, { sessions, events }]) => ({
+      id,
+      label: labelById.get(id) ?? fallbackLabel,
+      count: sessions.size,
+      secondaryCount: events,
+    }));
 }
 
 /** Tamanho de um evento vem do campo `size` (WHATSAPP_CLICK) ou de
@@ -375,45 +398,30 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
     trafficCounts.set(traffic, (trafficCounts.get(traffic) ?? 0) + 1);
   }
 
-  // Evolução diária — só o período atual, um ponto por dia.
-  const dailyMap = new Map<string, { pageViews: number; productViews: number }>();
-  for (const row of currentRows) {
-    if (row.event_type !== "PAGE_VIEW" && row.event_type !== "PRODUCT_VIEW") continue;
-    const key = dayKey(row.created_at);
-    const entry = dailyMap.get(key) ?? { pageViews: 0, productViews: 0 };
-    if (row.event_type === "PAGE_VIEW") entry.pageViews++;
-    else entry.productViews++;
-    dailyMap.set(key, entry);
-  }
-  const dailyEvolution: DailyPoint[] = [...dailyMap.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, v]) => ({ date, ...v }));
-
-  // Rankings — contam só no período atual.
-  const productViewCounts = bucketCount(
+  // Rankings — contam só no período atual, por sessão distinta (não
+  // evento bruto): a mesma sessão repetindo a mesma ação no mesmo item
+  // conta 1 vez. Cada bucket guarda também o total bruto de eventos
+  // (secondaryCount), exibido de forma discreta pela UI.
+  const productViewBuckets = bucketSessionsAndEvents(
     currentRows.filter((r) => r.event_type === "PRODUCT_VIEW"),
     (r) => r.product_id
   );
-  const productAddCounts = bucketCount(
+  const productAddBuckets = bucketSessionsAndEvents(
     currentRows.filter((r) => r.event_type === "FAVORITE_ADDED"),
     (r) => r.product_id
   );
-  const categoryCounts = bucketCount(
+  const categoryBuckets = bucketSessionsAndEvents(
     currentRows.filter((r) => r.event_type === "CATEGORY_VIEW"),
     (r) => r.category_id
   );
-  const sizeCounts = new Map<string, number>();
-  for (const row of currentRows) {
-    const size = extractSize(row);
-    if (size) sizeCounts.set(size, (sizeCounts.get(size) ?? 0) + 1);
-  }
+  const sizeBuckets = bucketSessionsAndEvents(currentRows, extractSize);
 
   // Nomes reais só pros produtos/categorias que aparecem no ranking (join
   // no momento da leitura, nunca snapshot no evento — nome/categoria de um
   // produto pode mudar depois de visualizado, e o dashboard deve sempre
   // mostrar o dado atual, não uma foto velha).
-  const productIds = [...new Set([...productViewCounts.keys(), ...productAddCounts.keys()])];
-  const categoryIds = [...categoryCounts.keys()];
+  const productIds = [...new Set([...productViewBuckets.keys(), ...productAddBuckets.keys()])];
+  const categoryIds = [...categoryBuckets.keys()];
 
   const [{ data: products }, { data: dbCategories }] = await Promise.all([
     productIds.length > 0
@@ -426,6 +434,8 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
 
   const productNameById = new Map((products ?? []).map((p) => [p.id, p.name]));
   const categoryNameById = new Map((dbCategories ?? []).map((c) => [c.id, c.name]));
+  // Tamanho não tem tabela pra buscar nome — o próprio valor já é o label.
+  const sizeLabelById = new Map([...sizeBuckets.keys()].map((size) => [size, size]));
 
   return {
     cards: {
@@ -441,14 +451,10 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
     },
     funnel,
     devices: DEVICE_BUCKETS.map((bucket) => ({ id: bucket, label: bucket, count: deviceCounts.get(bucket) ?? 0 })),
-    dailyEvolution,
-    topViewedProducts: topN(productViewCounts, productNameById, 10, "Produto removido"),
-    topAddedProducts: topN(productAddCounts, productNameById, 10, "Produto removido"),
-    topCategories: topN(categoryCounts, categoryNameById, 10, "Categoria removida"),
-    topSizes: [...sizeCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([size, count]) => ({ id: size, label: size, count })),
+    topViewedProducts: topNBySessions(productViewBuckets, productNameById, 10, "Produto removido"),
+    topAddedProducts: topNBySessions(productAddBuckets, productNameById, 10, "Produto removido"),
+    topCategories: topNBySessions(categoryBuckets, categoryNameById, 10, "Categoria removida"),
+    topSizes: topNBySessions(sizeBuckets, sizeLabelById, 10),
     trafficSources: TRAFFIC_BUCKETS.map((bucket) => ({
       id: bucket,
       label: bucket,
