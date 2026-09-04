@@ -8,6 +8,12 @@ const nextConfig: NextConfig = {
     remotePatterns: supabaseHostname
       ? [{ protocol: "https", hostname: supabaseHostname, pathname: "/storage/v1/object/public/**" }]
       : [],
+    // ~31 dias — fotos de produto nunca trocam de conteúdo no mesmo
+    // storage_path (cada upload gera um UUID novo, ver
+    // lib/images/upload-client.ts), então um TTL longo é seguro e reduz
+    // quanto o Image Optimization da Vercel precisa reprocessar a mesma
+    // imagem+largura repetidamente.
+    minimumCacheTTL: 2678400,
   },
 };
 
