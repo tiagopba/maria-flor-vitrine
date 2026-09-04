@@ -209,7 +209,10 @@ export async function submitFavoritesWhatsAppClick(
   // nem pode impedir a abertura do WhatsApp; qualquer falha (token ausente,
   // rede, recusa da Meta) fica isolada dentro de sendCapiEvent, que nunca
   // lança — o try/catch aqui é só uma segunda camada de segurança.
-  after(async () => {
+  // TEMP DEBUG: await direto (não after()) só pra esta rodada de validação,
+  // pra aparecer na aba "External APIs" do painel de logs. REVERTER pra
+  // after() depois.
+  {
     try {
       const [hdrs, cookieStore] = await Promise.all([headers(), cookies()]);
       await sendCapiEvent({
@@ -234,7 +237,7 @@ export async function submitFavoritesWhatsAppClick(
       // sendCapiEvent já trata os próprios erros internamente; nunca deve
       // chegar aqui, mas por segurança nunca deixa nada escapar do after().
     }
-  });
+  }
 
   return { url: buildWhatsAppUrl(seller.whatsapp_number, message), leadData };
 }
