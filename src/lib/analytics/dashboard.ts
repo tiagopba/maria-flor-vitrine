@@ -108,6 +108,12 @@ export interface DashboardData {
     uniqueSessions: MetricComparison;
     productViews: MetricComparison;
     favoritesAdded: MetricComparison;
+    /** "Cliques para WhatsApp" — sessões distintas com pelo menos um
+     * WHATSAPP_CLICK/FAVORITES_WHATSAPP_CLICK no período (nunca quantidade
+     * bruta de evento: uma sessão que clica 3x conta 1). O evento em si só
+     * marca que o site gerou o link wa.me e redirecionou — não é
+     * confirmação de mensagem enviada de verdade, por isso o nome do card
+     * não diz "conversas iniciadas". */
     whatsappStarted: MetricComparison;
     /** Sessões com evento de WhatsApp ÷ sessões únicas (visita) — nunca
      * dividido pela quantidade bruta de PRODUCT_VIEW. */
@@ -148,8 +154,8 @@ const RELEVANT_EVENT_TYPES = [
   "OFFER_LEAD_CONFIRMED",
 ] as const;
 
-/** Mesmo par de eventos que já define "Conversas iniciadas no WhatsApp" —
- * reaproveitado por qualquer métrica nova que precise de "sessão com
+/** Mesmo par de eventos que já define "Cliques para WhatsApp" —
+ * reaproveitado por qualquer métrica que precise de "sessão com
  * WhatsApp" (funil, taxa, card), nunca uma lista divergente. */
 const WHATSAPP_EVENT_TYPES = ["WHATSAPP_CLICK", "FAVORITES_WHATSAPP_CLICK"] as const;
 
@@ -311,7 +317,6 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   const previousRows = rows.filter((r) => r.created_at < currentStartIso);
 
   const countByType = (list: RawEvent[], type: string) => list.filter((r) => r.event_type === type).length;
-  const countByTypes = (list: RawEvent[], types: string[]) => list.filter((r) => types.includes(r.event_type)).length;
 
   const currentPageViews = countByType(currentRows, "PAGE_VIEW");
   const previousPageViews = countByType(previousRows, "PAGE_VIEW");
@@ -319,8 +324,6 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   const previousProductViews = countByType(previousRows, "PRODUCT_VIEW");
   const currentFavorites = countByType(currentRows, "FAVORITE_ADDED");
   const previousFavorites = countByType(previousRows, "FAVORITE_ADDED");
-  const currentWhatsapp = countByTypes(currentRows, [...WHATSAPP_EVENT_TYPES]);
-  const previousWhatsapp = countByTypes(previousRows, [...WHATSAPP_EVENT_TYPES]);
   const currentOffersConfirmed = countByType(currentRows, "OFFER_LEAD_CONFIRMED");
   const previousOffersConfirmed = countByType(previousRows, "OFFER_LEAD_CONFIRMED");
 
@@ -430,7 +433,7 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
       uniqueSessions: compare(currentVisitSessions.size, previousVisitSessions.size),
       productViews: compare(currentProductViews, previousProductViews),
       favoritesAdded: compare(currentFavorites, previousFavorites),
-      whatsappStarted: compare(currentWhatsapp, previousWhatsapp),
+      whatsappStarted: compare(currentWhatsappSessions.size, previousWhatsappSessions.size),
       whatsappClickRate: compare(currentClickRate, previousClickRate),
       productViewRate: compare(currentProductViewRate, previousProductViewRate),
       selectionRate: compare(currentSelectionRate, previousSelectionRate),
