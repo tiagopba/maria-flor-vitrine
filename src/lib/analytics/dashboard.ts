@@ -1,7 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export type DashboardPeriod = "today" | "7d" | "30d" | "month";
+export type DashboardPeriod = "today" | "yesterday" | "7d" | "30d" | "month";
 
 export interface DateRange {
   start: Date;
@@ -10,12 +10,31 @@ export interface DateRange {
 
 /**
  * "Período anterior" é sempre uma janela do MESMO tamanho, imediatamente
- * antes do período atual — regra única e previsível pra qualquer um dos 4
+ * antes do período atual — regra única e previsível pra qualquer um dos
  * filtros (ex: 7 dias comparam com os 7 dias anteriores a esses; Hoje
  * compara com as mesmas horas de ontem). Mais simples e mais fácil de
  * explicar pra quem lê o dashboard do que "sempre o mês/dia cheio anterior".
+ *
+ * "Ontem" é o único período com fim fixo (não `now`): dia anterior completo,
+ * 00:00 até 00:00 do dia seguinte (intervalo meio-aberto, mesmo padrão dos
+ * outros — "Hoje" também vai de 00:00 até `now`). `setDate`/`setHours` usam
+ * o horário local do processo (mesmo timezone que "Hoje"/"Mês atual" já
+ * usam), então a virada de mês/ano é resolvida nativamente pelo `Date`. O
+ * período anterior de "Ontem" é o dia anterior a ele, também completo.
  */
 export function resolvePeriodRanges(period: DashboardPeriod, now = new Date()): { current: DateRange; previous: DateRange } {
+  if (period === "yesterday") {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - 1);
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+
+    return {
+      current: { start, end },
+      previous: { start: new Date(start.getTime() - 24 * 60 * 60 * 1000), end: start },
+    };
+  }
+
   let start: Date;
 
   switch (period) {
