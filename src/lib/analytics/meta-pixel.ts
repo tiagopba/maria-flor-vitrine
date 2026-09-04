@@ -11,9 +11,9 @@ export function getMetaPixelId(): string | null {
   return id && id.trim() ? id.trim() : null;
 }
 
-function devLog(eventName: string, params?: Record<string, unknown>): void {
+function devLog(eventName: string, params?: Record<string, unknown>, eventId?: string): void {
   if (process.env.NODE_ENV === "production") return;
-  console.log(`[META] ${eventName}`, params ?? {});
+  console.log(`[META] ${eventName}`, params ?? {}, eventId ? `eventID=${eventId}` : "");
 }
 
 /**
@@ -22,11 +22,21 @@ function devLog(eventName: string, params?: Record<string, unknown>): void {
  * não configurado, bloqueador de anúncios, etc.), `window.fbq` não existe e
  * a chamada simplesmente não faz nada — nunca deve impedir a ação real da
  * cliente nem gerar erro no console.
+ *
+ * `eventId`, quando informado, é passado como `eventID` (4º argumento do
+ * `fbq`) — é o mecanismo oficial de deduplicação Pixel/CAPI da Meta: o
+ * MESMO valor deve ser enviado também no `event_id` do lado servidor (ver
+ * lib/analytics/meta-capi.ts) para os dois serem reconhecidos como um único
+ * evento.
  */
-export function trackPixelEvent(eventName: string, params?: Record<string, unknown>): void {
+export function trackPixelEvent(eventName: string, params?: Record<string, unknown>, eventId?: string): void {
   try {
-    devLog(eventName, params);
-    window.fbq?.("track", eventName, params);
+    devLog(eventName, params, eventId);
+    if (eventId) {
+      window.fbq?.("track", eventName, params, { eventID: eventId });
+    } else {
+      window.fbq?.("track", eventName, params);
+    }
   } catch {
     // Nunca deixa uma falha do Pixel afetar o fluxo real.
   }
@@ -97,13 +107,20 @@ export function trackAddToCart(product: MetaTrackableProduct, selectedSize?: str
  * junto da abertura real do WhatsApp (nunca ao abrir a tela de escolha de
  * vendedora). Nunca inclui PII (nome/telefone/e-mail/endereço da cliente
  * ou da vendedora) — só dados agregados da seleção.
+ *
+ * `eventId`, quando informado, viaja também para a Conversions API (mesmo
+ * evento, mesmo id, dois caminhos) — ver submitFavoritesWhatsAppClick.
  */
-export function trackLead(lead: MetaLeadData): void {
-  trackPixelEvent("Lead", {
-    content_ids: lead.contentIds,
-    content_type: "product",
-    value: lead.value,
-    currency: "BRL",
-    num_items: lead.numItems,
-  });
+export function trackLead(lead: MetaLeadData, eventId?: string): void {
+  trackPixelEvent(
+    "Lead",
+    {
+      content_ids: lead.contentIds,
+      content_type: "product",
+      value: lead.value,
+      currency: "BRL",
+      num_items: lead.numItems,
+    },
+    eventId
+  );
 }

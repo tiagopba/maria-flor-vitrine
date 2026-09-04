@@ -138,6 +138,11 @@ export function FavoritesPageClient({
       size: entryByProductId.get(p.id)?.selected_size ?? null,
     }));
 
+    // Um único id pros dois lados do Lead (Pixel do browser + Conversions
+    // API) — é isso que permite a Meta reconhecer as duas chamadas como um
+    // único evento em vez de contar duas conversões.
+    const eventId = crypto.randomUUID();
+
     try {
       const utm = captureAndPersistUtm();
       const result = await submitFavoritesWhatsAppClick({
@@ -150,6 +155,8 @@ export function FavoritesPageClient({
         utmContent: utm.utm_content ?? null,
         referrer: utm.referrer ?? null,
         skipSelectionLink,
+        eventId,
+        eventSourceUrl: window.location.href,
       });
 
       if ("error" in result) {
@@ -160,7 +167,7 @@ export function FavoritesPageClient({
       }
 
       markJustContactedSeller();
-      trackLead(result.leadData);
+      trackLead(result.leadData, eventId);
       window.location.href = result.url;
     } catch {
       setSellerError("Não foi possível abrir o WhatsApp. Tente novamente.");

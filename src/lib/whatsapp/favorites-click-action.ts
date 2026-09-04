@@ -1,11 +1,14 @@
 "use server";
 
+import { after } from "next/server";
+import { cookies, headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createSharedSelection } from "@/lib/db/shared-selections";
 import { getColorNamesByIds } from "@/lib/db/colors";
 import { getSiteUrl } from "@/lib/site";
 import { resolveProductPricing, resolveTrackingPrice } from "@/lib/catalog/pricing";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
+import { sendCapiEvent } from "@/lib/analytics/meta-capi";
 import type { Database } from "@/types/database";
 import { buildFavoritesWhatsAppMessage, buildWhatsAppUrl } from "./message-builder";
 import { resolveSeller } from "./resolve-seller";
@@ -37,6 +40,14 @@ export interface FavoritesWhatsAppInput {
   /** Default "favorites_page" — o fluxo guiado no produto passa
    * "product_page" pra distinguir a origem no funil. */
   source?: string;
+  /**
+   * Gerado uma única vez no client antes desta chamada — mesmo valor usado
+   * em `fbq('track', 'Lead', ..., {eventID})` E no `event_id` da Conversions
+   * API, pra Meta deduplicar os dois lados como um único evento.
+   */
+  eventId: string;
+  /** `window.location.href` da cliente no momento do clique — vai como `event_source_url` na CAPI. */
+  eventSourceUrl: string;
 }
 
 /** Dado agregado da seleção só pro Meta Pixel (`Lead`) — nunca inclui PII. */
@@ -191,6 +202,39 @@ export async function submitFavoritesWhatsAppClick(
     value: available.reduce((sum, p) => sum + resolveTrackingPrice(resolveProductPricing(p, paymentSettings)), 0),
     numItems: available.length,
   };
+
+  // Conversions API — mesmo evento Lead do Pixel do browser, mesmo
+  // `eventId`, entregue por um segundo caminho (servidor). Roda DEPOIS da
+  // resposta já ter sido enviada ao client (after()), então nunca atrasa
+  // nem pode impedir a abertura do WhatsApp; qualquer falha (token ausente,
+  // rede, recusa da Meta) fica isolada dentro de sendCapiEvent, que nunca
+  // lança — o try/catch aqui é só uma segunda camada de segurança.
+  after(async () => {
+    try {
+      const [hdrs, cookieStore] = await Promise.all([headers(), cookies()]);
+      await sendCapiEvent({
+        eventName: "Lead",
+        eventId: input.eventId,
+        eventSourceUrl: input.eventSourceUrl,
+        userData: {
+          clientIpAddress: hdrs.get("x-forwarded-for")?.split(",")[0]?.trim(),
+          clientUserAgent: hdrs.get("user-agent") ?? undefined,
+          fbp: cookieStore.get("_fbp")?.value,
+          fbc: cookieStore.get("_fbc")?.value,
+        },
+        customData: {
+          content_ids: leadData.contentIds,
+          content_type: "product",
+          value: leadData.value,
+          currency: "BRL",
+          num_items: leadData.numItems,
+        },
+      });
+    } catch {
+      // sendCapiEvent já trata os próprios erros internamente; nunca deve
+      // chegar aqui, mas por segurança nunca deixa nada escapar do after().
+    }
+  });
 
   return { url: buildWhatsAppUrl(seller.whatsapp_number, message), leadData };
 }
