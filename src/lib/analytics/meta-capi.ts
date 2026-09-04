@@ -44,32 +44,19 @@ export interface SendCapiEventInput {
   customData?: Record<string, unknown>;
 }
 
-// TEMP (validação runtime determinística) — REVERTER: restaurar
-// `Promise<void>` e remover este tipo depois do teste.
-export interface CapiEventResult {
-  event_name: string;
-  event_id: string;
-  http_status: number;
-  events_received?: number;
-  messages?: unknown;
-  fbtrace_id?: string;
-}
-
 /**
  * Envia um evento à Conversions API. Nunca lança — qualquer problema (token/
  * Pixel ID ausentes, timeout, resposta de erro da Meta) só é logado no
  * servidor via `console.error`, nunca exposto ao client.
  */
-// TEMP: tipo de retorno mudou de `Promise<void>` pra `Promise<CapiEventResult | null>`
-// só pra validação determinística via rota de teste — REVERTER pra `Promise<void>`.
-export async function sendCapiEvent(input: SendCapiEventInput): Promise<CapiEventResult | null> {
+export async function sendCapiEvent(input: SendCapiEventInput): Promise<void> {
   const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID;
   const accessToken = process.env.META_CONVERSIONS_API_TOKEN;
 
   // Sem Pixel ID ou token configurados (dev local, Preview sem CAPI própria,
   // ou a loja simplesmente ainda não tem), a CAPI vira no-op — igual ao
   // comportamento já estabelecido do Pixel do browser.
-  if (!pixelId || !accessToken) return null;
+  if (!pixelId || !accessToken) return;
 
   try {
     const testEventCode = process.env.META_TEST_EVENT_CODE;
@@ -103,26 +90,14 @@ export async function sendCapiEvent(input: SendCapiEventInput): Promise<CapiEven
       signal: AbortSignal.timeout(5000),
     });
 
-    const responseBody = await response.json().catch(() => null);
-
     if (!response.ok) {
-      console.error(`[meta-capi] evento "${input.eventName}" recusado pela Meta (HTTP ${response.status}):`, responseBody);
+      const body = await response.text().catch(() => "");
+      console.error(`[meta-capi] evento "${input.eventName}" recusado pela Meta (HTTP ${response.status}):`, body);
     }
-
-    // TEMP: retorno sanitizado só pra validação determinística — REVERTER.
-    return {
-      event_name: input.eventName,
-      event_id: input.eventId,
-      http_status: response.status,
-      events_received: responseBody?.events_received,
-      messages: responseBody?.messages,
-      fbtrace_id: responseBody?.fbtrace_id,
-    };
   } catch (error) {
     console.error(
       `[meta-capi] falha ao enviar evento "${input.eventName}":`,
       error instanceof Error ? error.message : error
     );
-    return null;
   }
 }
