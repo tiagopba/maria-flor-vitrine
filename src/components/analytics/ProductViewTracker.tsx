@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { recordAnalyticsEvent } from "@/lib/analytics/track";
-import { trackPixelEvent } from "@/lib/analytics/meta-pixel";
+import { trackViewContent } from "@/lib/analytics/meta-pixel";
 import { getDeviceType } from "@/lib/analytics/device";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
@@ -18,11 +18,13 @@ export function ProductViewTracker({
   productId,
   categoryId,
   code,
+  name,
   price,
 }: {
   productId: string;
   categoryId: string;
   code: string;
+  name: string;
   price: number;
 }) {
   const trackedFor = useRef<string | null>(null);
@@ -46,13 +48,8 @@ export function ProductViewTracker({
       referrer: utm.referrer ?? null,
     }).catch(() => {});
 
-    trackPixelEvent("ViewContent", {
-      content_ids: [code],
-      content_type: "product",
-      value: price,
-      currency: "BRL",
-    });
-  }, [productId, categoryId, code, price]);
+    trackViewContent({ code, name, price });
+  }, [productId, categoryId, code, name, price]);
 
   return null;
 }

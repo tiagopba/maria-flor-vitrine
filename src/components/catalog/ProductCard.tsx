@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Price } from "@/components/ui/Price";
 import { FavoriteButton } from "@/components/catalog/FavoriteButton";
+import { resolveProductPricing, resolveTrackingPrice } from "@/lib/catalog/pricing";
 import { publicStatusBadge } from "@/lib/catalog/status";
 import type { DisplayGroupSwatch } from "@/lib/catalog/group-products-for-display";
 import type { ProductListItem } from "@/lib/db/products";
@@ -21,6 +22,7 @@ export function ProductCard({
   swatches?: DisplayGroupSwatch[];
 }) {
   const badge = publicStatusBadge(product.status);
+  const trackedPrice = resolveTrackingPrice(resolveProductPricing(product, paymentSettings));
   const visibleSwatches = swatches.slice(0, MAX_VISIBLE_SWATCHES);
   const hiddenSwatchCount = swatches.length - visibleSwatches.length;
 
@@ -44,6 +46,8 @@ export function ProductCard({
         <FavoriteButton
           productId={product.id}
           productCode={product.code}
+          productName={product.name}
+          price={trackedPrice}
           size="sm"
           className="absolute right-2 top-2"
         />

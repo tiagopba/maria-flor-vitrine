@@ -13,7 +13,7 @@ import type { ProductStatus } from "@/types/database";
  * de produto: é só uma projeção de leitura do que já existe.
  *
  * `id = product.code` de propósito — é o mesmo identificador que
- * ViewContent e AddToWishlist do Meta Pixel já enviam em `content_ids`
+ * ViewContent, AddToCart e Lead do Meta Pixel já enviam em `content_ids`
  * (ver ProductViewTracker/FavoriteButton/ProductWhatsAppFlow), então um
  * evento de Pixel e uma linha deste feed sempre apontam pro mesmo item aos
  * olhos do Meta — pré-requisito pra Catálogo Dinâmico/Advantage+ casar
@@ -91,7 +91,7 @@ export async function buildMetaCatalogFeed(): Promise<MetaCatalogFeedResult> {
 
     const id = product.code;
     // Defensivo: `code` já é único por linha de produto na prática (mesma
-    // premissa que ViewContent/AddToWishlist já assumem), mas nunca deixa
+    // premissa que ViewContent/AddToCart já assumem), mas nunca deixa
     // um id duplicado ir pro feed se isso um dia deixar de ser verdade.
     if (seenIds.has(id)) {
       skippedDuplicateIdCount++;

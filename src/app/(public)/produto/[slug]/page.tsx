@@ -19,7 +19,7 @@ import { buildProductJsonLd } from "@/lib/seo/structured-data";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { getSiteUrl } from "@/lib/site";
 import { ProductViewTracker } from "@/components/analytics/ProductViewTracker";
-import { resolveProductPricing } from "@/lib/catalog/pricing";
+import { resolveProductPricing, resolveTrackingPrice } from "@/lib/catalog/pricing";
 
 export async function generateMetadata({
   params,
@@ -78,7 +78,7 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
   const exploreCategories = buildExploreCategoriesItems(categories);
 
   const pricing = resolveProductPricing(product, paymentSettings);
-  const trackedPrice = pricing.model === "dual" ? pricing.cashPrice : pricing.promotionalPrice ?? pricing.price;
+  const trackedPrice = resolveTrackingPrice(pricing);
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6">
@@ -87,6 +87,7 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
         productId={product.id}
         categoryId={product.category_id}
         code={product.code}
+        name={product.name}
         price={trackedPrice}
       />
       <BackButton fallbackHref="/novidades" className="mb-4" />
