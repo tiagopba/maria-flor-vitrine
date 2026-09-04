@@ -7,7 +7,7 @@ import { useIsFavorited } from "@/lib/favorites/useFavorites";
 import { recordFavoriteEvent } from "@/lib/favorites/analytics";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { getPersistedUtm } from "@/lib/utm/persist";
-import { trackPixelEvent } from "@/lib/analytics/meta-pixel";
+import { trackAddToCart } from "@/lib/analytics/meta-pixel";
 
 /**
  * Coração de favoritar — usado no ProductCard (dentro de um <Link>, por
@@ -19,6 +19,8 @@ import { trackPixelEvent } from "@/lib/analytics/meta-pixel";
 export function FavoriteButton({
   productId,
   productCode,
+  productName,
+  price,
   className,
   size = "md",
 }: {
@@ -30,6 +32,9 @@ export function FavoriteButton({
    * localStorage e analytics interno).
    */
   productCode: string;
+  /** Nome e preço (já resolvido/efetivo) só para os parâmetros do AddToCart. */
+  productName: string;
+  price: number;
   className?: string;
   size?: "sm" | "md";
 }) {
@@ -43,7 +48,7 @@ export function FavoriteButton({
     const nowFavorited = toggleFavorite(productId);
 
     if (nowFavorited) {
-      trackPixelEvent("AddToWishlist", { content_ids: [productCode], content_type: "product" });
+      trackAddToCart({ code: productCode, name: productName, price });
     }
 
     startTransition(() => {

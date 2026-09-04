@@ -71,3 +71,13 @@ export function resolveProductPricing(
     installmentAmount,
   };
 }
+
+/**
+ * Preço "efetivo" pra tracking (Meta Pixel, Meta Catalog): no modelo dual
+ * usa o preço à vista (Pix); no legado, a promocional quando existir, senão
+ * o preço cheio. Um único lugar pra essa regra — reaproveitada em todo
+ * evento/feed que precisa de um `value` numérico único por produto.
+ */
+export function resolveTrackingPrice(pricing: ProductPricing): number {
+  return pricing.model === "dual" ? pricing.cashPrice : pricing.promotionalPrice ?? pricing.price;
+}
