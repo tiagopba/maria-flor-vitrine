@@ -68,12 +68,47 @@ const AVAILABILITY_BY_STATUS: Record<ProductStatus, string> = {
 };
 
 /**
+ * Política de devolução real da loja (7 dias, correio, frete de volta pago
+ * pela Maria Flor) — igual para todo produto, não é dado por produto, então
+ * fica fixa aqui em vez de vir do cadastro. Só os 5 campos que o Google
+ * exige para `MerchantReturnPolicy`; nenhuma taxa foi inventada —
+ * `returnFees: FreeReturn` reflete literalmente "a loja paga o frete de
+ * devolução", que é a regra real informada.
+ */
+const RETURN_POLICY = {
+  "@type": "MerchantReturnPolicy",
+  applicableCountry: "BR",
+  returnPolicyCategory: "https://schema.org/MerchantReturnFiniteReturnWindow",
+  merchantReturnDays: 7,
+  returnMethod: "https://schema.org/ReturnByMail",
+  returnFees: "https://schema.org/FreeReturn",
+} as const;
+
+const BRAND_NAME = "Maria Flor";
+
+/**
  * JSON-LD `Product` da página de produto. Preço único em `offers.price`
  * (exigência do schema — não dá pra declarar Pix e cartão ao mesmo tempo);
  * usa o menor preço real do produto (Pix/à vista quando o modelo dual está
  * ativo, senão o preço promocional ou o preço cheio do modelo legado) —
- * nunca um valor inventado. Sem `sku`/estoque numérico: o sistema não
- * controla quantidade, só os status (`ACTIVE`/`LAST_UNITS`/etc.).
+ * nunca um valor inventado. Sem estoque numérico: o sistema não controla
+ * quantidade, só os status (`ACTIVE`/`LAST_UNITS`/etc.).
+ *
+ * Identificadores: `sku`/`mpn` usam `product.code` (código interno real,
+ * já exibido pra cliente na própria página — "Código: ..."). Nenhum GTIN/
+ * EAN é declarado porque o cadastro de produto não guarda esse dado — não
+ * é inventado. `brand` é a Maria Flor mesma (mesma literal já usada no
+ * feed do Catálogo Meta, lib/feeds/meta-catalog.ts). Sem `identifierExists`
+ * de propósito: esse campo é só para quando NENHUM identificador existe —
+ * como sku/mpn/brand existem de verdade aqui, declará-lo como `false`
+ * seria incorreto.
+ *
+ * `shippingDetails` fica de fora nesta rodada: a Maria Flor faz frete
+ * grátis a partir de um valor mínimo que varia por promoção, sem nenhuma
+ * configuração real/dinâmica desse limite no sistema hoje (nenhuma chave
+ * em site_settings, nada equivalente a PAYMENT_SETTINGS pro frete) — sem
+ * um valor real pra usar, declarar um `shippingRate`/limite fixo seria
+ * inventar dado só pra silenciar o aviso do Search Console.
  */
 export function buildProductJsonLd(
   product: ProductDetail,
@@ -89,6 +124,8 @@ export function buildProductJsonLd(
     "@type": "Product",
     name: product.name,
     sku: product.code,
+    mpn: product.code,
+    brand: { "@type": "Brand", name: BRAND_NAME },
     url,
     ...(product.images[0]?.url ? { image: product.images.map((img) => img.url) } : {}),
     ...(product.description ? { description: product.description } : {}),
@@ -98,6 +135,7 @@ export function buildProductJsonLd(
       priceCurrency: "BRL",
       price: price.toFixed(2),
       availability: AVAILABILITY_BY_STATUS[product.status],
+      hasMerchantReturnPolicy: RETURN_POLICY,
     },
   };
 }
