@@ -9,7 +9,7 @@ const FUNNEL_STEPS: { key: keyof FunnelData; label: string }[] = [
   { key: "visitSessions", label: "Visitou a vitrine" },
   { key: "productViewSessions", label: "Visualizou um produto" },
   { key: "selectionSessions", label: "Adicionou à Minha Seleção" },
-  { key: "whatsappSessions", label: "Iniciou conversa no WhatsApp" },
+  { key: "whatsappSessions", label: "Clique para WhatsApp" },
 ];
 
 /**

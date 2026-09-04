@@ -77,7 +77,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
         <DashboardCard label="Sessões únicas" comparison={data.cards.uniqueSessions} icon={Users} />
         <DashboardCard label="Visualizações de produtos" comparison={data.cards.productViews} icon={ShoppingBag} />
         <DashboardCard label="Adições à Minha Seleção" comparison={data.cards.favoritesAdded} icon={Heart} />
-        <DashboardCard label="Conversas iniciadas no WhatsApp" comparison={data.cards.whatsappStarted} icon={MessageCircle} />
+        <DashboardCard
+          label="Cliques para WhatsApp"
+          comparison={data.cards.whatsappStarted}
+          icon={MessageCircle}
+          hint="Sessões distintas com clique — não confirma envio da mensagem"
+        />
         <DashboardCard
           label="Cadastros no Grupo de Ofertas"
           comparison={data.cards.offersLeadsConfirmed}
