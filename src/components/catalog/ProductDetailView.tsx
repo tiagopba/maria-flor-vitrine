@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { DualPriceBlock, Price } from "@/components/ui/Price";
 import { FavoriteButton } from "@/components/catalog/FavoriteButton";
 import { ProductWhatsAppFlow } from "@/components/catalog/ProductWhatsAppFlow";
-import { resolveProductPricing } from "@/lib/catalog/pricing";
+import { resolveProductPricing, resolveTrackingPrice } from "@/lib/catalog/pricing";
 import { PRODUCT_STATUS_LABELS, publicStatusBadge } from "@/lib/catalog/status";
 import type { ProductDetail } from "@/lib/db/products";
 import type { PaymentSettings } from "@/lib/site-settings/payments";
@@ -222,6 +222,7 @@ export function ProductDetailView({
   const badge = publicStatusBadge(active.status);
   const isSoldOut = active.status === "SOLD_OUT";
   const pricing = resolveProductPricing(active, paymentSettings);
+  const trackedPrice = resolveTrackingPrice(pricing);
 
   return (
     <div className="grid gap-8 sm:grid-cols-2">
@@ -343,6 +344,8 @@ export function ProductDetailView({
           <FavoriteButton
             productId={active.id}
             productCode={active.code}
+            productName={active.name}
+            price={trackedPrice}
             className="shrink-0 bg-muted hover:bg-border"
           />
         </div>
@@ -416,6 +419,8 @@ export function ProductDetailView({
             key={active.id}
             productId={active.id}
             productCode={active.code}
+            productName={active.name}
+            price={trackedPrice}
             status={active.status}
             sizes={active.sizes}
             sellers={sellers}

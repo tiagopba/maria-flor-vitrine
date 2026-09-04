@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import Script from "next/script";
 import { usePathname, useSearchParams } from "next/navigation";
-import { getMetaPixelId } from "@/lib/analytics/meta-pixel";
+import { getMetaPixelId, trackPageView } from "@/lib/analytics/meta-pixel";
 
 /**
  * Base code oficial do Meta Pixel — carregado só quando
@@ -17,18 +17,27 @@ export function MetaPixel() {
   const pixelId = getMetaPixelId();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const isFirstRender = useRef(true);
+  const routeKey = `${pathname}?${searchParams.toString()}`;
+  // Guarda pelo VALOR da rota já contabilizada (não um booleano de "já
+  // passou da primeira renderização") — um booleano quebra em desenvolvimento
+  // porque o React Strict Mode roda o efeito de montagem duas vezes de
+  // propósito (diagnóstico, só em dev), e um simples toggle interpretaria a
+  // segunda chamada como "troca de rota" e disparia um PageView duplicado.
+  // Comparar contra a própria rota é idempotente: reexecutar o efeito para a
+  // MESMA rota nunca dispara de novo, só uma troca real de valor dispara.
+  const lastTrackedRoute = useRef<string | null>(null);
 
   useEffect(() => {
     if (!pixelId) return;
-    if (isFirstRender.current) {
+    if (lastTrackedRoute.current === routeKey) return;
+    if (lastTrackedRoute.current === null) {
       // O próprio base code (script abaixo) já dispara o PageView inicial.
-      isFirstRender.current = false;
+      lastTrackedRoute.current = routeKey;
       return;
     }
-    window.fbq?.("track", "PageView");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, searchParams]);
+    lastTrackedRoute.current = routeKey;
+    trackPageView();
+  }, [pixelId, routeKey]);
 
   if (!pixelId) return null;
 

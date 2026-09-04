@@ -15,7 +15,7 @@ import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
 import { submitWhatsAppClick } from "@/lib/whatsapp/click-action";
 import { submitFavoritesWhatsAppClick } from "@/lib/whatsapp/favorites-click-action";
-import { trackPixelEvent } from "@/lib/analytics/meta-pixel";
+import { trackAddToCart, trackLead, trackPixelEvent } from "@/lib/analytics/meta-pixel";
 import type { ProductStatus } from "@/types/database";
 
 /**
@@ -30,6 +30,8 @@ import type { ProductStatus } from "@/types/database";
 export function ProductWhatsAppFlow({
   productId,
   productCode,
+  productName,
+  price,
   status,
   sizes,
   sellers,
@@ -41,6 +43,9 @@ export function ProductWhatsAppFlow({
    * baseado em `productId`.
    */
   productCode: string;
+  /** Nome e preço (já resolvido/efetivo) só para os parâmetros do AddToCart. */
+  productName: string;
+  price: number;
   status: ProductStatus;
   sizes: string[];
   sellers: { id: string; name: string }[];
@@ -128,7 +133,7 @@ export function ProductWhatsAppFlow({
       metadata: { size },
     }).catch(() => {});
 
-    trackPixelEvent("AddToWishlist", { content_ids: [productCode], content_type: "product" });
+    trackAddToCart({ code: productCode, name: productName, price }, size);
 
     setSizeSheetOpen(false);
     setAddedSheetOpen(true);
@@ -229,7 +234,7 @@ export function ProductWhatsAppFlow({
       }
 
       markJustContactedSeller();
-      trackPixelEvent("Contact");
+      trackLead(result.leadData);
       window.location.href = result.url;
     } catch {
       setSellerError("Não foi possível abrir o WhatsApp. Tente novamente.");

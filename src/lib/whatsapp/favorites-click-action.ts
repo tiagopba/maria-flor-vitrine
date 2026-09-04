@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createSharedSelection } from "@/lib/db/shared-selections";
 import { getColorNamesByIds } from "@/lib/db/colors";
 import { getSiteUrl } from "@/lib/site";
-import { resolveProductPricing } from "@/lib/catalog/pricing";
+import { resolveProductPricing, resolveTrackingPrice } from "@/lib/catalog/pricing";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import type { Database } from "@/types/database";
 import { buildFavoritesWhatsAppMessage, buildWhatsAppUrl } from "./message-builder";
@@ -39,8 +39,15 @@ export interface FavoritesWhatsAppInput {
   source?: string;
 }
 
+/** Dado agregado da seleção só pro Meta Pixel (`Lead`) — nunca inclui PII. */
+export interface FavoritesLeadData {
+  contentIds: string[];
+  value: number;
+  numItems: number;
+}
+
 export type FavoritesWhatsAppResult =
-  | { url: string }
+  | { url: string; leadData: FavoritesLeadData }
   | { error: string; code?: "selection_failed" };
 
 /**
@@ -179,5 +186,11 @@ export async function submitFavoritesWhatsAppClick(
     console.error("[submitFavoritesWhatsAppClick] falha ao registrar analytics_events:", insertError.message);
   }
 
-  return { url: buildWhatsAppUrl(seller.whatsapp_number, message) };
+  const leadData: FavoritesLeadData = {
+    contentIds: available.map((p) => p.code),
+    value: available.reduce((sum, p) => sum + resolveTrackingPrice(resolveProductPricing(p, paymentSettings)), 0),
+    numItems: available.length,
+  };
+
+  return { url: buildWhatsAppUrl(seller.whatsapp_number, message), leadData };
 }
