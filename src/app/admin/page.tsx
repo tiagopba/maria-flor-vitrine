@@ -4,7 +4,7 @@ import { getCurrentAdmin } from "@/lib/auth/permissions";
 import { getDashboardData, type DashboardPeriod } from "@/lib/analytics/dashboard";
 import { DashboardPeriodFilter } from "./DashboardPeriodFilter";
 import { DashboardCard } from "./DashboardCard";
-import { DailyEvolutionChart, RankingList } from "./DashboardCharts";
+import { RankingList } from "./DashboardCharts";
 import { ConversionFunnel, DeviceBreakdown } from "./DashboardFunnel";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -112,10 +112,6 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
         />
       </div>
 
-      <div className="mt-6">
-        <DailyEvolutionChart points={data.dailyEvolution} />
-      </div>
-
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <ConversionFunnel funnel={data.funnel} />
         <DeviceBreakdown devices={data.devices} />
@@ -123,18 +119,34 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
         <RankingList
-          title="Peças mais adicionadas à seleção"
-          rows={data.topAddedProducts}
-          emptyLabel="Nenhuma peça adicionada à seleção neste período."
-          withAvatar
-        />
-        <RankingList title="Categorias com mais interesse" rows={data.topCategories} emptyLabel="Sem visualizações de categoria neste período." />
-        <RankingList title="Tamanhos mais procurados" rows={data.topSizes} emptyLabel="Sem tamanho registrado neste período." />
-        <RankingList
           title="Produtos mais visualizados"
           rows={data.topViewedProducts}
           emptyLabel="Sem visualizações neste período."
           withAvatar
+          primaryUnitLabel="sessões interessadas"
+          secondaryUnitLabel="visualizações"
+        />
+        <RankingList
+          title="Peças mais adicionadas à seleção"
+          rows={data.topAddedProducts}
+          emptyLabel="Nenhuma peça adicionada à seleção neste período."
+          withAvatar
+          primaryUnitLabel="sessões adicionaram"
+          secondaryUnitLabel="adições"
+        />
+        <RankingList
+          title="Categorias com mais interesse"
+          rows={data.topCategories}
+          emptyLabel="Sem visualizações de categoria neste período."
+          primaryUnitLabel="sessões interessadas"
+          secondaryUnitLabel="visualizações"
+        />
+        <RankingList
+          title="Tamanhos mais procurados"
+          rows={data.topSizes}
+          emptyLabel="Sem tamanho registrado neste período."
+          primaryUnitLabel="sessões buscaram"
+          secondaryUnitLabel="menções"
         />
         <RankingList title="Origem do tráfego (sessões)" rows={data.trafficSources} emptyLabel="Sem sessões neste período." />
       </div>
