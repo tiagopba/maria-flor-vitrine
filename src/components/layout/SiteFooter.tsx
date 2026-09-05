@@ -29,7 +29,33 @@ export async function SiteFooter() {
           {locationLine && <p className="mt-1 text-sm text-text-muted">{locationLine}</p>}
         </div>
 
-        <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-text">
+        {/* Links reais de categoria no rodapé (presente em toda página
+            pública) — reforço de SEO puramente aditivo: o carrossel
+            "Explore por categoria" da Home continua exatamente como está,
+            isso aqui é uma segunda superfície, sempre em HTML servido, sem
+            depender de clique/drawer/portal como o Menu do header. */}
+        <nav aria-label="Categorias">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">Categorias</p>
+          <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-text">
+            <Link href="/novidades" className="hover:text-primary">
+              Novidades
+            </Link>
+            <Link href="/categoria/vestidos" className="hover:text-primary">
+              Vestidos
+            </Link>
+            <Link href="/categoria/calcas" className="hover:text-primary">
+              Calças
+            </Link>
+            <Link href="/categoria/conjuntos" className="hover:text-primary">
+              Conjuntos
+            </Link>
+            <Link href="/categoria/blusas" className="hover:text-primary">
+              Blusas
+            </Link>
+          </div>
+        </nav>
+
+        <nav aria-label="Institucional" className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-text">
           <Link href="/" className="hover:text-primary">
             Início
           </Link>
