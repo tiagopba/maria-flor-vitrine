@@ -41,7 +41,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const [novidades, categorias, paymentSettings] = await Promise.all([
-    listPublishedProducts(8),
+    listPublishedProducts(12),
     getVisibleCategoriesPublic(),
     getPaymentSettings(),
   ]);
