@@ -9,6 +9,108 @@ export interface DateRange {
 }
 
 /**
+ * Fuso de negócio da Maria Flor (Paranaíba/MS) — "Hoje"/"Ontem"/"Mês atual"
+ * têm que virar à meia-noite AQUI, nunca à meia-noite do fuso de onde o
+ * processo Node roda (na Vercel isso é UTC por padrão; localmente pode ser
+ * outro fuso qualquer, ex. o do sistema operacional do dev). Ver auditoria:
+ * `setHours(0,0,0,0)`/`getFullYear()+getMonth()` sem fuso explícito é
+ * exatamente o bug que fazia o dashboard "zerar"/trocar de dia às ~20h em
+ * Paranaíba (meia-noite UTC = 20h em Campo Grande, fuso fixo UTC-4, sem
+ * horário de verão desde 2019).
+ */
+export const BUSINESS_TIMEZONE = "America/Campo_Grande";
+
+/**
+ * Ano/mês/dia/hora/min/seg que `date` representa quando visto no fuso
+ * `timeZone` — só leitura, via `Intl.DateTimeFormat` (nativo, sem lib nova).
+ * `hour: "2-digit"` do `Intl` pode devolver `"24"` pra meia-noite em alguns
+ * ambientes; normaliza pra `0` pra nunca virar um `Date.UTC` inválido.
+ */
+function getZonedDateParts(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(date);
+
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  const hour = get("hour");
+
+  return {
+    year: get("year"),
+    month: get("month"), // 1-indexed
+    day: get("day"),
+    hour: hour === 24 ? 0 : hour,
+    minute: get("minute"),
+    second: get("second"),
+  };
+}
+
+/**
+ * Converte um horário de parede (ano/mês/dia/hora/min/seg) EM `timeZone`
+ * pro instante UTC correspondente — o inverso de `getZonedDateParts`.
+ * Sem lib de fuso: monta um palpite tratando os números como se já fossem
+ * UTC, descobre o desvio real formatando esse palpite de volta em
+ * `timeZone`, e corrige por esse desvio. `America/Campo_Grande` é fuso fixo
+ * (sem DST), então esse desvio nunca muda e uma passada já é exata — não
+ * precisa de iteração (necessária em fusos com horário de verão).
+ */
+function zonedTimeToUtc(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  second: number,
+  timeZone: string
+): Date {
+  const guessUtcMs = Date.UTC(year, month - 1, day, hour, minute, second);
+  const zonedAsIfUtc = getZonedDateParts(new Date(guessUtcMs), timeZone);
+  const zonedAsIfUtcMs = Date.UTC(
+    zonedAsIfUtc.year,
+    zonedAsIfUtc.month - 1,
+    zonedAsIfUtc.day,
+    zonedAsIfUtc.hour,
+    zonedAsIfUtc.minute,
+    zonedAsIfUtc.second
+  );
+  const offsetMs = zonedAsIfUtcMs - guessUtcMs;
+  return new Date(guessUtcMs - offsetMs);
+}
+
+/**
+ * Meia-noite (00:00:00.000) em `America/Campo_Grande` do dia-calendário de
+ * `now` nesse mesmo fuso, deslocado por `dayOffset` dias-calendário
+ * (0 = hoje, -1 = ontem, -2 = anteontem). `Date.UTC` normaliza nativamente
+ * qualquer estouro de dia/mês/ano (ex.: dia 0 vira o último dia do mês
+ * anterior), então virada de mês/ano não precisa de tratamento especial.
+ */
+function zonedStartOfDayUtc(now: Date, dayOffset = 0): Date {
+  const { year, month, day } = getZonedDateParts(now, BUSINESS_TIMEZONE);
+  const normalized = new Date(Date.UTC(year, month - 1, day + dayOffset));
+  return zonedTimeToUtc(
+    normalized.getUTCFullYear(),
+    normalized.getUTCMonth() + 1,
+    normalized.getUTCDate(),
+    0,
+    0,
+    0,
+    BUSINESS_TIMEZONE
+  );
+}
+
+/** Meia-noite do dia 1 do mês-calendário de `now` em `America/Campo_Grande`. */
+function zonedStartOfMonthUtc(now: Date): Date {
+  const { year, month } = getZonedDateParts(now, BUSINESS_TIMEZONE);
+  return zonedTimeToUtc(year, month, 1, 0, 0, 0, BUSINESS_TIMEZONE);
+}
+
+/**
  * "Período anterior" é sempre uma janela do MESMO tamanho, imediatamente
  * antes do período atual — regra única e previsível pra qualquer um dos
  * filtros (ex: 7 dias comparam com os 7 dias anteriores a esses; Hoje
@@ -17,21 +119,18 @@ export interface DateRange {
  *
  * "Ontem" é o único período com fim fixo (não `now`): dia anterior completo,
  * 00:00 até 00:00 do dia seguinte (intervalo meio-aberto, mesmo padrão dos
- * outros — "Hoje" também vai de 00:00 até `now`). `setDate`/`setHours` usam
- * o horário local do processo (mesmo timezone que "Hoje"/"Mês atual" já
- * usam), então a virada de mês/ano é resolvida nativamente pelo `Date`. O
- * período anterior de "Ontem" é o dia anterior a ele, também completo.
+ * outros — "Hoje" também vai de 00:00 até `now`), ambos os limites em
+ * `America/Campo_Grande` via `zonedStartOfDayUtc`. O período anterior de
+ * "Ontem" é o dia anterior a ele, também completo.
  */
 export function resolvePeriodRanges(period: DashboardPeriod, now = new Date()): { current: DateRange; previous: DateRange } {
   if (period === "yesterday") {
-    const start = new Date(now);
-    start.setHours(0, 0, 0, 0);
-    start.setDate(start.getDate() - 1);
-    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    const start = zonedStartOfDayUtc(now, -1);
+    const end = zonedStartOfDayUtc(now, 0);
 
     return {
       current: { start, end },
-      previous: { start: new Date(start.getTime() - 24 * 60 * 60 * 1000), end: start },
+      previous: { start: zonedStartOfDayUtc(now, -2), end: start },
     };
   }
 
@@ -39,11 +138,12 @@ export function resolvePeriodRanges(period: DashboardPeriod, now = new Date()): 
 
   switch (period) {
     case "today": {
-      start = new Date(now);
-      start.setHours(0, 0, 0, 0);
+      start = zonedStartOfDayUtc(now);
       break;
     }
     case "7d": {
+      // Janela móvel pelo instante exato — sem alinhamento a dia-calendário
+      // nenhum, então nunca dependeu (e continua não dependendo) de fuso.
       start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       break;
     }
@@ -52,7 +152,7 @@ export function resolvePeriodRanges(period: DashboardPeriod, now = new Date()): 
       break;
     }
     case "month": {
-      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      start = zonedStartOfMonthUtc(now);
       break;
     }
   }

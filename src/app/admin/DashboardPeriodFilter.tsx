@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { resolvePeriodRanges, type DashboardPeriod } from "@/lib/analytics/dashboard";
+import { BUSINESS_TIMEZONE, resolvePeriodRanges, type DashboardPeriod } from "@/lib/analytics/dashboard";
 
 const OPTIONS: { value: DashboardPeriod; label: string }[] = [
   { value: "today", label: "Hoje" },
@@ -11,16 +11,21 @@ const OPTIONS: { value: DashboardPeriod; label: string }[] = [
   { value: "month", label: "Mês atual" },
 ];
 
+/**
+ * `timeZone` explícito de propósito — sem isso, `toLocaleDateString` usa o
+ * fuso do processo (na Vercel, UTC por padrão), que pode mostrar uma data
+ * diferente da que `resolvePeriodRanges` calculou pra `America/Campo_Grande`
+ * (mesmo bug de fuso implícito que afetava o cálculo, ver auditoria).
+ */
 function formatDate(date: Date): string {
-  return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: BUSINESS_TIMEZONE });
 }
 
 /**
  * Filtro de período via query param (`?period=`) — mesmo mecanismo de
  * antes (navegação normal por link, sem estado client), só reskinado como
  * um controle segmentado único + os dois intervalos de data reais
- * (calculados por `resolvePeriodRanges`, já existente e inalterado — só
- * consumido aqui pra exibição).
+ * (calculados por `resolvePeriodRanges`, consumido aqui só pra exibição).
  */
 export function DashboardPeriodFilter({ current }: { current: DashboardPeriod }) {
   const { current: currentRange, previous: previousRange } = resolvePeriodRanges(current);
