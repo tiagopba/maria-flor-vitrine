@@ -129,7 +129,20 @@ export default async function Home() {
             As novidades da Maria Flor aparecem aqui assim que forem publicadas.
           </div>
         ) : (
-          <GroupedProductGrid groups={novidadesGroups} paymentSettings={paymentSettings} />
+          <>
+            <GroupedProductGrid groups={novidadesGroups} paymentSettings={paymentSettings} />
+            <div className="mt-8 flex justify-center sm:mt-10">
+              <Link href="/novidades">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  className="px-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                >
+                  Ver mais produtos
+                </Button>
+              </Link>
+            </div>
+          </>
         )}
       </section>
 
