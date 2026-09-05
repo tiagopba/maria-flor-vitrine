@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { CategoryCarousel } from "@/components/catalog/CategoryCarousel";
+import { GroupedProductGrid } from "@/components/catalog/GroupedProductGrid";
 import { HomeSearch } from "@/components/catalog/HomeSearch";
-import { ProductGrid } from "@/components/catalog/ProductGrid";
 import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
+import { groupProductsForDisplay, type DisplayGroup } from "@/lib/catalog/group-products-for-display";
 import { getVisibleCategoriesPublic } from "@/lib/db/categories";
 import { listPublishedProducts } from "@/lib/db/products";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
@@ -39,9 +40,40 @@ export const metadata: Metadata = {
 // tinha ficado de fora.
 export const dynamic = "force-dynamic";
 
+const HOME_NOVIDADES_TARGET = 12;
+
+/**
+ * `listPublishedProducts(N)` traz N REGISTROS (uma linha por cor), não N
+ * cards — várias cores do mesmo modelo colapsam num card só depois do
+ * agrupamento (ver group-products-for-display.ts). Por isso não dá pra só
+ * pedir 12 registros e exibir: se os lançamentos mais recentes tiverem
+ * várias cores, 12 registros podem virar bem menos de 12 cards.
+ *
+ * Busca em lotes crescentes (24 → 48 → 96) até ter 12 grupos distintos ou
+ * esgotar o catálogo publicado, sempre reconsultando do topo (mesma
+ * ordenação por published_at desc) — o lote pequeno cobre o caso comum
+ * (poucas cores por modelo) com uma única consulta; só escala quando
+ * necessário, sem carregar o catálogo inteiro na Home.
+ */
+async function getHomeNovidadesGroups(): Promise<DisplayGroup[]> {
+  const batchSizes = [24, 48, 96];
+  let groups: DisplayGroup[] = [];
+
+  for (const batchSize of batchSizes) {
+    const products = await listPublishedProducts(batchSize);
+    groups = groupProductsForDisplay(products);
+
+    // Menos registros do que o lote pedido = catálogo publicado acabou,
+    // não adianta pedir um lote maior.
+    if (groups.length >= HOME_NOVIDADES_TARGET || products.length < batchSize) break;
+  }
+
+  return groups.slice(0, HOME_NOVIDADES_TARGET);
+}
+
 export default async function Home() {
-  const [novidades, categorias, paymentSettings] = await Promise.all([
-    listPublishedProducts(12),
+  const [novidadesGroups, categorias, paymentSettings] = await Promise.all([
+    getHomeNovidadesGroups(),
     getVisibleCategoriesPublic(),
     getPaymentSettings(),
   ]);
@@ -91,12 +123,12 @@ export default async function Home() {
           </Link>
         </div>
 
-        {novidades.length === 0 ? (
+        {novidadesGroups.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-text-muted">
             As novidades da Maria Flor aparecem aqui assim que forem publicadas.
           </div>
         ) : (
-          <ProductGrid products={novidades} paymentSettings={paymentSettings} />
+          <GroupedProductGrid groups={novidadesGroups} paymentSettings={paymentSettings} />
         )}
       </section>
 
