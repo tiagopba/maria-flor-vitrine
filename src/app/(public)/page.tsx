@@ -40,20 +40,21 @@ export const metadata: Metadata = {
 // tinha ficado de fora.
 export const dynamic = "force-dynamic";
 
-const HOME_NOVIDADES_TARGET = 12;
+const HOME_NOVIDADES_TARGET = 16;
 
 /**
  * `listPublishedProducts(N)` traz N REGISTROS (uma linha por cor), não N
  * cards — várias cores do mesmo modelo colapsam num card só depois do
  * agrupamento (ver group-products-for-display.ts). Por isso não dá pra só
- * pedir 12 registros e exibir: se os lançamentos mais recentes tiverem
- * várias cores, 12 registros podem virar bem menos de 12 cards.
+ * pedir `HOME_NOVIDADES_TARGET` registros e exibir: se os lançamentos mais
+ * recentes tiverem várias cores, esses registros podem virar bem menos
+ * cards do que o alvo depois do agrupamento.
  *
- * Busca em lotes crescentes (24 → 48 → 96) até ter 12 grupos distintos ou
- * esgotar o catálogo publicado, sempre reconsultando do topo (mesma
- * ordenação por published_at desc) — o lote pequeno cobre o caso comum
- * (poucas cores por modelo) com uma única consulta; só escala quando
- * necessário, sem carregar o catálogo inteiro na Home.
+ * Busca em lotes crescentes (24 → 48 → 96) até ter `HOME_NOVIDADES_TARGET`
+ * grupos distintos ou esgotar o catálogo publicado, sempre reconsultando
+ * do topo (mesma ordenação por published_at desc) — o lote pequeno cobre
+ * o caso comum (poucas cores por modelo) com uma única consulta; só
+ * escala quando necessário, sem carregar o catálogo inteiro na Home.
  */
 async function getHomeNovidadesGroups(): Promise<DisplayGroup[]> {
   const batchSizes = [24, 48, 96];
