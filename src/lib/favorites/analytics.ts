@@ -8,7 +8,8 @@ export interface RecordFavoriteEventInput {
     | "FAVORITE_REMOVED"
     | "FAVORITES_VIEW"
     | "PRODUCT_FLOW_STARTED"
-    | "PRODUCT_FLOW_SEE_MORE_CLICK";
+    | "PRODUCT_FLOW_SEE_MORE_CLICK"
+    | "SIZE_SELECTED";
   productId?: string | null;
   sessionId: string;
   utmSource: string | null;
@@ -27,8 +28,9 @@ export interface RecordFavoriteEventInput {
  * "fire-and-forget" pelo client (não bloqueia o coração instantâneo nem o
  * carregamento da página) — falha aqui nunca deve impedir a ação real.
  *
- * Todos os event_type deste módulo (incluindo PRODUCT_FLOW_STARTED/
- * PRODUCT_FLOW_SEE_MORE_CLICK) já estão na constraint do banco.
+ * Todos os event_type deste módulo já estão na constraint do banco —
+ * inclusive SIZE_SELECTED, que existe desde a migration inicial mas nunca
+ * tinha sido disparado por nenhum código até agora.
  */
 export async function recordFavoriteEvent(input: RecordFavoriteEventInput): Promise<void> {
   const supabase = createAdminClient();

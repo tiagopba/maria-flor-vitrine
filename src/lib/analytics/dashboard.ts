@@ -173,6 +173,9 @@ interface RawEvent {
   product_id: string | null;
   category_id: string | null;
   size: string | null;
+  /** "product_page" | "favorites_page" nos eventos de WhatsApp — base de
+   * whatsappByOrigin (ver classifyWhatsappOrigin). */
+  source: string | null;
   utm_source: string | null;
   utm_medium: string | null;
   referrer: string | null;
@@ -210,6 +213,13 @@ export interface RankingRow {
 export interface FunnelData {
   visitSessions: number;
   productViewSessions: number;
+  /** Sessões com PRODUCT_FLOW_STARTED — clique em "Quero essa peça" na
+   * página do produto. */
+  flowStartedSessions: number;
+  /** Sessões com SIZE_SELECTED — evento existe desde a migration inicial,
+   * mas só passou a ser disparado (fluxo guiado de "Quero essa peça")
+   * junto desta mudança; sem histórico antes disso, ver PARTE 9. */
+  sizeSelectedSessions: number;
   selectionSessions: number;
   whatsappSessions: number;
 }
@@ -265,12 +275,19 @@ export interface DashboardData {
    * referrer do primeiro PAGE_VIEW de cada sessão no período (ver
    * classifyTrafficSource). */
   trafficSources: RankingRow[];
+  /** Página do produto ("Tirar dúvidas"/WHATSAPP_CLICK) vs Minha Seleção
+   * (FAVORITES_WHATSAPP_CLICK) — sessões distintas, ver
+   * classifyWhatsappOrigin. Mesmo par de eventos de whatsappSessions/
+   * whatsappStarted, só quebrado por origem. */
+  whatsappByOrigin: RankingRow[];
 }
 
 const RELEVANT_EVENT_TYPES = [
   "PAGE_VIEW",
   "PRODUCT_VIEW",
   "CATEGORY_VIEW",
+  "PRODUCT_FLOW_STARTED",
+  "SIZE_SELECTED",
   "FAVORITE_ADDED",
   "WHATSAPP_CLICK",
   "FAVORITES_WHATSAPP_CLICK",
@@ -281,6 +298,24 @@ const RELEVANT_EVENT_TYPES = [
  * reaproveitado por qualquer métrica que precise de "sessão com
  * WhatsApp" (funil, taxa, card), nunca uma lista divergente. */
 const WHATSAPP_EVENT_TYPES = ["WHATSAPP_CLICK", "FAVORITES_WHATSAPP_CLICK"] as const;
+
+const WHATSAPP_ORIGIN_BUCKETS = ["Página do produto", "Minha Seleção", "Outros"] as const;
+type WhatsappOriginBucket = (typeof WHATSAPP_ORIGIN_BUCKETS)[number];
+
+/**
+ * Origem do clique pro WhatsApp — WHATSAPP_CLICK (rota "Tirar dúvidas"/
+ * "Quero algo parecido", uma peça só, nunca passa por Favoritos) é sempre
+ * "Página do produto"; FAVORITES_WHATSAPP_CLICK usa a coluna `source` já
+ * gravada por quem dispara o evento ("product_page" no fluxo guiado do
+ * produto, "favorites_page" em /favoritos — ver favorites-click-action.ts).
+ * "Outros" cobre qualquer `source` inesperado, nunca inventa uma origem.
+ */
+function classifyWhatsappOrigin(row: Pick<RawEvent, "event_type" | "source">): WhatsappOriginBucket {
+  if (row.event_type === "WHATSAPP_CLICK") return "Página do produto";
+  if (row.source === "product_page") return "Página do produto";
+  if (row.source === "favorites_page") return "Minha Seleção";
+  return "Outros";
+}
 
 // Teto de segurança — generoso pro volume real de uma boutique, evita uma
 // consulta sem limite nenhum se o período for muito longo.
@@ -402,7 +437,7 @@ function extractSize(row: RawEvent): string | null {
 }
 
 const EVENT_COLUMNS =
-  "event_type, session_id, product_id, category_id, size, utm_source, utm_medium, referrer, device_type, metadata, created_at";
+  "event_type, session_id, product_id, category_id, size, source, utm_source, utm_medium, referrer, device_type, metadata, created_at";
 
 /**
  * `.limit(MAX_EVENTS)` sozinho não bastava: o PostgREST do projeto tem um
@@ -476,6 +511,8 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   const previousVisitSessions = distinctSessionIds(previousRows, ["PAGE_VIEW"]);
   const currentProductViewSessions = distinctSessionIds(currentRows, ["PRODUCT_VIEW"]);
   const previousProductViewSessions = distinctSessionIds(previousRows, ["PRODUCT_VIEW"]);
+  const currentFlowStartedSessions = distinctSessionIds(currentRows, ["PRODUCT_FLOW_STARTED"]);
+  const currentSizeSelectedSessions = distinctSessionIds(currentRows, ["SIZE_SELECTED"]);
   const currentSelectionSessions = distinctSessionIds(currentRows, ["FAVORITE_ADDED"]);
   const previousSelectionSessions = distinctSessionIds(previousRows, ["FAVORITE_ADDED"]);
   const currentWhatsappSessions = distinctSessionIds(currentRows, WHATSAPP_EVENT_TYPES);
@@ -491,9 +528,23 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   const funnel: FunnelData = {
     visitSessions: currentVisitSessions.size,
     productViewSessions: currentProductViewSessions.size,
+    flowStartedSessions: currentFlowStartedSessions.size,
+    sizeSelectedSessions: currentSizeSelectedSessions.size,
     selectionSessions: currentSelectionSessions.size,
     whatsappSessions: currentWhatsappSessions.size,
   };
+
+  // Origem do WhatsApp — sessões distintas por bucket (ver
+  // classifyWhatsappOrigin), só entre as linhas que já são um clique de
+  // WhatsApp no período atual (mesmo par de eventos de currentWhatsappSessions).
+  const whatsappOriginBuckets = new Map<string, Set<string>>(WHATSAPP_ORIGIN_BUCKETS.map((b) => [b, new Set()]));
+  for (const row of currentRows) {
+    if (!row.session_id || !WHATSAPP_EVENT_TYPES.includes(row.event_type as (typeof WHATSAPP_EVENT_TYPES)[number])) {
+      continue;
+    }
+    const origin = classifyWhatsappOrigin(row);
+    whatsappOriginBuckets.get(origin)?.add(row.session_id);
+  }
 
   // Dispositivo e origem de tráfego são atribuídos por SESSÃO, não por
   // evento — usa o PAGE_VIEW mais antigo de cada sessão no período atual
@@ -579,5 +630,10 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
       label: bucket,
       count: trafficCounts.get(bucket) ?? 0,
     })).sort((a, b) => b.count - a.count),
+    whatsappByOrigin: WHATSAPP_ORIGIN_BUCKETS.map((bucket) => ({
+      id: bucket,
+      label: bucket,
+      count: whatsappOriginBuckets.get(bucket)?.size ?? 0,
+    })),
   };
 }

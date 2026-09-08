@@ -1,11 +1,14 @@
 "use server";
 
+import { after } from "next/server";
+import { cookies, headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSiteUrl } from "@/lib/site";
-import { resolveProductPricing } from "@/lib/catalog/pricing";
+import { resolveProductPricing, resolveTrackingPrice } from "@/lib/catalog/pricing";
 import { getColorNamesByIds } from "@/lib/db/colors";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
-import { buildProductWhatsAppMessage, buildSoldOutWhatsAppMessage, buildWhatsAppUrl } from "./message-builder";
+import { sendCapiEvent } from "@/lib/analytics/meta-capi";
+import { buildProductDoubtWhatsAppMessage, buildSoldOutWhatsAppMessage, buildWhatsAppUrl } from "./message-builder";
 import { resolveSeller } from "./resolve-seller";
 
 export interface WhatsAppClickInput {
@@ -19,6 +22,15 @@ export interface WhatsAppClickInput {
   utmCampaign: string | null;
   utmContent: string | null;
   referrer: string | null;
+  /**
+   * Mesmo `event_id` usado em `fbq('track', 'Lead', ..., {eventID})` do
+   * browser, pra Meta deduplicar — só usado quando o produto NÃO está
+   * SOLD_OUT ("Quero algo parecido" continua sem Lead/CAPI, comportamento
+   * inalterado). Ambos opcionais: sem eles, este fluxo simplesmente não
+   * dispara CAPI, igual ao comportamento de sempre.
+   */
+  eventId?: string;
+  eventSourceUrl?: string;
 }
 
 export type WhatsAppClickResult = { url: string } | { error: string };
@@ -59,7 +71,7 @@ export async function submitWhatsAppClick(input: WhatsAppClickInput): Promise<Wh
   const message =
     product.status === "SOLD_OUT"
       ? buildSoldOutWhatsAppMessage({ productName: product.name, code: product.code, colorName })
-      : buildProductWhatsAppMessage({
+      : buildProductDoubtWhatsAppMessage({
           productName: product.name,
           code: product.code,
           colorName,
@@ -90,6 +102,45 @@ export async function submitWhatsAppClick(input: WhatsAppClickInput): Promise<Wh
   if (insertError) {
     // Não bloqueia a conversa por causa de uma falha no registro do evento.
     console.error("[submitWhatsAppClick] falha ao registrar analytics_events:", insertError.message);
+  }
+
+  // Conversions API — Lead server-side, só pro caminho "Tirar dúvidas"
+  // (produto disponível + eventId informado pelo chamador). "Quero algo
+  // parecido" (SOLD_OUT) nunca passa eventId, então nunca cai aqui —
+  // comportamento inalterado pra esse fluxo. Mesmo padrão fail-open de
+  // favorites-click-action.ts: roda depois da resposta via after(), nunca
+  // atrasa nem pode impedir a abertura do WhatsApp.
+  if (product.status !== "SOLD_OUT" && input.eventId && input.eventSourceUrl) {
+    const eventId = input.eventId;
+    const eventSourceUrl = input.eventSourceUrl;
+    const trackedValue = resolveTrackingPrice(pricing);
+
+    after(async () => {
+      try {
+        const [hdrs, cookieStore] = await Promise.all([headers(), cookies()]);
+        await sendCapiEvent({
+          eventName: "Lead",
+          eventId,
+          eventSourceUrl,
+          userData: {
+            clientIpAddress: hdrs.get("x-forwarded-for")?.split(",")[0]?.trim(),
+            clientUserAgent: hdrs.get("user-agent") ?? undefined,
+            fbp: cookieStore.get("_fbp")?.value,
+            fbc: cookieStore.get("_fbc")?.value,
+          },
+          customData: {
+            content_ids: [product.code],
+            content_type: "product",
+            value: trackedValue,
+            currency: "BRL",
+            num_items: 1,
+          },
+        });
+      } catch {
+        // sendCapiEvent já trata os próprios erros internamente; nunca deve
+        // chegar aqui, mas por segurança nunca deixa nada escapar do after().
+      }
+    });
   }
 
   return { url: buildWhatsAppUrl(seller.whatsapp_number, message) };

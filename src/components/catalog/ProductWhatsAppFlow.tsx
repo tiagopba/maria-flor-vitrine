@@ -16,6 +16,7 @@ import { captureAndPersistUtm } from "@/lib/utm/persist";
 import { submitWhatsAppClick } from "@/lib/whatsapp/click-action";
 import { submitFavoritesWhatsAppClick } from "@/lib/whatsapp/favorites-click-action";
 import { trackAddToCart, trackLead, trackPixelEvent } from "@/lib/analytics/meta-pixel";
+import { MessageCircle } from "lucide-react";
 import type { ProductStatus } from "@/types/database";
 
 /**
@@ -100,6 +101,15 @@ export function ProductWhatsAppFlow({
   const [selectionFailed, setSelectionFailed] = useState(false);
   const [lastSellerId, setLastSellerId] = useState<string | null>(null);
 
+  // ---- "Tirar dúvidas no WhatsApp" — caminho paralelo, NUNCA toca Minha
+  // Seleção/localStorage. Drawer própria (mesmo componente, instância
+  // separada) porque usa um server action diferente (submitWhatsAppClick,
+  // uma peça só, sem seleção) e uma mensagem diferente (dúvida, não
+  // interesse de compra). ----
+  const [doubtDrawerOpen, setDoubtDrawerOpen] = useState(false);
+  const [doubtSubmitting, setDoubtSubmitting] = useState<string | null>(null);
+  const [doubtError, setDoubtError] = useState<string | null>(null);
+
   function trackFlowEvent(eventType: "PRODUCT_FLOW_STARTED" | "PRODUCT_FLOW_SEE_MORE_CLICK") {
     const utm = captureAndPersistUtm();
     recordFavoriteEvent({
@@ -119,6 +129,28 @@ export function ProductWhatsAppFlow({
     const utm = captureAndPersistUtm();
     addFavorite(productId);
     if (size) persistSelectedSize(productId, size);
+
+    // SIZE_SELECTED sempre que um tamanho de verdade está envolvido — tanto
+    // no chip escolhido manualmente quanto no tamanho único auto-selecionado
+    // (não existe UI de escolha nesse caso, mas o tamanho final é o mesmo
+    // dado real; contar só o caso manual subestimaria a etapa "Escolheu
+    // tamanho" do funil pros produtos de tamanho único). Peça sem nenhum
+    // tamanho cadastrado (size === null) não dispara — não há o que "ter
+    // escolhido".
+    if (size) {
+      recordFavoriteEvent({
+        eventType: "SIZE_SELECTED",
+        productId,
+        sessionId: getVisitorSessionId(),
+        source: "product_page",
+        utmSource: utm.utm_source ?? null,
+        utmMedium: utm.utm_medium ?? null,
+        utmCampaign: utm.utm_campaign ?? null,
+        utmContent: utm.utm_content ?? null,
+        referrer: utm.referrer ?? null,
+        metadata: { size },
+      }).catch(() => {});
+    }
 
     recordFavoriteEvent({
       eventType: "FAVORITE_ADDED",
@@ -200,6 +232,55 @@ export function ProductWhatsAppFlow({
     setSellerDrawerOpen(true);
   }
 
+  function handleOpenDoubtDrawer() {
+    setDoubtError(null);
+    setDoubtDrawerOpen(true);
+  }
+
+  /**
+   * "Tirar dúvidas" — uma peça só, NUNCA toca Favoritos/Minha Seleção
+   * (sem addFavorite, sem FAVORITE_ADDED). Mesmo padrão de Lead do resto do
+   * app: gera o eventId no client, manda pro server action (que dispara a
+   * CAPI via after()) e só chama trackLead depois que o WhatsApp de verdade
+   * vai abrir — nunca ao só abrir esta drawer, nunca ao só escolher a
+   * vendedora, exatamente como já funciona em handleSellerChoice.
+   */
+  async function handleDoubtSellerChoice(sellerId: string | null) {
+    setDoubtError(null);
+    setDoubtSubmitting(sellerId ?? "any");
+
+    const eventId = crypto.randomUUID();
+
+    try {
+      const utm = captureAndPersistUtm();
+      const result = await submitWhatsAppClick({
+        productId,
+        size: getFavorites().find((f) => f.product_id === productId)?.selected_size ?? null,
+        sellerId,
+        sessionId: getVisitorSessionId(),
+        utmSource: utm.utm_source ?? null,
+        utmMedium: utm.utm_medium ?? null,
+        utmCampaign: utm.utm_campaign ?? null,
+        utmContent: utm.utm_content ?? null,
+        referrer: utm.referrer ?? null,
+        eventId,
+        eventSourceUrl: window.location.href,
+      });
+
+      if ("error" in result) {
+        setDoubtError(result.error);
+        setDoubtSubmitting(null);
+        return;
+      }
+
+      trackLead({ contentIds: [productCode], value: price, numItems: 1 }, eventId);
+      window.location.href = result.url;
+    } catch {
+      setDoubtError("Não foi possível abrir o WhatsApp. Tente novamente.");
+      setDoubtSubmitting(null);
+    }
+  }
+
   async function handleSellerChoice(sellerId: string | null, skipSelectionLink = false) {
     setSellerError(null);
     setSelectionFailed(false);
@@ -274,6 +355,23 @@ export function ProductWhatsAppFlow({
       <Button type="button" onClick={handleWantThis} className="h-12">
         Quero essa peça
       </Button>
+
+      {/* Secundário de propósito (variant="secondary", sem h-12 igual ao
+          principal) — caminho paralelo pra quem ainda tem dúvida, nunca
+          compete visualmente com o CTA de cima. */}
+      <Button type="button" variant="secondary" onClick={handleOpenDoubtDrawer} className="h-11 gap-2">
+        <MessageCircle className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+        Tirar dúvidas no WhatsApp
+      </Button>
+
+      <SellerSelectionDrawer
+        open={doubtDrawerOpen}
+        onClose={() => setDoubtDrawerOpen(false)}
+        sellers={sellers}
+        onChoose={handleDoubtSellerChoice}
+        submitting={doubtSubmitting}
+        error={doubtError}
+      />
 
       {needsSizeElsewhere && (
         <p className="text-xs text-red-600">

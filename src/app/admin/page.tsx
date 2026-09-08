@@ -149,6 +149,11 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
           secondaryUnitLabel="menções"
         />
         <RankingList title="Origem do tráfego (sessões)" rows={data.trafficSources} emptyLabel="Sem sessões neste período." />
+        <RankingList
+          title="Origem do WhatsApp (sessões)"
+          rows={data.whatsappByOrigin}
+          emptyLabel="Sem cliques para WhatsApp neste período."
+        />
       </div>
     </div>
   );

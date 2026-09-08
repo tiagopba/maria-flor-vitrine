@@ -73,6 +73,44 @@ export function buildProductWhatsAppMessage({
 }
 
 /**
+ * Mensagem para "Tirar dúvidas no WhatsApp" na página de produto — caminho
+ * paralelo ao "Quero essa peça": a cliente ainda não decidiu, só quer
+ * perguntar, então nunca exige tamanho (`size` é opcional; a linha some
+ * quando ausente, sem bloquear o clique). Preço sempre presente — mesma
+ * regra das outras mensagens, nunca pode haver divergência entre o valor
+ * mostrado na Vitrine e o enviado à vendedora, com ou sem tamanho escolhido.
+ */
+export function buildProductDoubtWhatsAppMessage({
+  productName,
+  code,
+  price,
+  size,
+  productUrl,
+  colorName,
+  dualPrice,
+}: ProductMessageInput & { dualPrice?: DualPriceLines }): string {
+  const priceLines = dualPrice
+    ? [
+        `${formatPrice(dualPrice.cashPrice)} no Pix`,
+        `${formatPrice(dualPrice.cardPrice)} no cartão${
+          dualPrice.installmentCount != null ? ` • até ${dualPrice.installmentCount}x sem juros` : ""
+        }`,
+      ]
+    : [formatPrice(price)];
+
+  const lines = ["Olá! Tenho uma dúvida sobre essa peça:", "", productName, `Código: ${code}`];
+
+  if (colorName) lines.push(`Cor: ${colorName}`);
+  if (size) lines.push(`Tamanho que estou procurando: ${size}`);
+
+  lines.push("", ...priceLines);
+
+  if (productUrl) lines.push("", "Link:", productUrl);
+
+  return lines.join("\n");
+}
+
+/**
  * Mensagem para "Quero algo parecido" quando o produto está SOLD_OUT — não
  * pede tamanho (não faz sentido para uma peça esgotada).
  */

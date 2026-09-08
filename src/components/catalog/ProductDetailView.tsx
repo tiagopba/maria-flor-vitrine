@@ -414,6 +414,21 @@ export function ProductDetailView({
           Disponibilidade sujeita à confirmação devido ao giro rápido das peças.
         </p>
 
+        {/* Tamanhos reais do produto (nunca fixo) + nota de frete — sempre
+            que houver ao menos 1 tamanho cadastrado; sem isso não há o que
+            mostrar (produto sem tamanho nenhum é o único caso omitido). */}
+        {active.sizes.length > 0 && (
+          <div className="flex flex-col gap-1 text-sm">
+            <p className="text-text">
+              <span className="font-medium text-text-muted">
+                {active.sizes.length === 1 ? "Tamanho: " : "Tamanhos disponíveis: "}
+              </span>
+              {active.sizes.join(" • ")}
+            </p>
+            <p className="text-text-muted">🚚 Enviamos para todo o Brasil</p>
+          </div>
+        )}
+
         <div className="mt-2">
           <ProductWhatsAppFlow
             key={active.id}
