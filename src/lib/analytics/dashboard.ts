@@ -176,6 +176,10 @@ interface RawEvent {
   /** "product_page" | "favorites_page" nos eventos de WhatsApp — base de
    * whatsappByOrigin (ver classifyWhatsappOrigin). */
   source: string | null;
+  /** Vendedora resolvida no momento do clique (ver resolveSeller) — já uma
+   * FK própria em analytics_events, nunca duplica nome/telefone aqui; o
+   * nome é resolvido depois via `sellers`, só pros ids que aparecerem. */
+  seller_id: string | null;
   utm_source: string | null;
   utm_medium: string | null;
   referrer: string | null;
@@ -280,6 +284,15 @@ export interface DashboardData {
    * classifyWhatsappOrigin. Mesmo par de eventos de whatsappSessions/
    * whatsappStarted, só quebrado por origem. */
   whatsappByOrigin: RankingRow[];
+  /** Sessões distintas por vendedora (nome resolvido via `sellers`, nunca
+   * duplicado em analytics_events) — só vendedoras que realmente
+   * receberam algum clique no período; sem entrada nenhuma quando não há
+   * seller_id nulo no período (ver getDashboardData). */
+  whatsappBySeller: RankingRow[];
+  /** "Vendedora escolhida" / "Qualquer vendedora / round-robin" / "Sem
+   * informação" — sempre as 3 categorias (mesmo padrão de devices/
+   * whatsappByOrigin), ver classifyDirectionMode. */
+  whatsappByDirectionMode: RankingRow[];
 }
 
 const RELEVANT_EVENT_TYPES = [
@@ -315,6 +328,22 @@ function classifyWhatsappOrigin(row: Pick<RawEvent, "event_type" | "source">): W
   if (row.source === "product_page") return "Página do produto";
   if (row.source === "favorites_page") return "Minha Seleção";
   return "Outros";
+}
+
+const DIRECTION_MODE_BUCKETS = ["Vendedora escolhida", "Qualquer vendedora / round-robin", "Sem informação"] as const;
+type DirectionModeBucket = (typeof DIRECTION_MODE_BUCKETS)[number];
+
+/**
+ * `metadata.selection_mode` já é gravado por resolveSeller em todo clique
+ * de WhatsApp ("manual" = cliente escolheu a vendedora, "round_robin" =
+ * "Qualquer vendedora") — "Sem informação" cobre só eventos gravados antes
+ * dessa metadata existir (nunca reescritos), não um erro técnico.
+ */
+function classifyDirectionMode(row: Pick<RawEvent, "metadata">): DirectionModeBucket {
+  const mode = row.metadata?.selection_mode;
+  if (mode === "manual") return "Vendedora escolhida";
+  if (mode === "round_robin") return "Qualquer vendedora / round-robin";
+  return "Sem informação";
 }
 
 // Teto de segurança — generoso pro volume real de uma boutique, evita uma
@@ -437,7 +466,7 @@ function extractSize(row: RawEvent): string | null {
 }
 
 const EVENT_COLUMNS =
-  "event_type, session_id, product_id, category_id, size, source, utm_source, utm_medium, referrer, device_type, metadata, created_at";
+  "event_type, session_id, product_id, category_id, size, source, seller_id, utm_source, utm_medium, referrer, device_type, metadata, created_at";
 
 /**
  * `.limit(MAX_EVENTS)` sozinho não bastava: o PostgREST do projeto tem um
@@ -534,17 +563,47 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
     whatsappSessions: currentWhatsappSessions.size,
   };
 
-  // Origem do WhatsApp — sessões distintas por bucket (ver
-  // classifyWhatsappOrigin), só entre as linhas que já são um clique de
-  // WhatsApp no período atual (mesmo par de eventos de currentWhatsappSessions).
+  // Origem do WhatsApp, vendedora e forma de direcionamento — sessões
+  // distintas por bucket, uma única passada pelas linhas que já são um
+  // clique de WhatsApp no período atual (mesmo par de eventos de
+  // currentWhatsappSessions). Uma sessão que clica várias vezes pra MESMA
+  // vendedora conta 1 (Set dedup); se clicar pra vendedoras diferentes,
+  // conta 1 em cada uma (Sets independentes por seller_id) — exatamente a
+  // regra pedida.
   const whatsappOriginBuckets = new Map<string, Set<string>>(WHATSAPP_ORIGIN_BUCKETS.map((b) => [b, new Set()]));
+  const directionModeBuckets = new Map<string, Set<string>>(DIRECTION_MODE_BUCKETS.map((b) => [b, new Set()]));
+  const sellerSessionSets = new Map<string, Set<string>>();
+  const noSellerSessions = new Set<string>();
   for (const row of currentRows) {
     if (!row.session_id || !WHATSAPP_EVENT_TYPES.includes(row.event_type as (typeof WHATSAPP_EVENT_TYPES)[number])) {
       continue;
     }
     const origin = classifyWhatsappOrigin(row);
     whatsappOriginBuckets.get(origin)?.add(row.session_id);
+
+    const mode = classifyDirectionMode(row);
+    directionModeBuckets.get(mode)?.add(row.session_id);
+
+    if (row.seller_id) {
+      const set = sellerSessionSets.get(row.seller_id) ?? new Set<string>();
+      set.add(row.session_id);
+      sellerSessionSets.set(row.seller_id, set);
+    } else {
+      noSellerSessions.add(row.session_id);
+    }
   }
+
+  // Nome só pras vendedoras que realmente aparecem no período — mesmo
+  // padrão de productNameById/categoryNameById (join no momento da
+  // leitura, nunca duplicado em analytics_events). Uma vendedora inativa
+  // (mas não excluída) continua com nome resolvido normalmente; só some se
+  // a linha em `sellers` for excluída de verdade (aí a FK já vira null por
+  // "on delete set null", e cai em noSellerSessions).
+  const sellerIdsInPeriod = [...sellerSessionSets.keys()];
+  const { data: sellersInPeriod } = await (sellerIdsInPeriod.length > 0
+    ? supabase.from("sellers").select("id, name").in("id", sellerIdsInPeriod)
+    : Promise.resolve({ data: [] as { id: string; name: string }[] }));
+  const sellerNameById = new Map((sellersInPeriod ?? []).map((s) => [s.id, s.name]));
 
   // Dispositivo e origem de tráfego são atribuídos por SESSÃO, não por
   // evento — usa o PAGE_VIEW mais antigo de cada sessão no período atual
@@ -634,6 +693,21 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
       id: bucket,
       label: bucket,
       count: whatsappOriginBuckets.get(bucket)?.size ?? 0,
+    })),
+    whatsappBySeller: [
+      ...sellerIdsInPeriod.map((sellerId) => ({
+        id: sellerId,
+        label: sellerNameById.get(sellerId) ?? "Vendedora removida",
+        count: sellerSessionSets.get(sellerId)?.size ?? 0,
+      })),
+      ...(noSellerSessions.size > 0
+        ? [{ id: "sem-vendedora", label: "Sem vendedora atribuída", count: noSellerSessions.size }]
+        : []),
+    ].sort((a, b) => b.count - a.count),
+    whatsappByDirectionMode: DIRECTION_MODE_BUCKETS.map((bucket) => ({
+      id: bucket,
+      label: bucket,
+      count: directionModeBuckets.get(bucket)?.size ?? 0,
     })),
   };
 }

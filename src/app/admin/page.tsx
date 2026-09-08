@@ -154,6 +154,18 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
           rows={data.whatsappByOrigin}
           emptyLabel="Sem cliques para WhatsApp neste período."
         />
+        <RankingList
+          title="Cliques para WhatsApp por vendedora"
+          rows={data.whatsappBySeller}
+          emptyLabel="Sem cliques para WhatsApp neste período."
+          primaryUnitLabel="sessões"
+        />
+        <RankingList
+          title="Forma de direcionamento"
+          rows={data.whatsappByDirectionMode}
+          emptyLabel="Sem cliques para WhatsApp neste período."
+          primaryUnitLabel="sessões"
+        />
       </div>
     </div>
   );
