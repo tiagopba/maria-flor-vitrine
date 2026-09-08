@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { recordAnalyticsEvent } from "@/lib/analytics/track";
 import { trackViewContent } from "@/lib/analytics/meta-pixel";
+import { sendViewContentCapi } from "@/lib/analytics/capi-actions";
 import { getDeviceType } from "@/lib/analytics/device";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
@@ -48,7 +49,17 @@ export function ProductViewTracker({
       referrer: utm.referrer ?? null,
     }).catch(() => {});
 
-    trackViewContent({ code, name, price });
+    // Mesmo event_id nos dois lados (Pixel do browser + Conversions API) —
+    // gerado só aqui, depois do guard acima, uma vez por visualização real.
+    const eventId = crypto.randomUUID();
+    trackViewContent({ code, name, price }, eventId);
+    sendViewContentCapi({
+      eventId,
+      eventSourceUrl: window.location.href,
+      productCode: code,
+      productName: name,
+      price,
+    }).catch(() => {});
   }, [productId, categoryId, code, name, price]);
 
   return null;

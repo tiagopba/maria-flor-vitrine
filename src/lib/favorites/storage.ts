@@ -22,6 +22,16 @@ export interface FavoriteEntry {
   product_id: string;
   selected_size?: string;
   added_at: string;
+  /**
+   * true só depois que o fluxo guiado "Quero essa peça" confirma a peça de
+   * verdade (ver ProductWhatsAppFlow.addToSelection) — nunca setado só por
+   * favoritar (coração). Existe porque `selected_size` sozinho não basta
+   * pra distinguir "só favoritado" de "já confirmado pelo fluxo" quando o
+   * produto não tem tamanho (os dois casos ficam com `selected_size`
+   * ausente) — sem isso, a primeira confirmação real de um produto sem
+   * tamanho que já estava favoritado deixava de disparar AddToCart.
+   */
+  flow_confirmed?: boolean;
 }
 
 function readRaw(): FavoriteEntry[] {
@@ -90,6 +100,19 @@ export function setSelectedSize(productId: string, size: string | null): void {
   const idx = entries.findIndex((e) => e.product_id === productId);
   if (idx === -1) return;
   entries[idx] = { ...entries[idx], selected_size: size ?? undefined };
+  writeRaw(entries);
+}
+
+/**
+ * Marca que o fluxo guiado "Quero essa peça" confirmou esta peça pelo
+ * menos uma vez — ver comentário de `flow_confirmed` em FavoriteEntry.
+ * Idempotente (no-op se já estava marcado); nunca chamado pelo coração.
+ */
+export function markFlowConfirmed(productId: string): void {
+  const entries = readRaw();
+  const idx = entries.findIndex((e) => e.product_id === productId);
+  if (idx === -1 || entries[idx].flow_confirmed) return;
+  entries[idx] = { ...entries[idx], flow_confirmed: true };
   writeRaw(entries);
 }
 

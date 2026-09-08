@@ -73,32 +73,62 @@ export function trackPageView(): void {
  * ViewContent — "olhou uma peça de verdade". Só deve ser chamado quando a
  * página individual do produto montou com os dados reais carregados (ver
  * ProductViewTracker, que já faz o guard contra disparo duplicado).
+ *
+ * `eventId`, quando informado, viaja também para a Conversions API (mesmo
+ * evento, mesmo id, dois caminhos) — ver lib/analytics/capi-actions.ts.
  */
-export function trackViewContent(product: MetaTrackableProduct): void {
-  trackPixelEvent("ViewContent", {
-    content_ids: [product.code],
-    content_name: product.name,
-    content_type: "product",
-    value: product.price,
-    currency: "BRL",
-  });
+export function trackViewContent(product: MetaTrackableProduct, eventId?: string): void {
+  trackPixelEvent(
+    "ViewContent",
+    {
+      content_ids: [product.code],
+      content_name: product.name,
+      content_type: "product",
+      value: product.price,
+      currency: "BRL",
+    },
+    eventId
+  );
 }
 
 /**
  * AddToCart — "Minha Seleção" faz o papel de carrinho aqui. Só deve ser
- * chamado depois que a peça REALMENTE entrou na seleção (após escolher
- * tamanho, quando existir mais de um) — nunca só no clique de
- * "Quero essa peça". `selectedSize` é opcional: entra em `selected_size`
- * só quando já se sabe o tamanho no momento da adição.
+ * chamado depois que a peça REALMENTE entrou/mudou na seleção (após
+ * escolher tamanho, quando existir mais de um) — nunca só no clique de
+ * "Quero essa peça", e nunca ao favoritar (ver trackAddToWishlist).
+ * `selectedSize` é opcional: entra em `selected_size` só quando já se sabe
+ * o tamanho no momento da adição.
+ *
+ * `eventId`, quando informado, viaja também para a Conversions API (mesmo
+ * evento, mesmo id, dois caminhos) — ver lib/analytics/capi-actions.ts.
  */
-export function trackAddToCart(product: MetaTrackableProduct, selectedSize?: string | null): void {
-  trackPixelEvent("AddToCart", {
+export function trackAddToCart(product: MetaTrackableProduct, selectedSize?: string | null, eventId?: string): void {
+  trackPixelEvent(
+    "AddToCart",
+    {
+      content_ids: [product.code],
+      content_name: product.name,
+      content_type: "product",
+      value: product.price,
+      currency: "BRL",
+      ...(selectedSize ? { selected_size: selectedSize } : {}),
+    },
+    eventId
+  );
+}
+
+/**
+ * AddToWishlist — "gostou/salvou a peça", disparado só ao favoritar
+ * (coração ligado). Nunca ao desfavoritar. Browser-only por enquanto (sem
+ * CAPI própria) — ver FavoriteButton.
+ */
+export function trackAddToWishlist(product: MetaTrackableProduct): void {
+  trackPixelEvent("AddToWishlist", {
     content_ids: [product.code],
     content_name: product.name,
     content_type: "product",
     value: product.price,
     currency: "BRL",
-    ...(selectedSize ? { selected_size: selectedSize } : {}),
   });
 }
 

@@ -10,12 +10,18 @@ import { SingleSizeSelector } from "@/components/catalog/SingleSizeSelector";
 import { getHopsFromListing, getLastListingPath, hasInternalHistory } from "@/components/layout/NavigationTracker";
 import { recordFavoriteEvent } from "@/lib/favorites/analytics";
 import { markJustContactedSeller } from "@/lib/favorites/post-contact";
-import { addFavorite, getFavorites, setSelectedSize as persistSelectedSize } from "@/lib/favorites/storage";
+import {
+  addFavorite,
+  getFavorites,
+  markFlowConfirmed,
+  setSelectedSize as persistSelectedSize,
+} from "@/lib/favorites/storage";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
 import { submitWhatsAppClick } from "@/lib/whatsapp/click-action";
 import { submitFavoritesWhatsAppClick } from "@/lib/whatsapp/favorites-click-action";
 import { trackAddToCart, trackLead, trackPixelEvent } from "@/lib/analytics/meta-pixel";
+import { sendAddToCartCapi } from "@/lib/analytics/capi-actions";
 import { MessageCircle } from "lucide-react";
 import type { ProductStatus } from "@/types/database";
 
@@ -127,8 +133,27 @@ export function ProductWhatsAppFlow({
 
   function addToSelection(size: string | null) {
     const utm = captureAndPersistUtm();
+
+    // Estado ANTES de mexer no storage — é a comparação contra isso que
+    // decide se essa é uma mudança real da seleção (novo produto, ou
+    // tamanho diferente do já salvo) ou só uma repetição idêntica/duplo
+    // clique da mesma ação: só uma mudança real deve gerar um novo
+    // AddToCart do Meta. addFavorite() já é idempotente pro storage, mas o
+    // tracking em si não era — é isso que este guard corrige.
+    //
+    // `flow_confirmed` (em vez de só comparar `selected_size`) é
+    // necessário porque favoritar pelo coração (AddToWishlist) já grava o
+    // produto no mesmo storage, sem tamanho — sem esse marcador, a
+    // primeira confirmação real de "Quero essa peça" pra um produto SEM
+    // tamanho que já estava favoritado ficaria indistinguível de uma
+    // repetição (null === null) e deixaria de disparar AddToCart.
+    const existing = getFavorites().find((f) => f.product_id === productId);
+    const wasConfirmedByFlow = existing?.flow_confirmed === true;
+    const isRealChange = !wasConfirmedByFlow || (existing?.selected_size ?? null) !== size;
+
     addFavorite(productId);
     if (size) persistSelectedSize(productId, size);
+    markFlowConfirmed(productId);
 
     // SIZE_SELECTED sempre que um tamanho de verdade está envolvido — tanto
     // no chip escolhido manualmente quanto no tamanho único auto-selecionado
@@ -165,7 +190,22 @@ export function ProductWhatsAppFlow({
       metadata: { size },
     }).catch(() => {});
 
-    trackAddToCart({ code: productCode, name: productName, price }, size);
+    // Só dispara o Meta AddToCart (Browser + Server) quando a seleção
+    // realmente mudou — repetir a mesma peça/tamanho (reclique em "Quero
+    // essa peça" já adicionada, ou duplo clique físico) não gera um
+    // segundo evento lógico.
+    if (isRealChange) {
+      const eventId = crypto.randomUUID();
+      trackAddToCart({ code: productCode, name: productName, price }, size, eventId);
+      sendAddToCartCapi({
+        eventId,
+        eventSourceUrl: window.location.href,
+        productCode,
+        productName,
+        price,
+        selectedSize: size,
+      }).catch(() => {});
+    }
 
     setSizeSheetOpen(false);
     setAddedSheetOpen(true);

@@ -7,7 +7,7 @@ import { useIsFavorited } from "@/lib/favorites/useFavorites";
 import { recordFavoriteEvent } from "@/lib/favorites/analytics";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { getPersistedUtm } from "@/lib/utm/persist";
-import { trackAddToCart } from "@/lib/analytics/meta-pixel";
+import { trackAddToWishlist } from "@/lib/analytics/meta-pixel";
 
 /**
  * Coração de favoritar — usado no ProductCard (dentro de um <Link>, por
@@ -48,7 +48,7 @@ export function FavoriteButton({
     const nowFavorited = toggleFavorite(productId);
 
     if (nowFavorited) {
-      trackAddToCart({ code: productCode, name: productName, price });
+      trackAddToWishlist({ code: productCode, name: productName, price });
     }
 
     startTransition(() => {
