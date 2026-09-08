@@ -1,13 +1,17 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
+import { sortProductSizes } from "@/lib/catalog/size-order";
 import { cn } from "@/lib/utils";
 
 /**
  * Escolha de UM tamanho entre as opções cadastradas do produto — usada na
  * página de produto individual e em cada peça da lista de Favoritos
  * (mesmo componente nos dois, para não duplicar a regra de "só um
- * tamanho = seleciona sozinho").
+ * tamanho = seleciona sozinho"). Ordena aqui dentro (não em cada chamador)
+ * pelo mesmo motivo: um único lugar decide a ordem de exibição pra
+ * qualquer tela que use este seletor, hoje ou no futuro — ver
+ * lib/catalog/size-order.ts.
  */
 export function SingleSizeSelector({
   sizes,
@@ -20,13 +24,14 @@ export function SingleSizeSelector({
   onChange: (size: string) => void;
   label?: string;
 }) {
-  const singleSize = sizes.length === 1 ? sizes[0] : null;
+  const sortedSizes = useMemo(() => sortProductSizes(sizes), [sizes]);
+  const singleSize = sortedSizes.length === 1 ? sortedSizes[0] : null;
 
   useEffect(() => {
     if (singleSize && value !== singleSize) onChange(singleSize);
   }, [singleSize, value, onChange]);
 
-  if (sizes.length === 0) return null;
+  if (sortedSizes.length === 0) return null;
 
   if (singleSize) {
     return (
@@ -40,7 +45,7 @@ export function SingleSizeSelector({
     <div>
       <p className="mb-1.5 text-sm font-medium text-text">{label}</p>
       <div className="flex flex-wrap gap-1.5">
-        {sizes.map((size) => (
+        {sortedSizes.map((size) => (
           <button
             key={size}
             type="button"

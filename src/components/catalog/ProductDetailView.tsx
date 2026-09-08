@@ -8,6 +8,7 @@ import { DualPriceBlock, Price } from "@/components/ui/Price";
 import { FavoriteButton } from "@/components/catalog/FavoriteButton";
 import { ProductWhatsAppFlow } from "@/components/catalog/ProductWhatsAppFlow";
 import { resolveProductPricing, resolveTrackingPrice } from "@/lib/catalog/pricing";
+import { sortProductSizes } from "@/lib/catalog/size-order";
 import { PRODUCT_STATUS_LABELS, publicStatusBadge } from "@/lib/catalog/status";
 import type { ProductDetail } from "@/lib/db/products";
 import type { PaymentSettings } from "@/lib/site-settings/payments";
@@ -223,6 +224,9 @@ export function ProductDetailView({
   const isSoldOut = active.status === "SOLD_OUT";
   const pricing = resolveProductPricing(active, paymentSettings);
   const trackedPrice = resolveTrackingPrice(pricing);
+  // Só pra exibição/modal — nunca reescreve o array vindo do produto nem o
+  // que está cadastrado no Supabase (ver lib/catalog/size-order.ts).
+  const sortedSizes = useMemo(() => sortProductSizes(active.sizes), [active.sizes]);
 
   return (
     <div className="grid gap-8 sm:grid-cols-2">
@@ -417,13 +421,13 @@ export function ProductDetailView({
         {/* Tamanhos reais do produto (nunca fixo) + nota de frete — sempre
             que houver ao menos 1 tamanho cadastrado; sem isso não há o que
             mostrar (produto sem tamanho nenhum é o único caso omitido). */}
-        {active.sizes.length > 0 && (
+        {sortedSizes.length > 0 && (
           <div className="flex flex-col gap-1 text-sm">
             <p className="text-text">
               <span className="font-medium text-text-muted">
-                {active.sizes.length === 1 ? "Tamanho: " : "Tamanhos disponíveis: "}
+                {sortedSizes.length === 1 ? "Tamanho: " : "Tamanhos disponíveis: "}
               </span>
-              {active.sizes.join(" • ")}
+              {sortedSizes.join(" • ")}
             </p>
             <p className="text-text-muted">🚚 Enviamos para todo o Brasil</p>
           </div>
@@ -437,7 +441,7 @@ export function ProductDetailView({
             productName={active.name}
             price={trackedPrice}
             status={active.status}
-            sizes={active.sizes}
+            sizes={sortedSizes}
             sellers={sellers}
           />
         </div>
