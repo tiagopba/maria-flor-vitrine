@@ -362,13 +362,29 @@ export async function getAvailableSizesPublic(): Promise<string[]> {
 }
 
 /**
+ * Tamanhos distintos entre um conjunto de ids de produto — usado pelas
+ * variantes de getAvailableSizesPublic restritas a um subconjunto do
+ * catálogo (categoria, Novidades), que buscam esses ids do seu próprio jeito
+ * e depois reaproveitam esta consulta em comum. product_sizes não tem
+ * coluna de categoria/data, então esse "ids primeiro, tamanhos depois" é
+ * sempre em duas consultas, nunca uma por produto.
+ */
+async function getAvailableSizesForProductIds(productIds: string[]): Promise<string[]> {
+  if (productIds.length === 0) return [];
+
+  const supabase = createPublicClient();
+  const { data, error } = await supabase.from("product_sizes").select("size").in("product_id", productIds);
+  if (error) throw new Error(error.message);
+
+  return [...new Set((data ?? []).map((row) => row.size))];
+}
+
+/**
  * Mesma ideia de getAvailableSizesPublic, mas restrita a uma única
  * categoria — usada pelo filtro de tamanho das páginas de categoria, que só
  * deve oferecer valores que existem de verdade ali (nunca a lista global do
- * catálogo). product_sizes não tem coluna de categoria, então busca os ids
- * de produtos da categoria primeiro (mesma regra de visibilidade das outras
- * listagens públicas: status != ARCHIVED, published_at preenchido) e depois
- * os tamanhos desses ids — duas consultas, nunca uma por produto.
+ * catálogo). Mesma regra de visibilidade das outras listagens públicas
+ * (status != ARCHIVED, published_at preenchido).
  */
 export async function getAvailableSizesForCategoryPublic(categoryId: string): Promise<string[]> {
   const supabase = createPublicClient();
@@ -381,13 +397,29 @@ export async function getAvailableSizesForCategoryPublic(categoryId: string): Pr
     .not("published_at", "is", null);
   if (productError) throw new Error(productError.message);
 
-  const productIds = (productRows ?? []).map((row) => row.id);
-  if (productIds.length === 0) return [];
+  return getAvailableSizesForProductIds((productRows ?? []).map((row) => row.id));
+}
 
-  const { data, error } = await supabase.from("product_sizes").select("size").in("product_id", productIds);
-  if (error) throw new Error(error.message);
+/**
+ * Mesma ideia de getAvailableSizesForCategoryPublic, mas restrita ao mesmo
+ * conjunto de produtos que /novidades exibe sem filtro (os mais recentes
+ * publicados, mesmo `limit` da consulta sem filtro dessa página) — evita
+ * oferecer um tamanho que existe no catálogo mas que não aparece nenhuma
+ * peça em Novidades.
+ */
+export async function getAvailableSizesForNovidadesPublic(limit = 48): Promise<string[]> {
+  const supabase = createPublicClient();
 
-  return [...new Set((data ?? []).map((row) => row.size))];
+  const { data: productRows, error: productError } = await supabase
+    .from("products")
+    .select("id")
+    .neq("status", "ARCHIVED")
+    .not("published_at", "is", null)
+    .order("published_at", { ascending: false })
+    .limit(limit);
+  if (productError) throw new Error(productError.message);
+
+  return getAvailableSizesForProductIds((productRows ?? []).map((row) => row.id));
 }
 
 /**

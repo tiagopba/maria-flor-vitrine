@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/Button";
 import { CategoryCarousel } from "@/components/catalog/CategoryCarousel";
 import { GroupedProductGrid } from "@/components/catalog/GroupedProductGrid";
 import { HomeSearch } from "@/components/catalog/HomeSearch";
+import { SizeQuickFilter } from "@/components/catalog/SizeQuickFilter";
 import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
 import { groupProductsForDisplay, type DisplayGroup } from "@/lib/catalog/group-products-for-display";
 import { getVisibleCategoriesPublic } from "@/lib/db/categories";
-import { listPublishedProducts } from "@/lib/db/products";
+import { getAvailableSizesForNovidadesPublic, listPublishedProducts } from "@/lib/db/products";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 
 // `absolute` de propósito — o layout raiz aplica um template "%s | Maria
@@ -43,6 +44,16 @@ export const dynamic = "force-dynamic";
 const HOME_NOVIDADES_TARGET = 16;
 
 /**
+ * SizeQuickFilter é o mesmo componente das páginas de categoria/Novidades,
+ * que atualiza a URL da rota atual (`initial` + o tamanho clicado). Na Home
+ * não existe filtro nenhum aplicado a estes 16 cards — este objeto fixo é
+ * só o "estado vazio" que faz o componente montar a URL só com `size`,
+ * virando `/novidades?size=X` (ou `/novidades` para "Todos") em vez de
+ * filtrar a própria Home.
+ */
+const NO_FILTERS_APPLIED = { size: null, minPrice: null, maxPrice: null, category: null };
+
+/**
  * `listPublishedProducts(N)` traz N REGISTROS (uma linha por cor), não N
  * cards — várias cores do mesmo modelo colapsam num card só depois do
  * agrupamento (ver group-products-for-display.ts). Por isso não dá pra só
@@ -73,8 +84,9 @@ async function getHomeNovidadesGroups(): Promise<DisplayGroup[]> {
 }
 
 export default async function Home() {
-  const [novidadesGroups, categorias, paymentSettings] = await Promise.all([
+  const [novidadesGroups, novidadesSizeOptions, categorias, paymentSettings] = await Promise.all([
     getHomeNovidadesGroups(),
+    getAvailableSizesForNovidadesPublic(),
     getVisibleCategoriesPublic(),
     getPaymentSettings(),
   ]);
@@ -84,20 +96,23 @@ export default async function Home() {
   return (
     <main className="flex flex-1 flex-col">
       {/* Hero — H1 real é "Moda Feminina em Paranaíba MS" (item 1 do SEO
-          local), mas visualmente quase idêntico ao anterior: só ganha uma
-          linha pequena em cima da mesma frase de sempre, sem texto
-          escondido nem mudança de estilo do hero. Padding vertical
-          reduzido de propósito (era py-10/py-14) — a primeira tela do
-          celular deve chegar mais rápido em busca/categorias/produtos. */}
+          local); a segunda linha decorativa que existia aqui foi trocada
+          pelo atalho de tamanho para Novidades, sem tocar no H1 nem na
+          metadata da Home. Padding vertical reduzido de propósito (era
+          py-10/py-14) — a primeira tela do celular deve chegar mais rápido
+          em busca/categorias/produtos. */}
       <section className="px-4 py-6 text-center sm:py-8">
         <h1 className="mx-auto max-w-sm font-display text-text">
           <span className="block text-xs font-semibold uppercase tracking-wide text-primary sm:text-sm">
             Moda Feminina em Paranaíba MS
           </span>
-          <span className="mt-2 block text-2xl leading-snug sm:text-4xl">
-            Tudo o que você viu nos nossos Stories, agora em um só lugar.
-          </span>
         </h1>
+        {/* Atalho, não filtro: clicar aqui nunca filtra estes 16 cards da
+            Home — SizeQuickFilter monta a URL a partir de `initial` sempre
+            vazio, então o clique só navega para /novidades?size=X. */}
+        <div className="mt-4 text-left">
+          <SizeQuickFilter basePath="/novidades" initial={NO_FILTERS_APPLIED} sizeOptions={novidadesSizeOptions} />
+        </div>
       </section>
 
       {/* Busca */}

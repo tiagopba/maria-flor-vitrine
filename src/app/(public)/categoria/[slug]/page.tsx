@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { CategoryCarousel } from "@/components/catalog/CategoryCarousel";
-import { CategorySizeQuickFilter } from "@/components/catalog/CategorySizeQuickFilter";
 import { FilteredEmptyState } from "@/components/catalog/FilteredEmptyState";
 import { ProductFilters } from "@/components/catalog/ProductFilters";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
+import { SizeQuickFilter } from "@/components/catalog/SizeQuickFilter";
 import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
 import { buildFilterQueryString, hasActiveFilters, parsePublicFilters } from "@/lib/catalog/filters";
 import { getCategoryBySlugPublic, getVisibleCategoriesPublic } from "@/lib/db/categories";
@@ -112,7 +112,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps<"
           <ProductFilters basePath={`/categoria/${slug}`} initial={filters} sizeOptions={sizeOptions} />
         </div>
 
-        <CategorySizeQuickFilter basePath={`/categoria/${slug}`} initial={filters} sizeOptions={sizeOptions} />
+        <SizeQuickFilter basePath={`/categoria/${slug}`} initial={filters} sizeOptions={sizeOptions} />
 
         {products.length === 0 ? (
           filtersActive ? (

@@ -7,13 +7,20 @@ import { sortProductSizes } from "@/lib/catalog/size-order";
 import { cn } from "@/lib/utils";
 
 /**
- * Filtro de tamanho sempre visível nas páginas de categoria, logo antes da
- * grade — o filtro completo (ProductFilters) continua existindo por trás do
- * botão "Filtrar" para preço, mas o tamanho é o filtro mais usado ali e
- * ficava escondido num drawer. Reaproveita o mesmo mecanismo de URL
- * (buildFilterQueryString) em vez de duplicar a lógica de filtragem.
+ * Filtro de tamanho sempre visível, logo antes da grade — o filtro completo
+ * (ProductFilters) continua existindo por trás do botão "Filtrar" para
+ * preço, mas o tamanho é o filtro mais usado e ficava escondido num drawer.
+ * Reaproveita o mesmo mecanismo de URL (buildFilterQueryString) em vez de
+ * duplicar a lógica de filtragem.
+ *
+ * Usado tanto nas páginas de categoria e em /novidades (onde filtra a
+ * própria listagem, já que `basePath` é a página atual) quanto como atalho
+ * na Home (onde `basePath="/novidades"` com a página atual sendo "/" faz o
+ * mesmo clique navegar para /novidades?size=X em vez de filtrar — nenhum
+ * comportamento especial precisa existir pra isso, é só consequência de
+ * `router.push` para uma rota diferente da atual).
  */
-export function CategorySizeQuickFilter({
+export function SizeQuickFilter({
   basePath,
   initial,
   sizeOptions,
