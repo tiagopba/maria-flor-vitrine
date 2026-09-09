@@ -17,25 +17,76 @@ function devLog(eventName: string, params?: Record<string, unknown>, eventId?: s
 }
 
 /**
+ * Fila mínima em memória (nunca localStorage, nunca sobrevive a reload) —
+ * existe só pra cobrir a janela entre o mount de componentes que disparam
+ * evento cedo (ex.: ProductViewTracker) e o momento em que a tag <Script>
+ * do base code (MetaPixel.tsx, strategy="afterInteractive") efetivamente
+ * roda e cria `window.fbq`. Antes dessa correção, `window.fbq?.(...)`
+ * virava no-op silencioso nessa janela e o evento Browser era perdido pra
+ * sempre — mesmo com o Pixel carregando normalmente um instante depois.
+ * `markMetaPixelReady()` (chamado via onReady do <Script>) esvazia a fila
+ * uma única vez; cada item só é reenviado aqui, nunca por retry/polling.
+ */
+interface QueuedPixelEvent {
+  eventName: string;
+  params?: Record<string, unknown>;
+  eventId?: string;
+}
+
+let pixelReady = false;
+const pendingEvents: QueuedPixelEvent[] = [];
+
+function sendToFbq(eventName: string, params?: Record<string, unknown>, eventId?: string): void {
+  if (eventId) {
+    window.fbq?.("track", eventName, params, { eventID: eventId });
+  } else {
+    window.fbq?.("track", eventName, params);
+  }
+}
+
+/**
+ * Chamado pelo `onReady` do `<Script id="meta-pixel-base">` (ver
+ * MetaPixel.tsx) assim que o base code rodou e `window.fbq` passou a
+ * existir de verdade. Idempotente — chamar de novo (ex.: onReady disparando
+ * mais de uma vez) é seguro, só esvazia o que ainda estiver pendente.
+ */
+export function markMetaPixelReady(): void {
+  pixelReady = true;
+  while (pendingEvents.length > 0) {
+    const next = pendingEvents.shift();
+    if (!next) break;
+    try {
+      sendToFbq(next.eventName, next.params, next.eventId);
+    } catch {
+      // Mesma regra de trackPixelEvent abaixo — nunca deixa o Pixel quebrar o fluxo real.
+    }
+  }
+}
+
+/**
  * Dispara um evento padrão do Meta Pixel (`fbq('track', ...)`). Sempre
- * fire-and-forget e silencioso: se o script do Pixel não carregou (Pixel ID
- * não configurado, bloqueador de anúncios, etc.), `window.fbq` não existe e
- * a chamada simplesmente não faz nada — nunca deve impedir a ação real da
- * cliente nem gerar erro no console.
+ * fire-and-forget e silencioso: se o Pixel não está configurado (Pixel ID
+ * ausente) ou está bloqueado (adblock), `window.fbq` nunca chega a existir
+ * e o evento fica parado na fila pra sempre — nunca gera erro nem afeta a
+ * ação real da cliente. Se o Pixel só ainda não carregou (`window.fbq`
+ * indefinido no momento da chamada, mas o `<Script>` ainda vai rodar), o
+ * evento entra na fila acima e é reenviado por `markMetaPixelReady()` assim
+ * que o Pixel ficar pronto — nunca perdido por timing.
  *
  * `eventId`, quando informado, é passado como `eventID` (4º argumento do
  * `fbq`) — é o mecanismo oficial de deduplicação Pixel/CAPI da Meta: o
  * MESMO valor deve ser enviado também no `event_id` do lado servidor (ver
  * lib/analytics/meta-capi.ts) para os dois serem reconhecidos como um único
- * evento.
+ * evento. A fila preserva esse `eventId` exatamente como recebido — nunca
+ * gera um novo.
  */
 export function trackPixelEvent(eventName: string, params?: Record<string, unknown>, eventId?: string): void {
   try {
     devLog(eventName, params, eventId);
-    if (eventId) {
-      window.fbq?.("track", eventName, params, { eventID: eventId });
+    if (pixelReady || window.fbq) {
+      sendToFbq(eventName, params, eventId);
     } else {
-      window.fbq?.("track", eventName, params);
+      pendingEvents.push({ eventName, params, eventId });
     }
   } catch {
     // Nunca deixa uma falha do Pixel afetar o fluxo real.

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import Script from "next/script";
 import { usePathname, useSearchParams } from "next/navigation";
-import { getMetaPixelId, trackPageView } from "@/lib/analytics/meta-pixel";
+import { getMetaPixelId, markMetaPixelReady, trackPageView } from "@/lib/analytics/meta-pixel";
 
 /**
  * Base code oficial do Meta Pixel — carregado só quando
@@ -42,7 +42,18 @@ export function MetaPixel() {
   if (!pixelId) return null;
 
   return (
-    <Script id="meta-pixel-base" strategy="afterInteractive">
+    <Script
+      id="meta-pixel-base"
+      strategy="afterInteractive"
+      // Sinaliza pra fila em lib/analytics/meta-pixel.ts que window.fbq já
+      // existe de verdade — corrige a corrida em que componentes que
+      // disparam evento no mount (ex.: ProductViewTracker) podiam rodar
+      // antes desta tag <Script> ser injetada/executada, perdendo o
+      // ViewContent do Browser em silêncio. onReady roda depois do próprio
+      // conteúdo deste script (inclusive scripts inline, com id — ver
+      // next/script), então window.fbq já é garantido existir aqui.
+      onReady={() => markMetaPixelReady()}
+    >
       {`
         !function(f,b,e,v,n,t,s)
         {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
