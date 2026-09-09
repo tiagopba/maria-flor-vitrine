@@ -44,17 +44,17 @@ export function PostContactPrompt() {
   }
 
   return (
-    <Drawer open={open} onClose={handleKeep} title="Quer começar uma nova seleção?">
+    <Drawer open={open} onClose={handleKeep} title="Quer começar do zero?">
       <div className="flex flex-col gap-4 pb-1">
         <p className="text-sm text-text-muted">
           As peças que você enviou para a vendedora continuarão disponíveis no link enviado.
         </p>
         <div className="flex flex-col gap-2">
           <Button type="button" onClick={handleKeep} className="h-12">
-            Manter minha seleção
+            Manter minhas roupas
           </Button>
           <Button type="button" variant="secondary" onClick={handleStartNew} className="h-12">
-            Começar nova seleção
+            Começar de novo
           </Button>
         </div>
       </div>

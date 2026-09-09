@@ -160,7 +160,7 @@ export interface FavoritesSelectionItem {
 }
 
 /**
- * Mensagem para "Enviar minhas roupas" na página /favoritos — uma peça
+ * Mensagem para "Falar com uma vendedora" na página /favoritos — uma peça
  * SOLD_OUT nunca chega aqui (quem chama já filtrou antes; ver
  * favorites-click-action.ts), então todo item da lista é, por definição,
  * uma peça disponível para consulta.

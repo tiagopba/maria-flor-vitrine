@@ -96,7 +96,7 @@ export function FavoritesPageClient({
   }, []);
 
   function handleClearAll() {
-    if (!window.confirm("Tem certeza que quer limpar todos os favoritos?")) return;
+    if (!window.confirm("Tem certeza que quer limpar todas as peças escolhidas?")) return;
     clearFavorites();
   }
 
@@ -114,7 +114,7 @@ export function FavoritesPageClient({
 
     if (firstMissing) {
       setPendingProductId(firstMissing.id);
-      setValidationError("Escolha o tamanho das peças antes de enviar suas roupas.");
+      setValidationError("Escolha o tamanho desta peça antes de falar com uma vendedora.");
       rowRefs.current.get(firstMissing.id)?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
@@ -177,15 +177,15 @@ export function FavoritesPageClient({
   }
 
   if (products === null) {
-    return <p className="py-12 text-center text-sm text-text-muted">Carregando seus favoritos...</p>;
+    return <p className="py-12 text-center text-sm text-text-muted">Carregando suas peças...</p>;
   }
 
   if (products.length === 0) {
     return (
       <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-border px-4 py-16 text-center">
-        <p className="font-display text-lg text-text">Seu provador começa aqui ❤️</p>
+        <p className="font-display text-lg text-text">Você ainda não escolheu nenhuma peça ❤️</p>
         <p className="max-w-xs text-sm text-text-muted">
-          Salve as peças que você gostou e, quando quiser, envie todas as suas roupas para uma vendedora.
+          Explore a vitrine e toque em &quot;Quero essa peça&quot; nas roupas que gostar.
         </p>
         <Link href="/novidades">
           <Button className="mt-2">Ver novidades</Button>
@@ -200,8 +200,8 @@ export function FavoritesPageClient({
     <div className="flex flex-col gap-4">
       {products.length > MAX_ITEMS_TO_SEND && (
         <p className="rounded-xl bg-muted px-3 py-2 text-xs text-text-muted">
-          Você tem {products.length} peças salvas — para manter a mensagem organizada, enviaremos
-          as {MAX_ITEMS_TO_SEND} mais recentes.
+          Você tem {products.length} peças salvas — para facilitar o atendimento, vamos enviar para a
+          vendedora as {MAX_ITEMS_TO_SEND} mais recentes.
         </p>
       )}
 
@@ -224,7 +224,7 @@ export function FavoritesPageClient({
       {validationError && <p className="text-sm text-red-600">{validationError}</p>}
 
       <Button type="button" onClick={handleSendClick} className="h-12">
-        Enviar minhas roupas
+        Falar com uma vendedora
       </Button>
 
       <button
@@ -232,7 +232,7 @@ export function FavoritesPageClient({
         onClick={handleClearAll}
         className="self-center text-xs text-text-muted hover:text-red-600"
       >
-        Limpar favoritos
+        Limpar tudo
       </button>
 
       <SellerSelectionDrawer

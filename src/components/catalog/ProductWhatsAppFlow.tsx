@@ -415,7 +415,7 @@ export function ProductWhatsAppFlow({
 
       {needsSizeElsewhere && (
         <p className="text-xs text-red-600">
-          Escolha o tamanho das peças antes de enviar suas roupas.{" "}
+          Escolha o tamanho antes de enviar suas peças para uma vendedora.{" "}
           <Link href="/favoritos" className="underline">
             Ver em Minhas Roupas
           </Link>
