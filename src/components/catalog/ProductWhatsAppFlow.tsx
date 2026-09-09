@@ -415,9 +415,9 @@ export function ProductWhatsAppFlow({
 
       {needsSizeElsewhere && (
         <p className="text-xs text-red-600">
-          Escolha o tamanho das peças antes de enviar sua seleção.{" "}
+          Escolha o tamanho das peças antes de enviar suas roupas.{" "}
           <Link href="/favoritos" className="underline">
-            Ver em Minha Seleção
+            Ver em Minhas Roupas
           </Link>
         </p>
       )}
@@ -428,7 +428,7 @@ export function ProductWhatsAppFlow({
 
       <Drawer open={addedSheetOpen} onClose={() => setAddedSheetOpen(false)}>
         <div className="flex flex-col items-center gap-1 pb-1 text-center">
-          <p className="font-display text-lg text-text">Peça adicionada à sua seleção ❤️</p>
+          <p className="font-display text-lg text-text">Peça adicionada às Minhas Roupas ❤️</p>
           <p className="mb-2 text-sm text-text-muted">Quer escolher mais alguma peça?</p>
 
           <Button type="button" onClick={handleTalkToSeller} className="h-12 w-full">

@@ -114,7 +114,7 @@ export function FavoritesPageClient({
 
     if (firstMissing) {
       setPendingProductId(firstMissing.id);
-      setValidationError("Escolha o tamanho das peças antes de enviar sua seleção.");
+      setValidationError("Escolha o tamanho das peças antes de enviar suas roupas.");
       rowRefs.current.get(firstMissing.id)?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
@@ -185,7 +185,7 @@ export function FavoritesPageClient({
       <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-border px-4 py-16 text-center">
         <p className="font-display text-lg text-text">Seu provador começa aqui ❤️</p>
         <p className="max-w-xs text-sm text-text-muted">
-          Salve as peças que você gostou e, quando quiser, envie toda a sua seleção para uma vendedora.
+          Salve as peças que você gostou e, quando quiser, envie todas as suas roupas para uma vendedora.
         </p>
         <Link href="/novidades">
           <Button className="mt-2">Ver novidades</Button>
@@ -200,7 +200,7 @@ export function FavoritesPageClient({
     <div className="flex flex-col gap-4">
       {products.length > MAX_ITEMS_TO_SEND && (
         <p className="rounded-xl bg-muted px-3 py-2 text-xs text-text-muted">
-          Você tem {products.length} peças salvas — para manter a mensagem organizada, sua seleção enviará
+          Você tem {products.length} peças salvas — para manter a mensagem organizada, enviaremos
           as {MAX_ITEMS_TO_SEND} mais recentes.
         </p>
       )}
@@ -224,7 +224,7 @@ export function FavoritesPageClient({
       {validationError && <p className="text-sm text-red-600">{validationError}</p>}
 
       <Button type="button" onClick={handleSendClick} className="h-12">
-        Enviar minha seleção
+        Enviar minhas roupas
       </Button>
 
       <button
