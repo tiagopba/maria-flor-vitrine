@@ -38,7 +38,11 @@ export default async function ComoChegarPage() {
         ) : (
           <p className="text-text-muted">Endereço em breve por aqui.</p>
         )}
-        {info.city && info.state && (
+        {/* Só mostra cidade/estado à parte quando NÃO há endereço completo
+            configurado — hoje `address` já vem com cidade/estado dentro
+            (ver /admin/configuracoes), então repetir aqui duplicava a
+            informação na tela. */}
+        {!info.address && info.city && info.state && (
           <p className="text-text-muted">
             {info.city}/{info.state}
           </p>
