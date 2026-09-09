@@ -24,8 +24,20 @@ function devLog(eventName: string, params?: Record<string, unknown>, eventId?: s
  * roda e cria `window.fbq`. Antes dessa correção, `window.fbq?.(...)`
  * virava no-op silencioso nessa janela e o evento Browser era perdido pra
  * sempre — mesmo com o Pixel carregando normalmente um instante depois.
- * `markMetaPixelReady()` (chamado via onReady do <Script>) esvazia a fila
- * uma única vez; cada item só é reenviado aqui, nunca por retry/polling.
+ *
+ * `markMetaPixelReady()` esvazia a fila uma única vez; cada item só é
+ * reenviado aqui, nunca por retry/polling. Importante: NÃO é chamado via
+ * `onReady` do `<Script>` — nesta versão do Next.js (16.3.3), pra script
+ * inline (`children`, sem `src`), `onReady`/`afterLoad` disparam ANTES do
+ * elemento `<script>` ser inserido no DOM (confirmado lendo
+ * node_modules/next/dist/client/script.js: `el.textContent = children;
+ * afterLoad()` roda antes de `document.body.appendChild(el)`), ou seja,
+ * antes do conteúdo inline (que cria `window.fbq`) ter executado de
+ * verdade — usar `onReady` aqui esvaziaria a fila cedo demais e perderia o
+ * evento do mesmo jeito. Em vez disso, `window.__flushMetaPixelQueue` (ver
+ * global.d.ts) é chamado como ÚLTIMA linha do próprio script inline, no
+ * mesmo bloco síncrono que acabou de criar `window.fbq` — só nesse ponto
+ * dá pra garantir que o Pixel está pronto de verdade.
  */
 interface QueuedPixelEvent {
   eventName: string;
@@ -45,10 +57,12 @@ function sendToFbq(eventName: string, params?: Record<string, unknown>, eventId?
 }
 
 /**
- * Chamado pelo `onReady` do `<Script id="meta-pixel-base">` (ver
- * MetaPixel.tsx) assim que o base code rodou e `window.fbq` passou a
- * existir de verdade. Idempotente — chamar de novo (ex.: onReady disparando
- * mais de uma vez) é seguro, só esvazia o que ainda estiver pendente.
+ * Esvazia a fila acima. Chamado só a partir da última linha do script
+ * inline do base code (ver MetaPixel.tsx), nunca de um efeito React — é
+ * o único ponto em que dá pra garantir de verdade que `window.fbq` já
+ * existe (ver comentário da fila acima). Idempotente — seguro chamar mais
+ * de uma vez (ex.: troca de rota client-side não recria o `<Script>`, mas
+ * nada aqui depende disso).
  */
 export function markMetaPixelReady(): void {
   pixelReady = true;
@@ -61,6 +75,16 @@ export function markMetaPixelReady(): void {
       // Mesma regra de trackPixelEvent abaixo — nunca deixa o Pixel quebrar o fluxo real.
     }
   }
+}
+
+// Ponte pro script inline (que roda fora do bundle de módulos, isolado no
+// próprio <script>) conseguir chamar markMetaPixelReady sem import — ver
+// window.__flushMetaPixelQueue em types/global.d.ts. Atribuída aqui, na
+// avaliação do módulo (roda antes de qualquer efeito React, inclusive
+// antes do <Script> do MetaPixel ser injetado), então já existe no window
+// no único instante em que o script inline poderia precisar dela.
+if (typeof window !== "undefined") {
+  window.__flushMetaPixelQueue = markMetaPixelReady;
 }
 
 /**

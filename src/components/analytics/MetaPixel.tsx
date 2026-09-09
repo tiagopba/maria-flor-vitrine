@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import Script from "next/script";
 import { usePathname, useSearchParams } from "next/navigation";
-import { getMetaPixelId, markMetaPixelReady, trackPageView } from "@/lib/analytics/meta-pixel";
+import { getMetaPixelId, trackPageView } from "@/lib/analytics/meta-pixel";
 
 /**
  * Base code oficial do Meta Pixel — carregado só quando
@@ -42,18 +42,7 @@ export function MetaPixel() {
   if (!pixelId) return null;
 
   return (
-    <Script
-      id="meta-pixel-base"
-      strategy="afterInteractive"
-      // Sinaliza pra fila em lib/analytics/meta-pixel.ts que window.fbq já
-      // existe de verdade — corrige a corrida em que componentes que
-      // disparam evento no mount (ex.: ProductViewTracker) podiam rodar
-      // antes desta tag <Script> ser injetada/executada, perdendo o
-      // ViewContent do Browser em silêncio. onReady roda depois do próprio
-      // conteúdo deste script (inclusive scripts inline, com id — ver
-      // next/script), então window.fbq já é garantido existir aqui.
-      onReady={() => markMetaPixelReady()}
-    >
+    <Script id="meta-pixel-base" strategy="afterInteractive">
       {`
         !function(f,b,e,v,n,t,s)
         {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
@@ -65,6 +54,14 @@ export function MetaPixel() {
         'https://connect.facebook.net/en_US/fbevents.js');
         fbq('init', '${pixelId}');
         fbq('track', 'PageView');
+        if (window.__flushMetaPixelQueue) window.__flushMetaPixelQueue();
+        // ^ Última linha de propósito: sinaliza pra fila em
+        // lib/analytics/meta-pixel.ts que window.fbq já existe de verdade,
+        // pra reenviar eventos que componentes com efeito de mount cedo
+        // (ex.: ProductViewTracker) tentaram disparar antes desta tag
+        // <Script> ter rodado. NÃO usar a prop onReady do <Script> aqui —
+        // pra script inline ela dispara antes do elemento ser inserido no
+        // DOM nesta versão do Next.js, ou seja, antes de fbq existir.
       `}
     </Script>
   );
