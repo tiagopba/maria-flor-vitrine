@@ -427,16 +427,25 @@ export function ProductWhatsAppFlow({
       </Drawer>
 
       <Drawer open={addedSheetOpen} onClose={() => setAddedSheetOpen(false)}>
-        <div className="flex flex-col items-center gap-1 pb-1 text-center">
-          <p className="font-display text-lg text-text">Peça adicionada às Minhas Roupas ❤️</p>
-          <p className="mb-2 text-sm text-text-muted">Quer escolher mais alguma peça?</p>
+        <div className="flex flex-col items-center gap-5 pb-2 pt-1 text-center">
+          <div className="flex flex-col items-center gap-1.5">
+            <p className="font-display text-xl text-text">Produto adicionado às Minhas Roupas ❤️</p>
+            <p className="text-sm text-text-muted">Quer continuar escolhendo ou falar com uma vendedora?</p>
+          </div>
 
-          <Button type="button" onClick={handleTalkToSeller} className="h-12 w-full">
-            Falar com uma vendedora
-          </Button>
-          <Button type="button" variant="secondary" onClick={handleSeeMoreProducts} className="h-12 w-full">
-            Ver mais peças
-          </Button>
+          <div className="flex w-full flex-col gap-2">
+            <Button type="button" onClick={handleSeeMoreProducts} className="h-12 w-full uppercase tracking-wide">
+              Continuar escolhendo
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleTalkToSeller}
+              className="h-12 w-full uppercase tracking-wide"
+            >
+              Falar com uma vendedora
+            </Button>
+          </div>
         </div>
       </Drawer>
 
