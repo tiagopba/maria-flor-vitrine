@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { CategoryCarousel } from "@/components/catalog/CategoryCarousel";
+import { CategorySizeQuickFilter } from "@/components/catalog/CategorySizeQuickFilter";
 import { FilteredEmptyState } from "@/components/catalog/FilteredEmptyState";
 import { ProductFilters } from "@/components/catalog/ProductFilters";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
 import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
 import { buildFilterQueryString, hasActiveFilters, parsePublicFilters } from "@/lib/catalog/filters";
 import { getCategoryBySlugPublic, getVisibleCategoriesPublic } from "@/lib/db/categories";
-import { getAvailableSizesPublic, listPublishedProductsFiltered } from "@/lib/db/products";
+import { getAvailableSizesForCategoryPublic, listPublishedProductsFiltered } from "@/lib/db/products";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { buildCategoryDescription, buildCategoryTitle } from "@/lib/seo/local";
 import { CategoryViewTracker } from "@/components/analytics/CategoryViewTracker";
@@ -67,7 +68,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps<"
   const filtersActive = hasActiveFilters(filters);
 
   const [sizeOptions, categories, paymentSettings] = await Promise.all([
-    getAvailableSizesPublic(),
+    getAvailableSizesForCategoryPublic(category.id),
     getVisibleCategoriesPublic(),
     getPaymentSettings(),
   ]);
@@ -110,6 +111,8 @@ export default async function CategoryPage({ params, searchParams }: PageProps<"
         <div className="mb-6">
           <ProductFilters basePath={`/categoria/${slug}`} initial={filters} sizeOptions={sizeOptions} />
         </div>
+
+        <CategorySizeQuickFilter basePath={`/categoria/${slug}`} initial={filters} sizeOptions={sizeOptions} />
 
         {products.length === 0 ? (
           filtersActive ? (

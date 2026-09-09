@@ -362,6 +362,35 @@ export async function getAvailableSizesPublic(): Promise<string[]> {
 }
 
 /**
+ * Mesma ideia de getAvailableSizesPublic, mas restrita a uma única
+ * categoria — usada pelo filtro de tamanho das páginas de categoria, que só
+ * deve oferecer valores que existem de verdade ali (nunca a lista global do
+ * catálogo). product_sizes não tem coluna de categoria, então busca os ids
+ * de produtos da categoria primeiro (mesma regra de visibilidade das outras
+ * listagens públicas: status != ARCHIVED, published_at preenchido) e depois
+ * os tamanhos desses ids — duas consultas, nunca uma por produto.
+ */
+export async function getAvailableSizesForCategoryPublic(categoryId: string): Promise<string[]> {
+  const supabase = createPublicClient();
+
+  const { data: productRows, error: productError } = await supabase
+    .from("products")
+    .select("id")
+    .eq("category_id", categoryId)
+    .neq("status", "ARCHIVED")
+    .not("published_at", "is", null);
+  if (productError) throw new Error(productError.message);
+
+  const productIds = (productRows ?? []).map((row) => row.id);
+  if (productIds.length === 0) return [];
+
+  const { data, error } = await supabase.from("product_sizes").select("size").in("product_id", productIds);
+  if (error) throw new Error(error.message);
+
+  return [...new Set((data ?? []).map((row) => row.size))];
+}
+
+/**
  * Busca vários produtos de uma vez pelos IDs salvos localmente em
  * Favoritos — sempre em lote (produtos + imagens + tamanhos + categorias
  * em só 4 consultas, nunca uma por produto) para não virar N+1 conforme a
