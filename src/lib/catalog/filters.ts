@@ -1,5 +1,7 @@
 export interface ParsedPublicFilters {
   size: string | null;
+  /** Numeração corporal (?fit=40) — nunca o tamanho da etiqueta. Ver PublicProductFilters.fitSize. */
+  fit: number | null;
   minPrice: number | null;
   maxPrice: number | null;
   category: string | null;
@@ -23,6 +25,7 @@ function parseNumberParam(value: string | string[] | undefined): number | null {
 export function parsePublicFilters(searchParams: RawSearchParams): ParsedPublicFilters {
   return {
     size: parseStringParam(searchParams.size),
+    fit: parseNumberParam(searchParams.fit),
     minPrice: parseNumberParam(searchParams.minPrice),
     maxPrice: parseNumberParam(searchParams.maxPrice),
     category: parseStringParam(searchParams.category),
@@ -30,7 +33,9 @@ export function parsePublicFilters(searchParams: RawSearchParams): ParsedPublicF
 }
 
 export function hasActiveFilters(filters: ParsedPublicFilters): boolean {
-  return Boolean(filters.size || filters.minPrice != null || filters.maxPrice != null || filters.category);
+  return Boolean(
+    filters.size || filters.fit != null || filters.minPrice != null || filters.maxPrice != null || filters.category
+  );
 }
 
 /** Monta a query string de filtros (nunca inclui parâmetros vazios/nulos). */
@@ -48,6 +53,7 @@ export function buildFilterQueryString(
 
   if (filters.category) params.set("category", filters.category);
   if (filters.size) params.set("size", filters.size);
+  if (filters.fit != null) params.set("fit", String(filters.fit));
   if (filters.minPrice != null) params.set("minPrice", String(filters.minPrice));
   if (filters.maxPrice != null) params.set("maxPrice", String(filters.maxPrice));
 

@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { CategoryCarousel } from "@/components/catalog/CategoryCarousel";
+import { FitQuickFilter } from "@/components/catalog/FitQuickFilter";
 import { GroupedProductGrid } from "@/components/catalog/GroupedProductGrid";
 import { HomeSearch } from "@/components/catalog/HomeSearch";
-import { SizeQuickFilter } from "@/components/catalog/SizeQuickFilter";
 import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
 import { groupProductsForDisplay, type DisplayGroup } from "@/lib/catalog/group-products-for-display";
 import { getVisibleCategoriesPublic } from "@/lib/db/categories";
-import { getAvailableSizesForNovidadesPublic, listPublishedProducts } from "@/lib/db/products";
+import { getAvailableFitSizesForNovidadesPublic, listPublishedProducts } from "@/lib/db/products";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 
 // `absolute` de propósito — o layout raiz aplica um template "%s | Maria
@@ -44,14 +44,14 @@ export const dynamic = "force-dynamic";
 const HOME_NOVIDADES_TARGET = 16;
 
 /**
- * SizeQuickFilter é o mesmo componente das páginas de categoria/Novidades,
- * que atualiza a URL da rota atual (`initial` + o tamanho clicado). Na Home
- * não existe filtro nenhum aplicado a estes 16 cards — este objeto fixo é
- * só o "estado vazio" que faz o componente montar a URL só com `size`,
- * virando `/novidades?size=X` (ou `/novidades` para "Todos") em vez de
- * filtrar a própria Home.
+ * FitQuickFilter é o mesmo componente das páginas de categoria/Novidades,
+ * que atualiza a URL da rota atual (`initial` + a numeração clicada). Na
+ * Home não existe filtro nenhum aplicado a estes 16 cards — este objeto
+ * fixo é só o "estado vazio" que faz o componente montar a URL só com
+ * `fit`, virando `/novidades?fit=X` (ou `/novidades` para "Todos") em vez
+ * de filtrar a própria Home.
  */
-const NO_FILTERS_APPLIED = { size: null, minPrice: null, maxPrice: null, category: null };
+const NO_FILTERS_APPLIED = { size: null, fit: null, minPrice: null, maxPrice: null, category: null };
 
 /**
  * `listPublishedProducts(N)` traz N REGISTROS (uma linha por cor), não N
@@ -84,9 +84,9 @@ async function getHomeNovidadesGroups(): Promise<DisplayGroup[]> {
 }
 
 export default async function Home() {
-  const [novidadesGroups, novidadesSizeOptions, categorias, paymentSettings] = await Promise.all([
+  const [novidadesGroups, novidadesFitOptions, categorias, paymentSettings] = await Promise.all([
     getHomeNovidadesGroups(),
-    getAvailableSizesForNovidadesPublic(),
+    getAvailableFitSizesForNovidadesPublic(),
     getVisibleCategoriesPublic(),
     getPaymentSettings(),
   ]);
@@ -108,10 +108,10 @@ export default async function Home() {
           </span>
         </h1>
         {/* Atalho, não filtro: clicar aqui nunca filtra estes 16 cards da
-            Home — SizeQuickFilter monta a URL a partir de `initial` sempre
-            vazio, então o clique só navega para /novidades?size=X. */}
+            Home — FitQuickFilter monta a URL a partir de `initial` sempre
+            vazio, então o clique só navega para /novidades?fit=X. */}
         <div className="mt-4 text-left">
-          <SizeQuickFilter basePath="/novidades" initial={NO_FILTERS_APPLIED} sizeOptions={novidadesSizeOptions} />
+          <FitQuickFilter basePath="/novidades" initial={NO_FILTERS_APPLIED} fitOptions={novidadesFitOptions} />
         </div>
       </section>
 

@@ -18,11 +18,14 @@ export function SingleSizeSelector({
   value,
   onChange,
   label = "Selecione o tamanho",
+  fitHintByLabel,
 }: {
   sizes: string[];
   value: string | null;
   onChange: (size: string) => void;
   label?: string;
+  /** "Veste X ao Y" por tamanho — opcional, quando ausente o chip fica exatamente como antes (ex: Minhas Roupas, item 13: nunca lista compatibilidade de todos os tamanhos). */
+  fitHintByLabel?: Record<string, string | null>;
 }) {
   const sortedSizes = useMemo(() => sortProductSizes(sizes), [sizes]);
   const singleSize = sortedSizes.length === 1 ? sortedSizes[0] : null;
@@ -34,9 +37,11 @@ export function SingleSizeSelector({
   if (sortedSizes.length === 0) return null;
 
   if (singleSize) {
+    const hint = fitHintByLabel?.[singleSize];
     return (
       <p className="text-sm text-text">
         Tamanho: <span className="font-medium">{singleSize}</span>
+        {hint && <span className="ml-1.5 text-text-muted">· {hint}</span>}
       </p>
     );
   }
@@ -45,22 +50,27 @@ export function SingleSizeSelector({
     <div>
       <p className="mb-1.5 text-sm font-medium text-text">{label}</p>
       <div className="flex flex-wrap gap-1.5">
-        {sortedSizes.map((size) => (
-          <button
-            key={size}
-            type="button"
-            onClick={() => onChange(size)}
-            aria-pressed={value === size}
-            className={cn(
-              "flex h-10 min-w-10 items-center justify-center rounded-full border px-3 text-sm font-medium transition-colors",
-              value === size
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-surface text-text hover:bg-muted"
-            )}
-          >
-            {size}
-          </button>
-        ))}
+        {sortedSizes.map((size) => {
+          const hint = fitHintByLabel?.[size];
+          return (
+            <div key={size} className="flex flex-col items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => onChange(size)}
+                aria-pressed={value === size}
+                className={cn(
+                  "flex h-10 min-w-10 items-center justify-center rounded-full border px-3 text-sm font-medium transition-colors",
+                  value === size
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-surface text-text hover:bg-muted"
+                )}
+              >
+                {size}
+              </button>
+              {hint && <span className="text-[10px] text-text-muted">{hint}</span>}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

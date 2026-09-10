@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { DualPriceBlock, Price } from "@/components/ui/Price";
 import { FavoriteButton } from "@/components/catalog/FavoriteButton";
 import { ProductWhatsAppFlow } from "@/components/catalog/ProductWhatsAppFlow";
+import { formatFitSizesLabel } from "@/lib/catalog/fit-size-format";
 import { resolveProductPricing, resolveTrackingPrice } from "@/lib/catalog/pricing";
 import { sortProductSizes } from "@/lib/catalog/size-order";
 import { PRODUCT_STATUS_LABELS, publicStatusBadge } from "@/lib/catalog/status";
@@ -57,11 +58,14 @@ export function ProductDetailView({
   initialActiveId,
   paymentSettings,
   sellers,
+  fitCompatibilityByProductId,
 }: {
   members: ProductDetail[];
   initialActiveId: string;
   paymentSettings: PaymentSettings;
   sellers: { id: string; name: string }[];
+  /** product_id -> label_size (da etiqueta) -> numerações que veste. Vazio/ausente = sem compatibilidade cadastrada (fallback seguro: só o tamanho da etiqueta aparece). */
+  fitCompatibilityByProductId?: Record<string, Record<string, number[]>>;
 }) {
   // Rotaciona pra a variante atual ser sempre o índice 0 — "sempre
   // começando pela primeira foto da variante atual/principal".
@@ -227,6 +231,19 @@ export function ProductDetailView({
   // Só pra exibição/modal — nunca reescreve o array vindo do produto nem o
   // que está cadastrado no Supabase (ver lib/catalog/size-order.ts).
   const sortedSizes = useMemo(() => sortProductSizes(active.sizes), [active.sizes]);
+
+  // "Veste X ao Y" por tamanho da etiqueta desta variante — nunca infere,
+  // só formata o que já está em product_size_fit_compatibilities (ver
+  // fit-size-format.ts). Ausência de compatibilidade pra um tamanho é o
+  // fallback seguro: aquele label simplesmente não ganha a linha extra.
+  const fitHintByLabel = useMemo(() => {
+    const activeFitCompatibility = fitCompatibilityByProductId?.[active.id] ?? {};
+    const hints: Record<string, string | null> = {};
+    for (const size of sortedSizes) {
+      hints[size] = formatFitSizesLabel(activeFitCompatibility[size] ?? []);
+    }
+    return hints;
+  }, [sortedSizes, fitCompatibilityByProductId, active.id]);
 
   return (
     <div className="grid gap-8 sm:grid-cols-2">
@@ -418,17 +435,33 @@ export function ProductDetailView({
           Disponibilidade sujeita à confirmação devido ao giro rápido das peças.
         </p>
 
-        {/* Tamanhos reais do produto (nunca fixo) + nota de frete — sempre
-            que houver ao menos 1 tamanho cadastrado; sem isso não há o que
-            mostrar (produto sem tamanho nenhum é o único caso omitido). */}
+        {/* Tamanhos reais do produto (nunca fixo) + "veste" (quando
+            cadastrado) + nota de frete — sempre que houver ao menos 1
+            tamanho cadastrado; sem isso não há o que mostrar (produto sem
+            tamanho nenhum é o único caso omitido). O tamanho que a cliente
+            escolhe continua sendo o da etiqueta — "veste" é só informativo,
+            nunca substitui P/M/G/Único por um número. */}
         {sortedSizes.length > 0 && (
           <div className="flex flex-col gap-1 text-sm">
-            <p className="text-text">
-              <span className="font-medium text-text-muted">
-                {sortedSizes.length === 1 ? "Tamanho: " : "Tamanhos disponíveis: "}
-              </span>
-              {sortedSizes.join(" • ")}
-            </p>
+            {sortedSizes.length === 1 ? (
+              <p className="text-text">
+                <span className="font-medium text-text-muted">Tamanho: </span>
+                {sortedSizes[0]}
+                {fitHintByLabel[sortedSizes[0]] && (
+                  <span className="ml-1.5 text-text-muted">· {fitHintByLabel[sortedSizes[0]]}</span>
+                )}
+              </p>
+            ) : (
+              <div className="flex flex-col gap-0.5">
+                <span className="font-medium text-text-muted">Tamanhos disponíveis:</span>
+                {sortedSizes.map((size) => (
+                  <p key={size} className="text-text">
+                    {size}
+                    {fitHintByLabel[size] && <span className="ml-1.5 text-text-muted">· {fitHintByLabel[size]}</span>}
+                  </p>
+                ))}
+              </div>
+            )}
             <p className="text-text-muted">🚚 Enviamos para todo o Brasil</p>
           </div>
         )}
@@ -442,6 +475,7 @@ export function ProductDetailView({
             price={trackedPrice}
             status={active.status}
             sizes={sortedSizes}
+            fitHintByLabel={fitHintByLabel}
             sellers={sellers}
           />
         </div>
