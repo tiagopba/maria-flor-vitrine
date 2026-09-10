@@ -15,23 +15,33 @@ type Tab = "pending" | "reviewed";
  * como o resto do Admin). Cada card edita sua própria compatibilidade e
  * salva isoladamente pela RPC dedicada — nunca reaproveita o save do
  * ProductForm.
+ *
+ * Dois estados propositalmente separados: `draftFitByProduct` (o que está
+ * marcado na tela agora, muda a cada clique num chip) e
+ * `persistedFitByProduct` (o que realmente já foi salvo pela RPC — só muda
+ * depois de um save bem-sucedido). Pendentes/Revisados é calculado SEMPRE a
+ * partir do persistido, nunca do draft — senão o card migraria de aba só de
+ * marcar um chip, antes de qualquer save de verdade acontecer.
  */
 export function RevisarNumeracoesList({ items }: { items: SizeFitReviewProduct[] }) {
   const [tab, setTab] = useState<Tab>("pending");
-  const [fitByProduct, setFitByProduct] = useState<Record<string, Record<string, number[]>>>(() =>
+  const initialFitByProduct = () =>
     Object.fromEntries(
       items.map((item) => [
         item.productId,
         Object.fromEntries(item.labels.map((l) => [l.labelSize, l.fitSizes])),
       ])
-    )
-  );
+    );
+  const [draftFitByProduct, setDraftFitByProduct] =
+    useState<Record<string, Record<string, number[]>>>(initialFitByProduct);
+  const [persistedFitByProduct, setPersistedFitByProduct] =
+    useState<Record<string, Record<string, number[]>>>(initialFitByProduct);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [errorByProduct, setErrorByProduct] = useState<Record<string, string>>({});
   const cardRefs = useRef<Record<string, HTMLLIElement | null>>({});
 
   function isItemPending(item: SizeFitReviewProduct): boolean {
-    const fit = fitByProduct[item.productId] ?? {};
+    const fit = persistedFitByProduct[item.productId] ?? {};
     return item.labels.some((l) => (fit[l.labelSize] ?? []).length === 0);
   }
 
@@ -43,8 +53,9 @@ export function RevisarNumeracoesList({ items }: { items: SizeFitReviewProduct[]
   // PRODUTOS pendentes (um card = um produto, mesmo que ele tenha vários
   // tamanhos pendentes); esta linha só complementa mostrando também quantos
   // pares (produto, tamanho da etiqueta) individuais ainda faltam revisar.
+  // Também calculada a partir do persistido, pelo mesmo motivo do isPending.
   const pendingLabelPairCount = pendingItems.reduce((sum, item) => {
-    const fit = fitByProduct[item.productId] ?? {};
+    const fit = persistedFitByProduct[item.productId] ?? {};
     return sum + item.labels.filter((l) => (fit[l.labelSize] ?? []).length === 0).length;
   }, 0);
 
@@ -57,11 +68,11 @@ export function RevisarNumeracoesList({ items }: { items: SizeFitReviewProduct[]
       return next;
     });
 
-    const fit = fitByProduct[item.productId] ?? {};
+    const draft = draftFitByProduct[item.productId] ?? {};
     const payload = [
       {
         product_id: item.productId,
-        sizes: item.labels.map((l) => ({ label_size: l.labelSize, fit_sizes: fit[l.labelSize] ?? [] })),
+        sizes: item.labels.map((l) => ({ label_size: l.labelSize, fit_sizes: draft[l.labelSize] ?? [] })),
       },
     ];
 
@@ -69,9 +80,15 @@ export function RevisarNumeracoesList({ items }: { items: SizeFitReviewProduct[]
     setSavingId(null);
 
     if ("error" in result) {
+      // Falhou: não toca no persistido (card não migra de aba, contador não
+      // muda) e não mexe no draft (a administradora não perde o que marcou).
       setErrorByProduct((prev) => ({ ...prev, [item.productId]: result.error }));
       return;
     }
+
+    // Só agora, com a RPC confirmando sucesso, o draft vira persistido —
+    // é o único lugar que pode fazer isPending mudar e o card trocar de aba.
+    setPersistedFitByProduct((prev) => ({ ...prev, [item.productId]: draft }));
 
     if (advanceToId) {
       requestAnimationFrame(() => {
@@ -135,8 +152,8 @@ export function RevisarNumeracoesList({ items }: { items: SizeFitReviewProduct[]
 
                 <SizeFitCompatibilityFields
                   labelSizes={item.labels.map((l) => l.labelSize)}
-                  value={fitByProduct[item.productId] ?? {}}
-                  onChange={(next) => setFitByProduct((prev) => ({ ...prev, [item.productId]: next }))}
+                  value={draftFitByProduct[item.productId] ?? {}}
+                  onChange={(next) => setDraftFitByProduct((prev) => ({ ...prev, [item.productId]: next }))}
                 />
 
                 {errorByProduct[item.productId] && (
