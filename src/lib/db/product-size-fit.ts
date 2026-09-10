@@ -1,8 +1,11 @@
 import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import { listProductsAdmin } from "@/lib/db/products";
 import { sortProductSizes } from "@/lib/catalog/size-order";
 import type { SaveProductSizeFitPayload } from "@/lib/validation/product-size-fit";
+import type { Database } from "@/types/database";
 
 /**
  * Módulo isolado para "numerações que veste" — deliberadamente separado de
@@ -175,4 +178,77 @@ export async function listSizeFitReviewProducts(
 export async function countPendingSizeFitProducts(): Promise<number> {
   const items = await listSizeFitReviewProducts({ status: "pending" });
   return items.length;
+}
+
+/**
+ * Mesma leitura em lote de getSizeFitCompatibilityByProductIds (acima),
+ * mas parametrizada pelo client — usada pela vitrine pública (página de
+ * produto, Minhas Roupas, mensagem de WhatsApp), NUNCA pelo client de
+ * sessão/cookie (ver o motivo documentado em lib/supabase/public.ts: uma
+ * sessão de admin inválida no mesmo navegador não pode derrubar uma
+ * leitura pública). Implementação deliberadamente duplicada em vez de
+ * fatorada em cima de getSizeFitCompatibilityByProductIds — a tela Admin
+ * Revisar numerações não deve ser tocada por esta mudança, nem
+ * indiretamente por um refactor compartilhado.
+ */
+async function getSizeFitCompatibilityByProductIdsForClient(
+  supabase: SupabaseClient<Database>,
+  productIds: string[]
+): Promise<Map<string, LabelSizeFit[]>> {
+  if (productIds.length === 0) return new Map();
+
+  const [{ data: sizes, error: sizesError }, { data: fits, error: fitsError }] = await Promise.all([
+    supabase.from("product_sizes").select("product_id, size").in("product_id", productIds),
+    supabase
+      .from("product_size_fit_compatibilities")
+      .select("product_id, label_size, fit_size")
+      .in("product_id", productIds),
+  ]);
+
+  if (sizesError) throw new Error(sizesError.message);
+  if (fitsError) throw new Error(fitsError.message);
+
+  const fitsByKey = new Map<string, number[]>();
+  for (const row of fits ?? []) {
+    const key = `${row.product_id}::${row.label_size}`;
+    const list = fitsByKey.get(key) ?? [];
+    list.push(row.fit_size);
+    fitsByKey.set(key, list);
+  }
+
+  const result = new Map<string, LabelSizeFit[]>();
+  for (const row of sizes ?? []) {
+    const key = `${row.product_id}::${row.size}`;
+    const list = result.get(row.product_id) ?? [];
+    list.push({ labelSize: row.size, fitSizes: (fitsByKey.get(key) ?? []).sort((a, b) => a - b) });
+    result.set(row.product_id, list);
+  }
+
+  return result;
+}
+
+/**
+ * Variante pública (anon key, sem cookies) de getSizeFitCompatibilityByProductIds
+ * — usada pela página de produto e por qualquer leitura server-side que
+ * roda numa página pública (RSC). A RLS pública de product_size_fit_compatibilities
+ * já restringe a produtos publicados/não arquivados e a label_size que
+ * ainda existe em product_sizes, então não repete essa checagem aqui.
+ */
+export async function getSizeFitCompatibilityByProductIdsPublic(
+  productIds: string[]
+): Promise<Map<string, LabelSizeFit[]>> {
+  return getSizeFitCompatibilityByProductIdsForClient(createPublicClient(), productIds);
+}
+
+/**
+ * Mesma leitura, mas recebendo um client já criado pelo chamador — usada
+ * por Server Actions que já têm seu próprio client em escopo (ex:
+ * favorites-click-action.ts, que usa o client admin) e não devem criar um
+ * segundo client só para esta consulta.
+ */
+export async function getSizeFitCompatibilityWithClient(
+  supabase: SupabaseClient<Database>,
+  productIds: string[]
+): Promise<Map<string, LabelSizeFit[]>> {
+  return getSizeFitCompatibilityByProductIdsForClient(supabase, productIds);
 }

@@ -12,6 +12,7 @@ import {
   getRelatedProductsPublic,
 } from "@/lib/db/products";
 import { resolveProductSlugRedirect } from "@/lib/db/product-slug";
+import { getSizeFitCompatibilityByProductIdsPublic } from "@/lib/db/product-size-fit";
 import { getActiveSellersForModal } from "@/lib/db/sellers";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { buildProductDescription, titleCase } from "@/lib/seo/local";
@@ -75,6 +76,18 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
   // outra — nunca deixa a própria página quebrar por causa disso.
   const members = groupMembers.some((m) => m.id === product.id) ? groupMembers : [product, ...groupMembers];
 
+  // "Veste X ao Y" por cor (cada cor é seu próprio product_id) — uma
+  // consulta em lote pras cores deste modelo, nunca uma por cor. Fallback
+  // seguro: produto sem compatibilidade cadastrada só não ganha a linha
+  // extra (ProductDetailView já trata ausência/array vazio).
+  const fitCompatibilityMap = await getSizeFitCompatibilityByProductIdsPublic(members.map((m) => m.id));
+  const fitCompatibilityByProductId = Object.fromEntries(
+    [...fitCompatibilityMap.entries()].map(([productId, labelFits]) => [
+      productId,
+      Object.fromEntries(labelFits.map((l) => [l.labelSize, l.fitSizes])),
+    ])
+  );
+
   const exploreCategories = buildExploreCategoriesItems(categories);
 
   const pricing = resolveProductPricing(product, paymentSettings);
@@ -92,7 +105,13 @@ export default async function ProductPage({ params }: PageProps<"/produto/[slug]
       />
       <BackButton fallbackHref="/novidades" className="mb-4" />
 
-      <ProductDetailView members={members} initialActiveId={product.id} paymentSettings={paymentSettings} sellers={sellers} />
+      <ProductDetailView
+        members={members}
+        initialActiveId={product.id}
+        paymentSettings={paymentSettings}
+        sellers={sellers}
+        fitCompatibilityByProductId={fitCompatibilityByProductId}
+      />
 
       {related.length > 0 && (
         <section className="mt-12">

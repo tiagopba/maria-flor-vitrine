@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
 import { CategoryCarousel } from "@/components/catalog/CategoryCarousel";
 import { FilteredEmptyState } from "@/components/catalog/FilteredEmptyState";
+import { FitQuickFilter } from "@/components/catalog/FitQuickFilter";
 import { ProductFilters } from "@/components/catalog/ProductFilters";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
-import { SizeQuickFilter } from "@/components/catalog/SizeQuickFilter";
 import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
 import { buildFilterQueryString, hasActiveFilters, parsePublicFilters } from "@/lib/catalog/filters";
 import { getCategoryBySlugPublic, getVisibleCategoriesPublic } from "@/lib/db/categories";
-import { getAvailableSizesForNovidadesPublic, listPublishedProductsFiltered } from "@/lib/db/products";
+import {
+  getAvailableFitSizesForNovidadesPublic,
+  getAvailableSizesForNovidadesPublic,
+  listPublishedProductsFiltered,
+} from "@/lib/db/products";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 
 export async function generateMetadata({ searchParams }: PageProps<"/novidades">): Promise<Metadata> {
@@ -28,9 +32,10 @@ export default async function NovidadesPage({ searchParams }: PageProps<"/novida
   const filters = parsePublicFilters(params);
   const filtersActive = hasActiveFilters(filters);
 
-  const [category, sizeOptions, categories, paymentSettings] = await Promise.all([
+  const [category, sizeOptions, fitOptions, categories, paymentSettings] = await Promise.all([
     filters.category ? getCategoryBySlugPublic(filters.category) : Promise.resolve(null),
     getAvailableSizesForNovidadesPublic(),
+    getAvailableFitSizesForNovidadesPublic(),
     getVisibleCategoriesPublic(),
     getPaymentSettings(),
   ]);
@@ -39,6 +44,7 @@ export default async function NovidadesPage({ searchParams }: PageProps<"/novida
     {
       categoryId: category?.id,
       size: filters.size ?? undefined,
+      fitSize: filters.fit ?? undefined,
       minPrice: filters.minPrice ?? undefined,
       maxPrice: filters.maxPrice ?? undefined,
     },
@@ -61,7 +67,7 @@ export default async function NovidadesPage({ searchParams }: PageProps<"/novida
         />
       </div>
 
-      <SizeQuickFilter basePath="/novidades" initial={filters} sizeOptions={sizeOptions} />
+      <FitQuickFilter basePath="/novidades" initial={filters} fitOptions={fitOptions} />
 
       {products.length === 0 ? (
         filtersActive ? (

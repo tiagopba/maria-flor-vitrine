@@ -147,7 +147,12 @@ export function ProductFilters({ basePath, initial, sizeOptions, categoryOptions
           )}
 
           <div className="flex gap-2 pt-2">
-            <Button type="button" variant="secondary" className="flex-1" onClick={() => apply({ size: null, minPrice: null, maxPrice: null, category: null })}>
+            <Button
+              type="button"
+              variant="secondary"
+              className="flex-1"
+              onClick={() => apply({ size: null, fit: initial.fit, minPrice: null, maxPrice: null, category: null })}
+            >
               Limpar filtros
             </Button>
             <Button type="button" className="flex-1" onClick={() => apply(pending)}>

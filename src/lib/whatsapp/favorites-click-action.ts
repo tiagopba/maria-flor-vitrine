@@ -6,7 +6,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createSharedSelection } from "@/lib/db/shared-selections";
 import { getColorNamesByIds } from "@/lib/db/colors";
 import { getSiteUrl } from "@/lib/site";
+import { formatFitSizesLabel } from "@/lib/catalog/fit-size-format";
 import { resolveProductPricing, resolveTrackingPrice } from "@/lib/catalog/pricing";
+import { getSizeFitCompatibilityWithClient } from "@/lib/db/product-size-fit";
 import { getStateLabel } from "@/lib/shipping/brazilian-states";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { sendCapiEvent } from "@/lib/analytics/meta-capi";
@@ -144,16 +146,30 @@ export async function submitFavoritesWhatsAppClick(
   const colorIds = [...new Set(available.map((p) => p.color_id).filter((id): id is string => id != null))];
   const colorNameById = await getColorNamesByIds(supabase, colorIds);
 
+  // "Veste X ao Y" — busca fresca no servidor (nunca confia em compatibilidade
+  // vinda do client), em lote pelos mesmos ids já resolvidos acima. Sem
+  // compatibilidade pra aquele tamanho: fitLabel fica undefined e a
+  // mensagem sai exatamente como antes (nunca inventa vestibilidade).
+  const fitCompatibilityByProductId = await getSizeFitCompatibilityWithClient(
+    supabase,
+    available.map((p) => p.id)
+  );
+
   const shippingStateLabel = input.shippingStateCode ? (getStateLabel(input.shippingStateCode) ?? undefined) : undefined;
 
   const message = buildFavoritesWhatsAppMessage(
     available.map((p) => {
       const pricing = resolveProductPricing(p, paymentSettings);
+      const size = sizeByProductId.get(p.id) ?? undefined;
+      const fitSizes = size
+        ? fitCompatibilityByProductId.get(p.id)?.find((l) => l.labelSize === size)?.fitSizes
+        : undefined;
       return {
         productName: p.name,
         code: p.code,
         colorName: p.color_id ? colorNameById.get(p.color_id) : undefined,
-        size: sizeByProductId.get(p.id) ?? undefined,
+        fitLabel: fitSizes ? (formatFitSizesLabel(fitSizes) ?? undefined) : undefined,
+        size,
         price: pricing.model === "legacy" ? (pricing.promotionalPrice ?? pricing.price) : undefined,
         dualPrice:
           pricing.model === "dual"

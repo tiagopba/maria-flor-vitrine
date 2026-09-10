@@ -5,10 +5,14 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Price } from "@/components/ui/Price";
 import { SingleSizeSelector } from "@/components/catalog/SingleSizeSelector";
+import { formatFitSizesLabel } from "@/lib/catalog/fit-size-format";
 import { publicStatusBadge } from "@/lib/catalog/status";
 import { removeFavorite, setSelectedSize } from "@/lib/favorites/storage";
 import type { ProductDetail } from "@/lib/db/products";
 import type { PaymentSettings } from "@/lib/site-settings/payments";
+
+/** ProductDetail + compatibilidade (label_size -> numerações que veste) — ver /api/favoritos/produtos. */
+export type FavoriteProductDetail = ProductDetail & { fitCompatibility?: Record<string, number[]> };
 
 /**
  * Uma peça na lista de /favoritos — imagem à esquerda, informações à
@@ -23,7 +27,7 @@ export function FavoriteProductRow({
   rowRef,
   paymentSettings,
 }: {
-  product: ProductDetail;
+  product: FavoriteProductDetail;
   selectedSize: string | null;
   /** true quando essa é a primeira peça sem tamanho escolhido — usado só para o scroll/foco, a mensagem de erro é única, mostrada acima da lista */
   pending?: boolean;
@@ -33,6 +37,9 @@ export function FavoriteProductRow({
   const isSoldOut = product.status === "SOLD_OUT";
   const badge = publicStatusBadge(product.status);
   const mainImage = product.images[0]?.url ?? null;
+  // Só a compatibilidade do tamanho JÁ ESCOLHIDO (item 13 da Etapa 2) —
+  // nunca lista as de todos os tamanhos aqui, mesmo que o payload as tenha.
+  const fitHint = selectedSize ? formatFitSizesLabel(product.fitCompatibility?.[selectedSize] ?? []) : null;
 
   return (
     <div
@@ -77,12 +84,15 @@ export function FavoriteProductRow({
         {isSoldOut ? (
           <p className="text-xs font-medium text-red-600">Esgotado no momento</p>
         ) : (
-          <SingleSizeSelector
-            sizes={product.sizes}
-            value={selectedSize}
-            onChange={(size) => setSelectedSize(product.id, size)}
-            label="Tamanho"
-          />
+          <>
+            <SingleSizeSelector
+              sizes={product.sizes}
+              value={selectedSize}
+              onChange={(size) => setSelectedSize(product.id, size)}
+              label="Tamanho"
+            />
+            {fitHint && <p className="text-xs text-text-muted">{fitHint}</p>}
+          </>
         )}
       </div>
     </div>

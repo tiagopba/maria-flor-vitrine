@@ -262,6 +262,13 @@ export type PublicProductStatusFilter = "available" | "last_units";
 export interface PublicProductFilters {
   categoryId?: string;
   size?: string;
+  /**
+   * Numeração corporal que a cliente realmente veste (ex: 40) — nunca o
+   * tamanho da etiqueta. Combinável com `size`, mas a nova interface
+   * pública (FitQuickFilter) só gera um dos dois por vez. Ver
+   * product_size_fit_compatibilities.
+   */
+  fitSize?: number;
   minPrice?: number;
   maxPrice?: number;
   /**
@@ -330,6 +337,23 @@ export async function listPublishedProductsFiltered(
     if (sizeError) throw new Error(sizeError.message);
 
     const ids = [...new Set((sizeRows ?? []).map((r) => r.product_id))];
+    if (ids.length === 0) return [];
+    query = query.in("id", ids);
+  }
+
+  // Numeração que veste — segunda consulta em product_size_fit_compatibilities
+  // (nunca uma consulta por produto), aproveitando o índice
+  // (fit_size, product_id) já criado na migration da tabela. Nunca infere
+  // compatibilidade: só usa o que está cadastrado; um produto/variante sem
+  // essa linha simplesmente não entra no resultado filtrado.
+  if (filters.fitSize != null) {
+    const { data: fitRows, error: fitError } = await supabase
+      .from("product_size_fit_compatibilities")
+      .select("product_id")
+      .eq("fit_size", filters.fitSize);
+    if (fitError) throw new Error(fitError.message);
+
+    const ids = [...new Set((fitRows ?? []).map((r) => r.product_id))];
     if (ids.length === 0) return [];
     query = query.in("id", ids);
   }
@@ -420,6 +444,66 @@ export async function getAvailableSizesForNovidadesPublic(limit = 48): Promise<s
   if (productError) throw new Error(productError.message);
 
   return getAvailableSizesForProductIds((productRows ?? []).map((row) => row.id));
+}
+
+/**
+ * Numerações (fit_size) distintas entre um conjunto de ids de produto —
+ * mesma ideia de getAvailableSizesForProductIds, mas em
+ * product_size_fit_compatibilities. A RLS pública dessa tabela já restringe
+ * às linhas de produtos publicados com label_size ainda existente em
+ * product_sizes, então o filtro de visibilidade não precisa ser repetido
+ * aqui. Nunca uma consulta por produto.
+ */
+async function getAvailableFitSizesForProductIds(productIds: string[]): Promise<number[]> {
+  if (productIds.length === 0) return [];
+
+  const supabase = createPublicClient();
+  const { data, error } = await supabase
+    .from("product_size_fit_compatibilities")
+    .select("fit_size")
+    .in("product_id", productIds);
+  if (error) throw new Error(error.message);
+
+  return [...new Set((data ?? []).map((row) => row.fit_size))].sort((a, b) => a - b);
+}
+
+/**
+ * Mesma ideia de getAvailableSizesForCategoryPublic, mas pra numeração —
+ * só oferece no FitQuickFilter os números que realmente existem em
+ * compatibilidades cadastradas daquela categoria (nunca uma lista fixa
+ * tipo 34–48).
+ */
+export async function getAvailableFitSizesForCategoryPublic(categoryId: string): Promise<number[]> {
+  const supabase = createPublicClient();
+
+  const { data: productRows, error: productError } = await supabase
+    .from("products")
+    .select("id")
+    .eq("category_id", categoryId)
+    .neq("status", "ARCHIVED")
+    .not("published_at", "is", null);
+  if (productError) throw new Error(productError.message);
+
+  return getAvailableFitSizesForProductIds((productRows ?? []).map((row) => row.id));
+}
+
+/**
+ * Mesma ideia de getAvailableSizesForNovidadesPublic, mas pra numeração —
+ * restrita ao mesmo conjunto de produtos que /novidades exibe sem filtro.
+ */
+export async function getAvailableFitSizesForNovidadesPublic(limit = 48): Promise<number[]> {
+  const supabase = createPublicClient();
+
+  const { data: productRows, error: productError } = await supabase
+    .from("products")
+    .select("id")
+    .neq("status", "ARCHIVED")
+    .not("published_at", "is", null)
+    .order("published_at", { ascending: false })
+    .limit(limit);
+  if (productError) throw new Error(productError.message);
+
+  return getAvailableFitSizesForProductIds((productRows ?? []).map((row) => row.id));
 }
 
 /**
