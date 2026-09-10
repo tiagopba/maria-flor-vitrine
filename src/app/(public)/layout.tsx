@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { NavigationTracker } from "@/components/layout/NavigationTracker";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
+import { TrustBar } from "@/components/layout/TrustBar";
 import { FavoritesDiscoveryTip } from "@/components/catalog/FavoritesDiscoveryTip";
 import { PostContactPrompt } from "@/components/catalog/PostContactPrompt";
 import { JsonLd } from "@/components/seo/JsonLd";
@@ -36,6 +37,7 @@ export default async function PublicLayout({ children }: { children: React.React
       <FavoritesDiscoveryTip />
       <PostContactPrompt />
       {children}
+      <TrustBar />
       <SiteFooter />
     </>
   );
