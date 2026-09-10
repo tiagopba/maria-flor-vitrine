@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getActiveCategoriesPublic } from "@/lib/db/categories";
 import { listActiveColorsAdmin } from "@/lib/db/colors";
 import { getProductByIdAdmin } from "@/lib/db/products";
+import { getSizeFitCompatibilityByProductId } from "@/lib/db/product-size-fit";
 import { listActiveSizeOptionsAdmin, listSizeOptionsForVariantEdit } from "@/lib/db/sizes";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { ProductForm } from "../ProductForm";
@@ -25,6 +26,12 @@ export const metadata: Metadata = { title: "Novo produto" };
  * parcelamento (força "usar parcelamento padrão da loja" marcado).
  * `promotional_price` também não é copiado — não está na lista de campos
  * pedida, então fica de fora em vez de herdar um valor não solicitado.
+ *
+ * "Numerações que veste" do produto original também é copiada pro rascunho
+ * (mesmo mecanismo: só existe na tela até a admin clicar Salvar), mapeada só
+ * pra tamanhos que continuam existindo em `sizes` — se um tamanho não veio
+ * nesta cópia (produto original tinha mais tamanhos que os copiados), a
+ * compatibilidade dele é ignorada aqui, nunca vaza pro rascunho.
  */
 export default async function NewProductPage({ searchParams }: PageProps<"/admin/produtos/novo">) {
   const [rawParams, categories, colors, activeSizeOptions, paymentSettings] = await Promise.all([
@@ -50,6 +57,10 @@ export default async function NewProductPage({ searchParams }: PageProps<"/admin
       }
     : undefined;
 
+  const sourceFitCompatibility = sourceProduct
+    ? await getSizeFitCompatibilityByProductId(sourceProduct.id)
+    : [];
+
   const variantDefaults: VariantBlockData[] | undefined = sourceProduct
     ? [
         {
@@ -66,6 +77,11 @@ export default async function NewProductPage({ searchParams }: PageProps<"/admin
           sizes: sourceProduct.sizes,
           images: [],
           sizeOptions: await listSizeOptionsForVariantEdit(sourceProduct.sizes),
+          fitCompatibility: Object.fromEntries(
+            sourceFitCompatibility
+              .filter((l) => sourceProduct.sizes.includes(l.labelSize))
+              .map((l) => [l.labelSize, l.fitSizes])
+          ),
         },
       ]
     : undefined;

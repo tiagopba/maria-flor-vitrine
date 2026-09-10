@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { LogOut, Menu } from "lucide-react";
 import { getCurrentAdmin } from "@/lib/auth/permissions";
+import { countPendingSizeFitProducts } from "@/lib/db/product-size-fit";
 import { AdminNav } from "./AdminNav";
 import { logout } from "./login/actions";
 
@@ -21,6 +22,8 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   if (!admin) {
     return children;
   }
+
+  const pendingSizeFitCount = await countPendingSizeFitProducts();
 
   return (
     <div className="flex min-h-screen flex-col bg-[#faf6f3] sm:flex-row">
@@ -54,7 +57,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
         </div>
 
         <div className="flex-1 overflow-y-auto py-2 sm:py-3">
-          <AdminNav role={admin.role} />
+          <AdminNav role={admin.role} pendingSizeFitCount={pendingSizeFitCount} />
         </div>
 
         <div className="hidden shrink-0 border-t border-white/10 px-4 py-3 sm:block">
