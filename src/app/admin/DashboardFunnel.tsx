@@ -6,12 +6,9 @@ function formatPercent(value: number): string {
 }
 
 const FUNNEL_STEPS: { key: keyof FunnelData; label: string }[] = [
-  { key: "visitSessions", label: "Visitou a vitrine" },
-  { key: "productViewSessions", label: "Visualizou um produto" },
-  { key: "flowStartedSessions", label: "Clicou \"Quero essa peça\"" },
-  { key: "sizeSelectedSessions", label: "Escolheu o tamanho" },
-  { key: "selectionSessions", label: "Adicionou à Minha Seleção" },
-  { key: "whatsappSessions", label: "Clique para WhatsApp" },
+  { key: "productViewSessions", label: "Visualizou produto" },
+  { key: "selectionSessions", label: "Adicionou às Minhas Roupas" },
+  { key: "whatsappSessions", label: "Tirar dúvidas no WhatsApp" },
 ];
 
 /**

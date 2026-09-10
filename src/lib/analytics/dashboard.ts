@@ -214,16 +214,17 @@ export interface RankingRow {
   secondaryCount?: number;
 }
 
+/**
+ * Funil simplificado ao novo fluxo da cliente ("Quero essa peça" manda
+ * direto pra /favoritos; conversa com vendedora só acontece lá) — três
+ * etapas, cada uma sessões distintas com pelo menos um evento do tipo,
+ * nunca quantidade bruta:
+ * Visualizou produto (PRODUCT_VIEW) → Adicionou às Minhas Roupas
+ * (FAVORITE_ADDED) → Tirar dúvidas no WhatsApp (FAVORITES_WHATSAPP_CLICK,
+ * nunca o WHATSAPP_CLICK antigo — ver DOUBT_WHATSAPP_EVENT_TYPES).
+ */
 export interface FunnelData {
-  visitSessions: number;
   productViewSessions: number;
-  /** Sessões com PRODUCT_FLOW_STARTED — clique em "Quero essa peça" na
-   * página do produto. */
-  flowStartedSessions: number;
-  /** Sessões com SIZE_SELECTED — evento existe desde a migration inicial,
-   * mas só passou a ser disparado (fluxo guiado de "Quero essa peça")
-   * junto desta mudança; sem histórico antes disso, ver PARTE 9. */
-  sizeSelectedSessions: number;
   selectionSessions: number;
   whatsappSessions: number;
 }
@@ -242,16 +243,21 @@ export interface DashboardData {
      * diferença, não é reescrita. */
     uniqueSessions: MetricComparison;
     productViews: MetricComparison;
+    /** "Adições às Minhas Roupas" — sessões distintas com pelo menos um
+     * FAVORITE_ADDED no período (nunca quantidade bruta de evento). */
     favoritesAdded: MetricComparison;
-    /** "Cliques para WhatsApp" — sessões distintas com pelo menos um
-     * WHATSAPP_CLICK/FAVORITES_WHATSAPP_CLICK no período (nunca quantidade
-     * bruta de evento: uma sessão que clica 3x conta 1). O evento em si só
-     * marca que o site gerou o link wa.me e redirecionou — não é
-     * confirmação de mensagem enviada de verdade, por isso o nome do card
-     * não diz "conversas iniciadas". */
+    /** "Cliques em Tirar dúvidas" — sessões distintas com pelo menos um
+     * FAVORITES_WHATSAPP_CLICK no período (nunca quantidade bruta de
+     * evento: uma sessão que clica 3x conta 1). Deliberadamente NÃO inclui
+     * o WHATSAPP_CLICK antigo (fluxo "Tirar dúvidas" da página de produto,
+     * removido; hoje só "Quero algo parecido" de SOLD_OUT) — ver
+     * DOUBT_WHATSAPP_EVENT_TYPES. O evento em si só marca que o site gerou
+     * o link wa.me e redirecionou — não é confirmação de mensagem enviada
+     * de verdade, por isso o nome do card não diz "conversas iniciadas". */
     whatsappStarted: MetricComparison;
-    /** Sessões com evento de WhatsApp ÷ sessões únicas (visita) — nunca
-     * dividido pela quantidade bruta de PRODUCT_VIEW. */
+    /** Sessões com FAVORITES_WHATSAPP_CLICK ÷ sessões únicas (visita) —
+     * mesma base de whatsappStarted, nunca dividido pela quantidade bruta
+     * de PRODUCT_VIEW. */
     whatsappClickRate: MetricComparison;
     /** Sessões com PRODUCT_VIEW ÷ sessões únicas (visita). */
     productViewRate: MetricComparison;
@@ -259,9 +265,10 @@ export interface DashboardData {
     selectionRate: MetricComparison;
     offersLeadsConfirmed: MetricComparison;
   };
-  /** Funil da Vitrine — cada etapa conta sessões distintas que tiveram pelo
-   * menos um evento daquele tipo no período atual (não quantidade bruta de
-   * eventos, e as etapas não exigem ordem entre si). */
+  /** Funil da Vitrine (Visualizou produto → Adicionou às Minhas Roupas →
+   * Tirar dúvidas no WhatsApp) — cada etapa conta sessões distintas que
+   * tiveram pelo menos um evento daquele tipo no período atual (não
+   * quantidade bruta de eventos, e as etapas não exigem ordem entre si). */
   funnel: FunnelData;
   /** Mobile / Desktop / Outros (tablet + desconhecido) — sessões distintas,
    * classificadas pelo `device_type` do primeiro PAGE_VIEW de cada sessão
@@ -284,14 +291,17 @@ export interface DashboardData {
    * classifyWhatsappOrigin. Mesmo par de eventos de whatsappSessions/
    * whatsappStarted, só quebrado por origem. */
   whatsappByOrigin: RankingRow[];
-  /** Sessões distintas por vendedora (nome resolvido via `sellers`, nunca
-   * duplicado em analytics_events) — só vendedoras que realmente
-   * receberam algum clique no período; sem entrada nenhuma quando não há
-   * seller_id nulo no período (ver getDashboardData). */
+  /** "Tirar dúvidas por vendedora" — sessões distintas por vendedora, só
+   * FAVORITES_WHATSAPP_CLICK (nunca o WHATSAPP_CLICK antigo). Nome
+   * resolvido via `sellers`, nunca duplicado em analytics_events — só
+   * vendedoras que realmente receberam algum clique no período; sem
+   * entrada nenhuma quando não há seller_id nulo no período (ver
+   * getDashboardData). */
   whatsappBySeller: RankingRow[];
   /** "Vendedora escolhida" / "Qualquer vendedora / round-robin" / "Sem
    * informação" — sempre as 3 categorias (mesmo padrão de devices/
-   * whatsappByOrigin), ver classifyDirectionMode. */
+   * whatsappByOrigin), ver classifyDirectionMode. Mesma base de
+   * whatsappBySeller: só FAVORITES_WHATSAPP_CLICK. */
   whatsappByDirectionMode: RankingRow[];
 }
 
@@ -307,10 +317,20 @@ const RELEVANT_EVENT_TYPES = [
   "OFFER_LEAD_CONFIRMED",
 ] as const;
 
-/** Mesmo par de eventos que já define "Cliques para WhatsApp" —
- * reaproveitado por qualquer métrica que precise de "sessão com
- * WhatsApp" (funil, taxa, card), nunca uma lista divergente. */
+/** Os dois eventos de clique pra WhatsApp que já existiram no site — usado
+ * só por whatsappByOrigin (visão histórica "Página do produto" vs "Minha
+ * Seleção"), nunca pelo funil/card/ranking principais. */
 const WHATSAPP_EVENT_TYPES = ["WHATSAPP_CLICK", "FAVORITES_WHATSAPP_CLICK"] as const;
+
+/**
+ * "Tirar dúvidas no WhatsApp" — o funil/card/taxa/rankings principais do
+ * novo fluxo usam só este evento, nunca o WHATSAPP_CLICK antigo (rota
+ * "Tirar dúvidas" da página de produto, removida; hoje esse event_type só
+ * nasce de "Quero algo parecido" em peça SOLD_OUT, um fluxo à parte que não
+ * deve inflar as métricas do fluxo principal — ver instrução de não
+ * misturar os dois).
+ */
+const DOUBT_WHATSAPP_EVENT_TYPES = ["FAVORITES_WHATSAPP_CLICK"] as const;
 
 const WHATSAPP_ORIGIN_BUCKETS = ["Página do produto", "Minha Seleção", "Outros"] as const;
 type WhatsappOriginBucket = (typeof WHATSAPP_ORIGIN_BUCKETS)[number];
@@ -540,12 +560,13 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   const previousVisitSessions = distinctSessionIds(previousRows, ["PAGE_VIEW"]);
   const currentProductViewSessions = distinctSessionIds(currentRows, ["PRODUCT_VIEW"]);
   const previousProductViewSessions = distinctSessionIds(previousRows, ["PRODUCT_VIEW"]);
-  const currentFlowStartedSessions = distinctSessionIds(currentRows, ["PRODUCT_FLOW_STARTED"]);
-  const currentSizeSelectedSessions = distinctSessionIds(currentRows, ["SIZE_SELECTED"]);
   const currentSelectionSessions = distinctSessionIds(currentRows, ["FAVORITE_ADDED"]);
   const previousSelectionSessions = distinctSessionIds(previousRows, ["FAVORITE_ADDED"]);
-  const currentWhatsappSessions = distinctSessionIds(currentRows, WHATSAPP_EVENT_TYPES);
-  const previousWhatsappSessions = distinctSessionIds(previousRows, WHATSAPP_EVENT_TYPES);
+  // "Cliques em Tirar dúvidas" — só FAVORITES_WHATSAPP_CLICK, nunca o
+  // WHATSAPP_CLICK antigo (ver DOUBT_WHATSAPP_EVENT_TYPES). Base do funil
+  // principal, do card e da taxa de WhatsApp.
+  const currentWhatsappSessions = distinctSessionIds(currentRows, DOUBT_WHATSAPP_EVENT_TYPES);
+  const previousWhatsappSessions = distinctSessionIds(previousRows, DOUBT_WHATSAPP_EVENT_TYPES);
 
   const currentClickRate = ratePct(currentWhatsappSessions.size, currentVisitSessions.size);
   const previousClickRate = ratePct(previousWhatsappSessions.size, previousVisitSessions.size);
@@ -555,31 +576,39 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   const previousSelectionRate = ratePct(previousSelectionSessions.size, previousVisitSessions.size);
 
   const funnel: FunnelData = {
-    visitSessions: currentVisitSessions.size,
     productViewSessions: currentProductViewSessions.size,
-    flowStartedSessions: currentFlowStartedSessions.size,
-    sizeSelectedSessions: currentSizeSelectedSessions.size,
     selectionSessions: currentSelectionSessions.size,
     whatsappSessions: currentWhatsappSessions.size,
   };
 
-  // Origem do WhatsApp, vendedora e forma de direcionamento — sessões
-  // distintas por bucket, uma única passada pelas linhas que já são um
-  // clique de WhatsApp no período atual (mesmo par de eventos de
-  // currentWhatsappSessions). Uma sessão que clica várias vezes pra MESMA
-  // vendedora conta 1 (Set dedup); se clicar pra vendedoras diferentes,
-  // conta 1 em cada uma (Sets independentes por seller_id) — exatamente a
-  // regra pedida.
+  // Origem do WhatsApp (histórico, ver WHATSAPP_EVENT_TYPES) — sessões
+  // distintas por bucket, uma única passada pelas linhas que já são
+  // qualquer um dos dois eventos de WhatsApp no período atual. Preserva a
+  // visão antiga "Página do produto" vs "Minha Seleção" sem misturar com o
+  // funil/ranking principais (que usam só FAVORITES_WHATSAPP_CLICK, no loop
+  // separado logo abaixo).
   const whatsappOriginBuckets = new Map<string, Set<string>>(WHATSAPP_ORIGIN_BUCKETS.map((b) => [b, new Set()]));
-  const directionModeBuckets = new Map<string, Set<string>>(DIRECTION_MODE_BUCKETS.map((b) => [b, new Set()]));
-  const sellerSessionSets = new Map<string, Set<string>>();
-  const noSellerSessions = new Set<string>();
   for (const row of currentRows) {
     if (!row.session_id || !WHATSAPP_EVENT_TYPES.includes(row.event_type as (typeof WHATSAPP_EVENT_TYPES)[number])) {
       continue;
     }
     const origin = classifyWhatsappOrigin(row);
     whatsappOriginBuckets.get(origin)?.add(row.session_id);
+  }
+
+  // "Tirar dúvidas por vendedora" e "Forma de direcionamento" — só
+  // FAVORITES_WHATSAPP_CLICK (mesma base de currentWhatsappSessions), nunca
+  // o WHATSAPP_CLICK antigo. Uma sessão que clica várias vezes pra MESMA
+  // vendedora conta 1 (Set dedup); se clicar pra vendedoras diferentes,
+  // conta 1 em cada uma (Sets independentes por seller_id) — exatamente a
+  // regra pedida.
+  const directionModeBuckets = new Map<string, Set<string>>(DIRECTION_MODE_BUCKETS.map((b) => [b, new Set()]));
+  const sellerSessionSets = new Map<string, Set<string>>();
+  const noSellerSessions = new Set<string>();
+  for (const row of currentRows) {
+    if (!row.session_id || !DOUBT_WHATSAPP_EVENT_TYPES.includes(row.event_type as (typeof DOUBT_WHATSAPP_EVENT_TYPES)[number])) {
+      continue;
+    }
 
     const mode = classifyDirectionMode(row);
     directionModeBuckets.get(mode)?.add(row.session_id);

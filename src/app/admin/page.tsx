@@ -76,12 +76,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
         <DashboardCard label="Visualizações da vitrine" comparison={data.cards.pageViews} icon={Eye} />
         <DashboardCard label="Sessões únicas" comparison={data.cards.uniqueSessions} icon={Users} />
         <DashboardCard label="Visualizações de produtos" comparison={data.cards.productViews} icon={ShoppingBag} />
-        <DashboardCard label="Adições à Minha Seleção" comparison={data.cards.favoritesAdded} icon={Heart} />
+        <DashboardCard label="Adições às Minhas Roupas" comparison={data.cards.favoritesAdded} icon={Heart} />
         <DashboardCard
-          label="Cliques para WhatsApp"
+          label="Cliques em Tirar dúvidas"
           comparison={data.cards.whatsappStarted}
           icon={MessageCircle}
-          hint="Sessões distintas com clique — não confirma envio da mensagem"
+          hint="Sessões distintas que seguiram para o WhatsApp — não confirma envio da mensagem."
         />
         <DashboardCard
           label="Cadastros no Grupo de Ofertas"
@@ -127,9 +127,9 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
           secondaryUnitLabel="visualizações"
         />
         <RankingList
-          title="Peças mais adicionadas à seleção"
+          title="Peças mais adicionadas às Minhas Roupas"
           rows={data.topAddedProducts}
-          emptyLabel="Nenhuma peça adicionada à seleção neste período."
+          emptyLabel="Nenhuma peça adicionada às Minhas Roupas neste período."
           withAvatar
           primaryUnitLabel="sessões adicionaram"
           secondaryUnitLabel="adições"
@@ -155,15 +155,15 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
           emptyLabel="Sem cliques para WhatsApp neste período."
         />
         <RankingList
-          title="Cliques para WhatsApp por vendedora"
+          title="Tirar dúvidas por vendedora"
           rows={data.whatsappBySeller}
-          emptyLabel="Sem cliques para WhatsApp neste período."
+          emptyLabel="Sem cliques em tirar dúvidas neste período."
           primaryUnitLabel="sessões"
         />
         <RankingList
           title="Forma de direcionamento"
           rows={data.whatsappByDirectionMode}
-          emptyLabel="Sem cliques para WhatsApp neste período."
+          emptyLabel="Sem cliques em tirar dúvidas neste período."
           primaryUnitLabel="sessões"
         />
       </div>
