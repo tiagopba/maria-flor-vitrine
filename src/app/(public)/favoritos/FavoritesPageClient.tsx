@@ -5,11 +5,15 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { FavoriteProductRow } from "@/components/catalog/FavoriteProductRow";
 import { SellerSelectionDrawer } from "@/components/catalog/SellerSelectionDrawer";
-import { getFavoriteProductsAction } from "@/lib/favorites/actions";
 import { recordFavoriteEvent } from "@/lib/favorites/analytics";
 import { markJustContactedSeller } from "@/lib/favorites/post-contact";
-import { clearFavorites, removeFavoritesNotIn } from "@/lib/favorites/storage";
-import { useFavoritesList } from "@/lib/favorites/useFavorites";
+import {
+  clearFavorites,
+  FAVORITES_CHANGED_EVENT,
+  getFavorites,
+  removeFavoritesNotIn,
+  type FavoriteEntry,
+} from "@/lib/favorites/storage";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
 import { submitFavoritesWhatsAppClick } from "@/lib/whatsapp/favorites-click-action";
@@ -40,6 +44,27 @@ function WhatsAppIcon() {
   );
 }
 
+/**
+ * Placeholder de uma linha enquanto os dados reais não chegam — sem
+ * imagem nenhuma (nada aqui espera bytes de foto pra sumir), só blocos
+ * `animate-pulse` no formato de FavoriteProductRow. A quantidade de linhas
+ * já é conhecida pelo localStorage (ver `entries.length` abaixo), então o
+ * loading mostra a forma real da lista em vez de um texto genérico.
+ */
+function FavoriteProductRowSkeleton() {
+  return (
+    <div className="flex animate-pulse gap-3 rounded-2xl border border-border bg-surface p-3">
+      <div className="h-28 w-24 shrink-0 rounded-xl bg-muted sm:h-32 sm:w-28" />
+      <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
+        <div className="h-3.5 w-3/4 rounded bg-muted" />
+        <div className="h-3 w-1/3 rounded bg-muted" />
+        <div className="mt-1 h-4 w-2/5 rounded bg-muted" />
+        <div className="mt-1 h-7 w-1/2 rounded-full bg-muted" />
+      </div>
+    </div>
+  );
+}
+
 export function FavoritesPageClient({
   sellers,
   paymentSettings,
@@ -47,7 +72,7 @@ export function FavoritesPageClient({
   sellers: { id: string; name: string }[];
   paymentSettings: PaymentSettings;
 }) {
-  const entries = useFavoritesList();
+  const [entries, setEntries] = useState<FavoriteEntry[]>([]);
   const [fetched, setFetched] = useState<{ key: string; data: ProductDetail[] } | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [submitting, setSubmitting] = useState<string | null>(null);
@@ -58,37 +83,71 @@ export function FavoritesPageClient({
   const [pendingProductId, setPendingProductId] = useState<string | null>(null);
   const viewedRef = useRef(false);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  // Último conjunto de ids já buscado — evita refetch quando só o tamanho
+  // escolhido de uma peça muda (o mesmo evento de storage.ts dispara pros
+  // dois casos; só um conjunto de ids diferente precisa de um novo fetch).
+  const lastFetchedKeyRef = useRef<string | null>(null);
 
   const ids = entries.map((e) => e.product_id);
   const idsKey = ids.slice().sort().join(",");
   const isEmpty = ids.length === 0;
 
+  // Um único efeito: lê o localStorage e, no mesmo tick, já dispara o
+  // fetch — sem esperar um segundo efeito reagir à mudança de estado do
+  // primeiro (ver auditoria de performance de /favoritos). `fetch()`
+  // comum (não Server Action) roda em paralelo de verdade com
+  // FAVORITES_VIEW/PAGE_VIEW/etc, que continuam disparando exatamente como
+  // antes, sem segurar a UI.
   useEffect(() => {
-    if (isEmpty) return; // nada pra buscar — "products" já deriva [] direto no render
-
     let cancelled = false;
 
-    getFavoriteProductsAction(ids).then((result) => {
-      if (cancelled) return;
+    function sync() {
+      const currentEntries = getFavorites();
+      setEntries(currentEntries);
 
-      // A ordem de retorno do banco não segue a ordem dos ids pedidos —
-      // reordena pela ordem local (mais recente primeiro).
-      const byId = new Map(result.map((p) => [p.id, p]));
-      const ordered = ids.map((id) => byId.get(id)).filter((p): p is ProductDetail => Boolean(p));
-      setFetched({ key: idsKey, data: ordered });
+      const currentIds = currentEntries.map((e) => e.product_id);
+      const key = currentIds.slice().sort().join(",");
 
-      // Qualquer id pedido que não voltou é arquivado/despublicado/excluído
-      // — limpeza automática seguindo a regra do módulo.
-      if (byId.size !== ids.length) {
-        removeFavoritesNotIn(new Set(byId.keys()));
+      if (key === lastFetchedKeyRef.current) return; // já buscado (ou já em andamento) pra este conjunto
+
+      if (currentIds.length === 0) {
+        lastFetchedKeyRef.current = key;
+        setFetched({ key, data: [] });
+        return;
       }
-    });
 
+      // `lastFetchedKeyRef` só é marcado como concluído dentro do `.then`
+      // (nunca antes de disparar o fetch): em StrictMode (dev) o efeito
+      // roda duas vezes, e marcar a ref cedo demais faria a 2ª chamada
+      // (a que realmente sobrevive) achar que já tinha sido buscada e
+      // nunca atualizar `fetched` — prende a tela em loading pra sempre.
+      fetch(`/api/favoritos/produtos?ids=${currentIds.join(",")}`, { cache: "no-store" })
+        .then((res) => res.json())
+        .then((result: ProductDetail[]) => {
+          if (cancelled) return;
+          lastFetchedKeyRef.current = key;
+
+          // A ordem de retorno do banco não segue a ordem dos ids pedidos —
+          // reordena pela ordem local (mais recente primeiro).
+          const byId = new Map(result.map((p) => [p.id, p]));
+          const ordered = currentIds.map((id) => byId.get(id)).filter((p): p is ProductDetail => Boolean(p));
+          setFetched({ key, data: ordered });
+
+          // Qualquer id pedido que não voltou é arquivado/despublicado/excluído
+          // — limpeza automática seguindo a regra do módulo.
+          if (byId.size !== currentIds.length) {
+            removeFavoritesNotIn(new Set(byId.keys()));
+          }
+        });
+    }
+
+    sync();
+    window.addEventListener(FAVORITES_CHANGED_EVENT, sync);
     return () => {
       cancelled = true;
+      window.removeEventListener(FAVORITES_CHANGED_EVENT, sync);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idsKey, isEmpty]);
+  }, []);
 
   // null = carregando (ainda não temos um fetch resolvido pra esse exato
   // conjunto de ids — evita mostrar dado de uma lista antiga por um instante).
@@ -191,7 +250,13 @@ export function FavoritesPageClient({
   }
 
   if (products === null) {
-    return <p className="py-12 text-center text-sm text-text-muted">Carregando suas peças...</p>;
+    return (
+      <div className="flex flex-col gap-3">
+        {Array.from({ length: entries.length || 1 }).map((_, index) => (
+          <FavoriteProductRowSkeleton key={index} />
+        ))}
+      </div>
+    );
   }
 
   if (products.length === 0) {
