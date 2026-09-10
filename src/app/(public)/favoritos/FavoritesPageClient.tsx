@@ -253,7 +253,7 @@ export function FavoritesPageClient({
         onClick={handleClearAll}
         className="self-center text-xs text-text-muted hover:text-red-600"
       >
-        Limpar seleção de roupas
+        LIMPAR SELEÇÃO ROUPAS
       </button>
 
       <SellerSelectionDrawer
