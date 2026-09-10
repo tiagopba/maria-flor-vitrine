@@ -3,13 +3,17 @@ import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { CategoryCarousel } from "@/components/catalog/CategoryCarousel";
 import { FilteredEmptyState } from "@/components/catalog/FilteredEmptyState";
+import { FitQuickFilter } from "@/components/catalog/FitQuickFilter";
 import { ProductFilters } from "@/components/catalog/ProductFilters";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
-import { SizeQuickFilter } from "@/components/catalog/SizeQuickFilter";
 import { buildExploreCategoriesItems } from "@/lib/catalog/explore-categories";
 import { buildFilterQueryString, hasActiveFilters, parsePublicFilters } from "@/lib/catalog/filters";
 import { getCategoryBySlugPublic, getVisibleCategoriesPublic } from "@/lib/db/categories";
-import { getAvailableSizesForCategoryPublic, listPublishedProductsFiltered } from "@/lib/db/products";
+import {
+  getAvailableFitSizesForCategoryPublic,
+  getAvailableSizesForCategoryPublic,
+  listPublishedProductsFiltered,
+} from "@/lib/db/products";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { buildCategoryDescription, buildCategoryTitle } from "@/lib/seo/local";
 import { CategoryViewTracker } from "@/components/analytics/CategoryViewTracker";
@@ -67,8 +71,9 @@ export default async function CategoryPage({ params, searchParams }: PageProps<"
   const filters = parsePublicFilters(rawParams);
   const filtersActive = hasActiveFilters(filters);
 
-  const [sizeOptions, categories, paymentSettings] = await Promise.all([
+  const [sizeOptions, fitOptions, categories, paymentSettings] = await Promise.all([
     getAvailableSizesForCategoryPublic(category.id),
+    getAvailableFitSizesForCategoryPublic(category.id),
     getVisibleCategoriesPublic(),
     getPaymentSettings(),
   ]);
@@ -77,6 +82,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps<"
     {
       categoryId: category.id,
       size: filters.size ?? undefined,
+      fitSize: filters.fit ?? undefined,
       minPrice: filters.minPrice ?? undefined,
       maxPrice: filters.maxPrice ?? undefined,
     },
@@ -112,7 +118,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps<"
           <ProductFilters basePath={`/categoria/${slug}`} initial={filters} sizeOptions={sizeOptions} />
         </div>
 
-        <SizeQuickFilter basePath={`/categoria/${slug}`} initial={filters} sizeOptions={sizeOptions} />
+        <FitQuickFilter basePath={`/categoria/${slug}`} initial={filters} fitOptions={fitOptions} />
 
         {products.length === 0 ? (
           filtersActive ? (

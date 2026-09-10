@@ -4,21 +4,19 @@ import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { buildFilterQueryString, type ParsedPublicFilters } from "@/lib/catalog/filters";
 import { sortProductSizes } from "@/lib/catalog/size-order";
-import { cn } from "@/lib/utils";
+import { QuickFilterChips } from "@/components/catalog/QuickFilterChips";
 
 /**
- * Filtro de tamanho sempre visível, logo antes da grade — o filtro completo
- * (ProductFilters) continua existindo por trás do botão "Filtrar" para
- * preço, mas o tamanho é o filtro mais usado e ficava escondido num drawer.
- * Reaproveita o mesmo mecanismo de URL (buildFilterQueryString) em vez de
- * duplicar a lógica de filtragem.
+ * Filtro de TAMANHO DA ETIQUETA (?size=) — mantido por compatibilidade com
+ * URLs existentes; a interface principal nova de numeração é
+ * FitQuickFilter (?fit=), que substituiu este componente nas telas
+ * públicas (Home, Novidades, Categoria). Continua existindo caso algum
+ * lugar precise filtrar por etiqueta especificamente.
  *
- * Usado tanto nas páginas de categoria e em /novidades (onde filtra a
- * própria listagem, já que `basePath` é a página atual) quanto como atalho
- * na Home (onde `basePath="/novidades"` com a página atual sendo "/" faz o
- * mesmo clique navegar para /novidades?size=X em vez de filtrar — nenhum
- * comportamento especial precisa existir pra isso, é só consequência de
- * `router.push` para uma rota diferente da atual).
+ * Reaproveita o mesmo mecanismo de URL (buildFilterQueryString) e a mesma
+ * apresentação de chip de FitQuickFilter (QuickFilterChips) — só a
+ * ordenação (letras antes de números, ver size-order.ts) e o parâmetro
+ * filtrado (`size`, nunca `fit`) são específicos deste componente.
  */
 export function SizeQuickFilter({
   basePath,
@@ -32,37 +30,16 @@ export function SizeQuickFilter({
   const router = useRouter();
   const sortedSizes = useMemo(() => sortProductSizes(sizeOptions), [sizeOptions]);
 
-  if (sortedSizes.length === 0) return null;
-
   function selectSize(size: string | null) {
     router.push(`${basePath}${buildFilterQueryString({ ...initial, size })}`, { scroll: false });
   }
 
   return (
-    <div className="mb-6">
-      <p className="mb-2 font-display text-sm text-text">Qual tamanho você procura?</p>
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
-        <SizeChip label="Todos" selected={!initial.size} onClick={() => selectSize(null)} />
-        {sortedSizes.map((size) => (
-          <SizeChip key={size} label={size} selected={initial.size === size} onClick={() => selectSize(size)} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SizeChip({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={selected}
-      className={cn(
-        "flex h-10 min-w-10 shrink-0 items-center justify-center rounded-full border px-3.5 text-sm font-medium transition-colors",
-        selected ? "border-primary bg-primary text-primary-foreground" : "border-border bg-surface text-text hover:bg-muted"
-      )}
-    >
-      {label}
-    </button>
+    <QuickFilterChips
+      label="Qual tamanho você procura?"
+      options={sortedSizes.map((size) => ({ value: size, label: size }))}
+      selectedValue={initial.size}
+      onSelect={selectSize}
+    />
   );
 }

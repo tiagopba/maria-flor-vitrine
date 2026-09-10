@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
-import { FavoriteProductRow } from "@/components/catalog/FavoriteProductRow";
+import { FavoriteProductRow, type FavoriteProductDetail } from "@/components/catalog/FavoriteProductRow";
 import { FreeShippingAccordion } from "@/components/catalog/FreeShippingAccordion";
 import { SellerSelectionDrawer } from "@/components/catalog/SellerSelectionDrawer";
 import { recordFavoriteEvent } from "@/lib/favorites/analytics";
@@ -20,7 +20,6 @@ import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
 import { submitFavoritesWhatsAppClick } from "@/lib/whatsapp/favorites-click-action";
 import { trackLead } from "@/lib/analytics/meta-pixel";
-import type { ProductDetail } from "@/lib/db/products";
 import type { PaymentSettings } from "@/lib/site-settings/payments";
 
 /**
@@ -75,7 +74,7 @@ export function FavoritesPageClient({
   paymentSettings: PaymentSettings;
 }) {
   const [entries, setEntries] = useState<FavoriteEntry[]>([]);
-  const [fetched, setFetched] = useState<{ key: string; data: ProductDetail[] } | null>(null);
+  const [fetched, setFetched] = useState<{ key: string; data: FavoriteProductDetail[] } | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -125,14 +124,14 @@ export function FavoritesPageClient({
       // nunca atualizar `fetched` — prende a tela em loading pra sempre.
       fetch(`/api/favoritos/produtos?ids=${currentIds.join(",")}`, { cache: "no-store" })
         .then((res) => res.json())
-        .then((result: ProductDetail[]) => {
+        .then((result: FavoriteProductDetail[]) => {
           if (cancelled) return;
           lastFetchedKeyRef.current = key;
 
           // A ordem de retorno do banco não segue a ordem dos ids pedidos —
           // reordena pela ordem local (mais recente primeiro).
           const byId = new Map(result.map((p) => [p.id, p]));
-          const ordered = currentIds.map((id) => byId.get(id)).filter((p): p is ProductDetail => Boolean(p));
+          const ordered = currentIds.map((id) => byId.get(id)).filter((p): p is FavoriteProductDetail => Boolean(p));
           setFetched({ key, data: ordered });
 
           // Qualquer id pedido que não voltou é arquivado/despublicado/excluído

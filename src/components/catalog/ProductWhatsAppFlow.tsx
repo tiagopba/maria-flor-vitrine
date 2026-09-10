@@ -30,6 +30,7 @@ export function ProductWhatsAppFlow({
   price,
   status,
   sizes,
+  fitHintByLabel,
   sellers,
 }: {
   productId: string;
@@ -44,6 +45,8 @@ export function ProductWhatsAppFlow({
   price: number;
   status: ProductStatus;
   sizes: string[];
+  /** "Veste X ao Y" por tamanho da etiqueta (ver ProductDetailView) — informativo, nunca decide sozinho. */
+  fitHintByLabel?: Record<string, string | null>;
   sellers: { id: string; name: string }[];
 }) {
   const router = useRouter();
@@ -226,7 +229,7 @@ export function ProductWhatsAppFlow({
       <p className="text-center text-xs text-text-muted">Escolha seu tamanho e adicione às Minhas Roupas.</p>
 
       <Drawer open={sizeSheetOpen} onClose={() => setSizeSheetOpen(false)} title="Qual tamanho você procura?">
-        <SingleSizeSelector sizes={sizes} value={null} onChange={addToSelection} label="" />
+        <SingleSizeSelector sizes={sizes} value={null} onChange={addToSelection} label="" fitHintByLabel={fitHintByLabel} />
       </Drawer>
     </div>
   );

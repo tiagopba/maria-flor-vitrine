@@ -157,6 +157,13 @@ export interface FavoritesSelectionItem {
   price?: number;
   /** Preço Pix/cartão do modelo de dois preços — mesma regra de `price` acima. */
   dualPrice?: DualPriceLines;
+  /**
+   * "Veste X ao Y" (ver lib/catalog/fit-size-format.ts), já formatado —
+   * referente exclusivamente ao `size` (tamanho da etiqueta) escolhido
+   * nesta peça. Ausente quando não há compatibilidade cadastrada — a linha
+   * simplesmente não entra, mensagem idêntica ao comportamento antigo.
+   */
+  fitLabel?: string;
 }
 
 /**
@@ -193,6 +200,7 @@ export function buildFavoritesWhatsAppMessage(
     const details = [`Cód. ${product.code}`];
     if (product.colorName) details.push(product.colorName);
     if (product.size) details.push(`Tam. ${product.size}`);
+    if (product.fitLabel) details.push(product.fitLabel);
     lines.push(`  ${details.join(" | ")}`);
   });
 

@@ -3,8 +3,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Price } from "@/components/ui/Price";
+import { formatFitSizesLabel } from "@/lib/catalog/fit-size-format";
 import { publicStatusBadge } from "@/lib/catalog/status";
 import { getProductsByIdsPublic } from "@/lib/db/products";
+import { getSizeFitCompatibilityByProductIdsPublic } from "@/lib/db/product-size-fit";
 import { getSharedSelection } from "@/lib/db/shared-selections";
 import { recordSelectionViewed } from "@/lib/selections/analytics";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
@@ -47,9 +49,11 @@ export default async function SharedSelectionPage({ params }: { params: Promise<
   }
 
   const sizeByProductId = new Map(selection.items.map((i) => [i.product_id, i.selected_size]));
-  const [products, paymentSettings] = await Promise.all([
-    getProductsByIdsPublic(selection.items.map((i) => i.product_id)),
+  const productIds = selection.items.map((i) => i.product_id);
+  const [products, paymentSettings, fitCompatibilityByProductId] = await Promise.all([
+    getProductsByIdsPublic(productIds),
     getPaymentSettings(),
+    getSizeFitCompatibilityByProductIdsPublic(productIds),
   ]);
 
   // Não bloqueia a renderização — a vendedora precisa ver a seleção mesmo
@@ -77,6 +81,11 @@ export default async function SharedSelectionPage({ params }: { params: Promise<
             const badge = publicStatusBadge(product.status);
             const mainImage = product.images[0]?.url ?? null;
             const size = sizeByProductId.get(product.id);
+            const fitLabel = size
+              ? formatFitSizesLabel(
+                  fitCompatibilityByProductId.get(product.id)?.find((l) => l.labelSize === size)?.fitSizes ?? []
+                )
+              : null;
 
             return (
               <Link
@@ -99,6 +108,7 @@ export default async function SharedSelectionPage({ params }: { params: Promise<
                   {size && (
                     <p className="text-xs text-text">
                       Tamanho: <span className="font-medium">{size}</span>
+                      {fitLabel && <span className="ml-1 text-text-muted">· {fitLabel}</span>}
                     </p>
                   )}
                   <div className="flex items-center gap-2">
