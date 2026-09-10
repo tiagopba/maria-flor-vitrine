@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { SuccessToast } from "@/components/admin/SuccessToast";
 import { requireAdmin } from "@/lib/auth/permissions";
+import { listFreeShippingRulesAdmin } from "@/lib/db/shipping";
 import { getInstitutionalInfo } from "@/lib/site-settings/institutional";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { updatePaymentSettingsAction, updateSiteSettingsAction } from "./actions";
+import { FreeShippingRulesForm } from "./FreeShippingRulesForm";
 import { PaymentSettingsForm } from "./PaymentSettingsForm";
 import { SiteSettingsForm } from "./SiteSettingsForm";
 
@@ -14,7 +16,11 @@ export default async function ConfiguracoesPage() {
   // de allowedRoles já usado nas outras telas do painel.
   await requireAdmin(["admin", "master"]);
 
-  const [info, paymentSettings] = await Promise.all([getInstitutionalInfo(), getPaymentSettings()]);
+  const [info, paymentSettings, freeShippingRules] = await Promise.all([
+    getInstitutionalInfo(),
+    getPaymentSettings(),
+    listFreeShippingRulesAdmin(),
+  ]);
 
   return (
     <div className="max-w-2xl">
@@ -27,6 +33,10 @@ export default async function ConfiguracoesPage() {
 
       <div className="mb-6">
         <PaymentSettingsForm action={updatePaymentSettingsAction} defaultValues={paymentSettings} />
+      </div>
+
+      <div className="mb-6">
+        <FreeShippingRulesForm initialRules={freeShippingRules} />
       </div>
 
       <SiteSettingsForm action={updateSiteSettingsAction} defaultValues={info} />

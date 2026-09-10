@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { listProductsAdmin } from "@/lib/db/products";
+import { sortProductSizes } from "@/lib/catalog/size-order";
 import type { SaveProductSizeFitPayload } from "@/lib/validation/product-size-fit";
 
 /**
@@ -143,7 +144,14 @@ export async function listSizeFitReviewProducts(
     const labelFits = compatByProduct.get(p.id) ?? [];
     if (labelFits.length === 0) continue;
 
-    const labels: SizeFitReviewLabel[] = labelFits.map((l) => ({ ...l, pending: l.fitSizes.length === 0 }));
+    // Só ordem de apresentação (PP→P→M→G→GG→XG→XGG→G1→G2→G3, depois
+    // numéricos crescentes, "Único"/texto livre sempre por último) —
+    // reaproveita o mesmo helper já usado no catálogo público, nunca
+    // reordena nem reescreve o que está em product_sizes.
+    const orderIndex = new Map(sortProductSizes(labelFits.map((l) => l.labelSize)).map((size, i) => [size, i]));
+    const labels: SizeFitReviewLabel[] = labelFits
+      .map((l) => ({ ...l, pending: l.fitSizes.length === 0 }))
+      .sort((a, b) => (orderIndex.get(a.labelSize) ?? 0) - (orderIndex.get(b.labelSize) ?? 0));
     const isPending = labels.some((l) => l.pending);
 
     items.push({

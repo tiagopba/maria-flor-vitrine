@@ -177,7 +177,11 @@ export interface FavoritesSelectionItem {
  * divergência entre o preço mostrado na Vitrine e o preço na mensagem
  * enviada à vendedora.
  */
-export function buildFavoritesWhatsAppMessage(products: FavoritesSelectionItem[], selectionUrl?: string): string {
+export function buildFavoritesWhatsAppMessage(
+  products: FavoritesSelectionItem[],
+  selectionUrl?: string,
+  shippingStateLabel?: string
+): string {
   const lines = [`Oi! Separei algumas peças na Vitrine Maria Flor ${HEART}`, ""];
 
   // Cada peça em duas linhas — nome, depois código/cor/tamanho juntos. A
@@ -211,6 +215,13 @@ export function buildFavoritesWhatsAppMessage(products: FavoritesSelectionItem[]
 
   if (selectionUrl) {
     lines.push("", `${CAMERA} Fotos das peças:`, selectionUrl);
+  }
+
+  // Totalmente opcional — só entra quando a cliente escolheu um estado no
+  // seletor de frete grátis de /favoritos (ver FreeShippingAccordion).
+  // Ausente, a mensagem fica idêntica à de sempre.
+  if (shippingStateLabel) {
+    lines.push("", `Estado para envio: ${shippingStateLabel}`);
   }
 
   return lines.join("\n");

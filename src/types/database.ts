@@ -394,6 +394,22 @@ export interface Database {
         },
         "session_id"
       >;
+
+      // Condições promocionais de frete grátis por estado, geridas pelo
+      // Admin (Configurações → Frete grátis) — ver migration
+      // 20260910180000_free_shipping_rules.sql.
+      free_shipping_rules: Table<
+        {
+          id: string;
+          state_code: string;
+          service: string;
+          minimum_amount: number;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        },
+        "state_code" | "service" | "minimum_amount"
+      >;
     };
     Views: Record<string, never>;
     Functions: {
