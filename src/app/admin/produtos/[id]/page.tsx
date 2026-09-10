@@ -6,6 +6,7 @@ import { getCurrentAdmin } from "@/lib/auth/permissions";
 import { getActiveCategoriesPublic } from "@/lib/db/categories";
 import { listActiveColorsAdmin } from "@/lib/db/colors";
 import { getProductByIdAdmin, listGroupMemberIdsAdmin, type ProductDetail } from "@/lib/db/products";
+import { getSizeFitCompatibilityByProductIds, type LabelSizeFit } from "@/lib/db/product-size-fit";
 import { listActiveSizeOptionsAdmin, listSizeOptionsForVariantEdit } from "@/lib/db/sizes";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { ProductForm } from "../ProductForm";
@@ -14,7 +15,15 @@ import type { VariantBlockData } from "../VariantBlock";
 
 export const metadata: Metadata = { title: "Editar produto" };
 
-function toVariantBlock(product: ProductDetail, sizeOptions: Awaited<ReturnType<typeof listSizeOptionsForVariantEdit>>): VariantBlockData {
+function toFitCompatibilityRecord(labelFits: LabelSizeFit[]): Record<string, number[]> {
+  return Object.fromEntries(labelFits.map((l) => [l.labelSize, l.fitSizes]));
+}
+
+function toVariantBlock(
+  product: ProductDetail,
+  sizeOptions: Awaited<ReturnType<typeof listSizeOptionsForVariantEdit>>,
+  fitCompatibility: Record<string, number[]>
+): VariantBlockData {
   return {
     key: product.id,
     id: product.id,
@@ -29,6 +38,7 @@ function toVariantBlock(product: ProductDetail, sizeOptions: Awaited<ReturnType<
     sizes: product.sizes,
     images: product.images.map((img) => ({ id: img.id, storage_path: img.storage_path, url: img.url })),
     sizeOptions,
+    fitCompatibility,
   };
 }
 
@@ -56,13 +66,21 @@ export default async function EditProductPage({
   );
 
   const allProducts = [product, ...siblings];
+  const fitCompatibilityByProduct = await getSizeFitCompatibilityByProductIds(allProducts.map((p) => p.id));
   const variantDefaults = await Promise.all(
-    allProducts.map(async (p) => toVariantBlock(p, await listSizeOptionsForVariantEdit(p.sizes)))
+    allProducts.map(async (p) =>
+      toVariantBlock(
+        p,
+        await listSizeOptionsForVariantEdit(p.sizes),
+        toFitCompatibilityRecord(fitCompatibilityByProduct.get(p.id) ?? [])
+      )
+    )
   );
 
   return (
     <div className="max-w-2xl">
       <SuccessToast />
+      <SuccessToast queryParam="aviso" />
       <Link href="/admin/produtos" className="text-sm text-text-muted hover:text-text">
         ← Produtos
       </Link>

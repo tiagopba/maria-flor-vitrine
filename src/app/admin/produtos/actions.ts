@@ -20,7 +20,7 @@ import { sizeOptionSchema } from "@/lib/validation/size";
 import { saveProductVariantsPayloadSchema } from "@/lib/validation/product-variants";
 
 export type SaveProductVariantsActionResult =
-  | { ok: true; productId: string }
+  | { ok: true; productId: string; variants: { id: string; code: string; slug: string }[] }
   | { error: string; fieldErrors?: Record<string, string> };
 
 /**
@@ -96,7 +96,7 @@ export async function saveProductWithVariantsAction(rawPayload: unknown): Promis
   if (!productId) return { error: "Não foi possível salvar o produto." };
 
   revalidatePath(`/admin/produtos/${productId}`);
-  return { ok: true, productId };
+  return { ok: true, productId, variants: result.variants };
 }
 
 /**

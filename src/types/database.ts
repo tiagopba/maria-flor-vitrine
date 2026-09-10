@@ -184,6 +184,21 @@ export interface Database {
         "product_id" | "size"
       >;
 
+      // Numerações que cada tamanho da etiqueta (product_sizes.size) de um
+      // produto realmente veste — aditiva, nunca uma reinterpretação de
+      // product_sizes. Ver migration
+      // 20260910150000_product_size_fit_compatibilities.sql.
+      product_size_fit_compatibilities: Table<
+        {
+          id: string;
+          product_id: string;
+          label_size: string;
+          fit_size: number;
+          created_at: string;
+        },
+        "product_id" | "label_size" | "fit_size"
+      >;
+
       size_options: Table<
         {
           id: string;
@@ -399,6 +414,18 @@ export interface Database {
           group_id: string | null;
           variants: { id: string; code: string; slug: string }[];
           removed_image_paths: string[];
+        };
+      };
+      // Ver migration 20260910160000_save_product_size_fit_compatibilities_rpc.sql
+      // (preparada, não aplicada) — RPC dedicada e separada de
+      // save_product_with_variants.
+      save_product_size_fit_compatibilities: {
+        Args: {
+          payload: { product_id: string; sizes: { label_size: string; fit_sizes: number[] }[] }[];
+        };
+        Returns: {
+          product_ids: string[];
+          inserted_count: number;
         };
       };
       try_claim_otp_send: {

@@ -10,6 +10,7 @@ import type { SizeOption } from "@/lib/db/sizes";
 import { useImageUploadQueue } from "@/lib/images/use-image-upload-queue";
 import { slugify } from "@/lib/utils";
 import { discardUnusedUploadAction } from "./actions";
+import { SizeFitCompatibilityFields } from "./SizeFitCompatibilityFields";
 
 const STATUS_OPTIONS = Object.entries(PRODUCT_STATUS_LABELS).filter(([value]) => value !== "ARCHIVED");
 
@@ -38,6 +39,8 @@ export interface VariantBlockData {
   images: VariantGalleryImage[];
   /** Tamanhos disponíveis pra esta variante (ativos ∪ já usados aqui mesmo que inativos). */
   sizeOptions: SizeOption[];
+  /** "Numerações que veste" por tamanho da etiqueta — chave é o texto exato de `sizes`. */
+  fitCompatibility: Record<string, number[]>;
 }
 
 export interface VariantUploadState {
@@ -333,6 +336,12 @@ export function VariantBlock({
         </div>
         <SizeSelector value={block.sizes} onChange={(sizes) => update({ sizes })} options={block.sizeOptions} />
       </div>
+
+      <SizeFitCompatibilityFields
+        labelSizes={block.sizes}
+        value={block.fitCompatibility}
+        onChange={(fitCompatibility) => update({ fitCompatibility })}
+      />
     </div>
   );
 }
