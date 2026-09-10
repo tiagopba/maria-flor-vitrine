@@ -39,6 +39,15 @@ export function RevisarNumeracoesList({ items }: { items: SizeFitReviewProduct[]
   const reviewedItems = items.filter((i) => !isItemPending(i));
   const visibleItems = tab === "pending" ? pendingItems : reviewedItems;
 
+  // Contagem secundária (informativa) — o badge do menu e a aba contam
+  // PRODUTOS pendentes (um card = um produto, mesmo que ele tenha vários
+  // tamanhos pendentes); esta linha só complementa mostrando também quantos
+  // pares (produto, tamanho da etiqueta) individuais ainda faltam revisar.
+  const pendingLabelPairCount = pendingItems.reduce((sum, item) => {
+    const fit = fitByProduct[item.productId] ?? {};
+    return sum + item.labels.filter((l) => (fit[l.labelSize] ?? []).length === 0).length;
+  }, 0);
+
   async function handleSave(item: SizeFitReviewProduct, advanceToId: string | null) {
     setSavingId(item.productId);
     setErrorByProduct((prev) => {
@@ -81,9 +90,15 @@ export function RevisarNumeracoesList({ items }: { items: SizeFitReviewProduct[]
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <TabButton label={`Pendentes (${pendingItems.length})`} active={tab === "pending"} onClick={() => setTab("pending")} />
         <TabButton label={`Revisados (${reviewedItems.length})`} active={tab === "reviewed"} onClick={() => setTab("reviewed")} />
+        {pendingItems.length > 0 && (
+          <span className="text-xs text-text-muted">
+            {pendingItems.length} {pendingItems.length === 1 ? "produto" : "produtos"} · {pendingLabelPairCount}{" "}
+            {pendingLabelPairCount === 1 ? "tamanho" : "tamanhos"} para revisar
+          </span>
+        )}
       </div>
 
       {visibleItems.length === 0 ? (

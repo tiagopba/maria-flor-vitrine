@@ -104,8 +104,14 @@ begin
         raise exception 'invalid_fit_sizes:%:%', v_product_id, v_label_size;
       end if;
 
+      -- Limite superior (999) é só uma trava de sanidade contra lixo/overflow
+      -- — fit_size é smallint (máx. 32767) e nunca deveria receber algo fora
+      -- de uma numeração de roupa real; isso garante que qualquer valor
+      -- inválido falhe aqui, na Passe 1 (código:detalhe amigável), em vez de
+      -- estourar como erro bruto de overflow do Postgres na hora do INSERT
+      -- na Passe 2. Não é regra de negócio nenhuma (não infere P/M/G/etc.).
       for v_fit_size_text in select jsonb_array_elements_text(v_fit_sizes) loop
-        if v_fit_size_text !~ '^[0-9]+$' or v_fit_size_text::int <= 0 then
+        if v_fit_size_text !~ '^[0-9]+$' or v_fit_size_text::int <= 0 or v_fit_size_text::int > 999 then
           raise exception 'invalid_fit_size_value:%', v_fit_size_text;
         end if;
       end loop;
