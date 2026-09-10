@@ -7,6 +7,7 @@ import { createSharedSelection } from "@/lib/db/shared-selections";
 import { getColorNamesByIds } from "@/lib/db/colors";
 import { getSiteUrl } from "@/lib/site";
 import { resolveProductPricing, resolveTrackingPrice } from "@/lib/catalog/pricing";
+import { getStateLabel } from "@/lib/shipping/brazilian-states";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { sendCapiEvent } from "@/lib/analytics/meta-capi";
 import type { Database } from "@/types/database";
@@ -48,6 +49,14 @@ export interface FavoritesWhatsAppInput {
   eventId: string;
   /** `window.location.href` da cliente no momento do clique — vai como `event_source_url` na CAPI. */
   eventSourceUrl: string;
+  /**
+   * UF opcional escolhida no seletor de frete grátis de /favoritos — lida
+   * do localStorage pelo client, nunca confiada sem validar aqui de novo
+   * contra a lista oficial (getStateLabel devolve null pra qualquer coisa
+   * que não seja uma das 27 siglas reais). null/ausente = mensagem sai
+   * idêntica à de sempre, sem nenhuma linha extra.
+   */
+  shippingStateCode?: string | null;
 }
 
 /** Dado agregado da seleção só pro Meta Pixel (`Lead`) — nunca inclui PII. */
@@ -135,6 +144,8 @@ export async function submitFavoritesWhatsAppClick(
   const colorIds = [...new Set(available.map((p) => p.color_id).filter((id): id is string => id != null))];
   const colorNameById = await getColorNamesByIds(supabase, colorIds);
 
+  const shippingStateLabel = input.shippingStateCode ? (getStateLabel(input.shippingStateCode) ?? undefined) : undefined;
+
   const message = buildFavoritesWhatsAppMessage(
     available.map((p) => {
       const pricing = resolveProductPricing(p, paymentSettings);
@@ -150,7 +161,8 @@ export async function submitFavoritesWhatsAppClick(
             : undefined,
       };
     }),
-    selectionUrl
+    selectionUrl,
+    shippingStateLabel
   );
 
   const eventsToInsert: AnalyticsEventInsert[] = [

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { FavoriteProductRow } from "@/components/catalog/FavoriteProductRow";
+import { FreeShippingAccordion } from "@/components/catalog/FreeShippingAccordion";
 import { SellerSelectionDrawer } from "@/components/catalog/SellerSelectionDrawer";
 import { recordFavoriteEvent } from "@/lib/favorites/analytics";
 import { markJustContactedSeller } from "@/lib/favorites/post-contact";
@@ -14,6 +15,7 @@ import {
   removeFavoritesNotIn,
   type FavoriteEntry,
 } from "@/lib/favorites/storage";
+import { getSavedShippingState } from "@/lib/shipping/state-storage";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
 import { submitFavoritesWhatsAppClick } from "@/lib/whatsapp/favorites-click-action";
@@ -230,6 +232,10 @@ export function FavoritesPageClient({
         skipSelectionLink,
         eventId,
         eventSourceUrl: window.location.href,
+        // Totalmente opcional — lido do localStorage só agora, na hora de
+        // montar a mensagem; sem UF salva isso é null e a mensagem sai
+        // idêntica à de sempre (ver buildFavoritesWhatsAppMessage).
+        shippingStateCode: getSavedShippingState(),
       });
 
       if ("error" in result) {
@@ -299,6 +305,8 @@ export function FavoritesPageClient({
           />
         ))}
       </div>
+
+      <FreeShippingAccordion />
 
       {validationError && <p className="text-sm text-red-600">{validationError}</p>}
 
