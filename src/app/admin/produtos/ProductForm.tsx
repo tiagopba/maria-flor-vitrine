@@ -15,6 +15,7 @@ import { discardUnusedUploadAction, saveProductWithVariantsAction } from "./acti
 import { CategoryQuickAddModal } from "./CategoryQuickAddModal";
 import { ColorQuickAddDrawer } from "./ColorQuickAddDrawer";
 import { RelateProductModal } from "./RelateProductModal";
+import { saveProductSizeFitCompatibilityAction } from "./size-fit-actions";
 import { SizeQuickAddDrawer } from "./SizeQuickAddDrawer";
 import { VariantBlock, type VariantBlockData, type VariantUploadState } from "./VariantBlock";
 
@@ -33,6 +34,7 @@ function emptyVariant(sizeOptions: SizeOption[], suggestedSizes: string[] = []):
     sizes: suggestedSizes,
     images: [],
     sizeOptions,
+    fitCompatibility: {},
   };
 }
 
@@ -304,11 +306,38 @@ export function ProductForm({
       return;
     }
 
-    router.push(
-      `/admin/produtos/${result.productId}?sucesso=${encodeURIComponent(
-        rootProductId ? "Alterações salvas com sucesso." : "Produto cadastrado com sucesso."
-      )}`
-    );
+    // Segundo save, deliberadamente separado e depois do primeiro: nunca
+    // desfaz produto/fotos/preços/variantes/cores/slug já commitados, mesmo
+    // se falhar. Mapeamento pro product_id real nunca por posição — usa o id
+    // já existente (variante que já era salva) ou o código único (variante
+    // nova, cujo id só a RPC de cima acabou de gerar).
+    const fitPayload = variants
+      .map((block) => {
+        if (block.sizes.length === 0) return null;
+        const productId = block.id ?? result.variants.find((v) => v.code === block.code.trim())?.id ?? null;
+        if (!productId) return null;
+        return {
+          product_id: productId,
+          sizes: block.sizes.map((labelSize) => ({
+            label_size: labelSize,
+            fit_sizes: block.fitCompatibility[labelSize] ?? [],
+          })),
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+    let fitWarning: string | null = null;
+    if (fitPayload.length > 0) {
+      const fitResult = await saveProductSizeFitCompatibilityAction(fitPayload);
+      if ("error" in fitResult) {
+        fitWarning = "Produto salvo, mas falta revisar as numerações que ele veste.";
+      }
+    }
+
+    const query = fitWarning
+      ? `aviso=${encodeURIComponent(fitWarning)}`
+      : `sucesso=${encodeURIComponent(rootProductId ? "Alterações salvas com sucesso." : "Produto cadastrado com sucesso.")}`;
+    router.push(`/admin/produtos/${result.productId}?${query}`);
     router.refresh();
   }
 

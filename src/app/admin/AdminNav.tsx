@@ -10,6 +10,7 @@ import {
   FolderTree,
   Palette,
   Ruler,
+  ListChecks,
   Users,
   UserRound,
   BarChart3,
@@ -24,11 +25,20 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   available: boolean;
   adminOnly?: boolean;
+  /** Só o item "Revisar numerações" usa isto — o contador some quando chega a 0, mas o item continua acessível. */
+  showsPendingSizeFitBadge?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard, available: true },
   { label: "Produtos", href: "/admin/produtos", icon: ShoppingBag, available: true },
+  {
+    label: "Revisar numerações",
+    href: "/admin/produtos/revisar-numeracoes",
+    icon: ListChecks,
+    available: true,
+    showsPendingSizeFitBadge: true,
+  },
   { label: "Provadores", href: "/admin/provadores", icon: Sparkles, available: false },
   { label: "Coleções", href: "/admin/colecoes", icon: Layers, available: false },
   { label: "Categorias", href: "/admin/categorias", icon: FolderTree, available: true },
@@ -46,17 +56,30 @@ const NAV_ITEMS: NavItem[] = [
  * envolve). Mesma estrutura/mecanismo de navegação de antes (Link normal,
  * sem estado novo); só a pintura muda.
  */
-export function AdminNav({ role }: { role: UserRole }) {
+export function AdminNav({ role, pendingSizeFitCount }: { role: UserRole; pendingSizeFitCount: number }) {
   const pathname = usePathname();
+
+  // Rota mais específica que casa com o pathname atual vence — evita que
+  // "Produtos" e "Revisar numerações" (que vive sob /admin/produtos/...)
+  // fiquem os dois marcados como ativos ao mesmo tempo.
+  const matchingHrefs = NAV_ITEMS.filter((item) =>
+    item.href === "/admin" ? pathname === item.href : pathname.startsWith(item.href)
+  ).map((item) => item.href);
+  const activeHref = matchingHrefs.reduce<string | null>(
+    (longest, href) => (longest === null || href.length > longest.length ? href : longest),
+    null
+  );
 
   return (
     <nav className="flex gap-1 overflow-x-auto px-3 py-2 sm:flex-col sm:gap-1 sm:overflow-visible sm:px-3 sm:py-2">
       {NAV_ITEMS.map((item) => {
-        const isActive =
-          item.href === "/admin" ? pathname === item.href : pathname.startsWith(item.href);
-
+        const isActive = item.href === activeHref;
         const locked = item.adminOnly && role !== "admin" && role !== "master";
         const Icon = item.icon;
+        const label =
+          item.showsPendingSizeFitBadge && pendingSizeFitCount > 0
+            ? `${item.label} (${pendingSizeFitCount})`
+            : item.label;
 
         if (!item.available || locked) {
           return (
@@ -66,7 +89,7 @@ export function AdminNav({ role }: { role: UserRole }) {
               className="flex shrink-0 items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm text-white/25 sm:whitespace-normal"
             >
               <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
-              {item.label}
+              {label}
             </span>
           );
         }
@@ -83,7 +106,7 @@ export function AdminNav({ role }: { role: UserRole }) {
             )}
           >
             <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
-            {item.label}
+            {label}
           </Link>
         );
       })}
