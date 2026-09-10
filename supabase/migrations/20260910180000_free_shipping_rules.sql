@@ -22,8 +22,13 @@
 --     direto — só através do Route Handler novo em /api/frete-gratis, que
 --     roda no servidor com o client admin e devolve só os campos/linhas
 --     ativas necessárias pro seletor de estado.
+--
+-- Referências explícitas de schema (public.) em tudo — mesmo padrão das
+-- duas migrations aplicadas mais recentes (product_size_fit_compatibilities
+-- e sua RPC), pelo mesmo motivo: nunca depender do search_path da sessão
+-- que rodar o script.
 
-create table free_shipping_rules (
+create table public.free_shipping_rules (
   id uuid primary key default gen_random_uuid(),
   state_code text not null check (state_code in (
     'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG',
@@ -39,22 +44,27 @@ create table free_shipping_rules (
 
 -- Índice parcial: a única consulta pública é sempre "linhas ativas",
 -- exatamente o filtro que o Route Handler faz.
-create index free_shipping_rules_active_idx on free_shipping_rules (state_code) where active;
+create index free_shipping_rules_active_idx on public.free_shipping_rules (state_code) where active;
 
-alter table free_shipping_rules enable row level security;
+alter table public.free_shipping_rules enable row level security;
 
 -- Mesmo padrão de site_settings_admin_all: só ADMIN/MASTER (is_admin(),
 -- não is_catalog_editor_or_admin()) — condição de frete é config
 -- financeira/promocional, mesmo nível de acesso de PAYMENT_SETTINGS,
--- não do catálogo geral.
-create policy "free_shipping_rules_admin_all" on free_shipping_rules
-  for all using (is_admin()) with check (is_admin());
+-- não do catálogo geral. public.is_admin() já contempla 'master' desde
+-- 20260902100100_master_role_rls_functions.sql — nenhuma role nova.
+create policy "free_shipping_rules_admin_all"
+on public.free_shipping_rules
+for all
+using (public.is_admin())
+with check (public.is_admin());
 
--- updated_at automático — reaproveita a function set_updated_at() já usada
--- em products/categories/profiles/provadores (ver init_schema.sql).
+-- updated_at automático — reaproveita public.set_updated_at(), já criada em
+-- 20260827120000_init_schema.sql e usada por profiles/categories/products/
+-- provadores/etc. Nenhuma function nova/duplicada.
 create trigger free_shipping_rules_set_updated_at
-  before update on free_shipping_rules
-  for each row execute function set_updated_at();
+  before update on public.free_shipping_rules
+  for each row execute function public.set_updated_at();
 
 -- Nenhum seed automático aqui — a regra de negócio combinada (MS: PAC 199,90
 -- / SEDEX 249,90; SP/MG/PR/MT/GO/DF: PAC 299,90) fica pra uma migration ou
