@@ -40,6 +40,7 @@ export function RankingList({
   withAvatar = false,
   primaryUnitLabel,
   secondaryUnitLabel,
+  hint,
 }: {
   title: string;
   rows: RankingRow[];
@@ -47,6 +48,10 @@ export function RankingList({
   withAvatar?: boolean;
   primaryUnitLabel?: string;
   secondaryUnitLabel?: string;
+  /** Texto discreto, sempre visível sob a lista (ex.: aviso de que uma
+   * mesma sessão pode contar em mais de uma linha do ranking) — diferente
+   * de `emptyLabel`, que só aparece quando `rows` está vazio. */
+  hint?: string;
 }) {
   const max = Math.max(1, ...rows.map((r) => r.count));
 
@@ -100,6 +105,7 @@ export function RankingList({
           ))}
         </ul>
       )}
+      {hint && <p className="mt-3 text-[11px] text-text-muted">{hint}</p>}
     </div>
   );
 }

@@ -76,7 +76,13 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
         <DashboardCard label="Visualizações da vitrine" comparison={data.cards.pageViews} icon={Eye} />
         <DashboardCard label="Sessões únicas" comparison={data.cards.uniqueSessions} icon={Users} />
         <DashboardCard label="Visualizações de produtos" comparison={data.cards.productViews} icon={ShoppingBag} />
-        <DashboardCard label="Adições às Minhas Roupas" comparison={data.cards.favoritesAdded} icon={Heart} />
+        <DashboardCard
+          label="Adições às Minhas Roupas"
+          comparison={data.cards.favoritesAdded}
+          icon={Heart}
+          formatValue={(n) => `${Math.round(n)} sessões`}
+          hint={`${data.cards.favoritesAddedRawCount} adições`}
+        />
         <DashboardCard
           label="Cliques em Tirar dúvidas"
           comparison={data.cards.whatsappStarted}
@@ -150,15 +156,11 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
         />
         <RankingList title="Origem do tráfego (sessões)" rows={data.trafficSources} emptyLabel="Sem sessões neste período." />
         <RankingList
-          title="Origem do WhatsApp (sessões)"
-          rows={data.whatsappByOrigin}
-          emptyLabel="Sem cliques para WhatsApp neste período."
-        />
-        <RankingList
           title="Tirar dúvidas por vendedora"
           rows={data.whatsappBySeller}
           emptyLabel="Sem cliques em tirar dúvidas neste período."
           primaryUnitLabel="sessões"
+          hint="Uma mesma sessão pode aparecer em mais de uma vendedora."
         />
         <RankingList
           title="Forma de direcionamento"
