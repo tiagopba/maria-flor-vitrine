@@ -311,7 +311,7 @@ export function FavoritesPageClient({
 
       <Button type="button" onClick={handleSendClick} className="h-12 w-full gap-2 uppercase tracking-wide">
         <WhatsAppIcon />
-        Tirar dúvidas no WhatsApp
+        Comprar
       </Button>
 
       <Link href="/novidades">
