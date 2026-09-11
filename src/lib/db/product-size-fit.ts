@@ -174,10 +174,51 @@ export async function listSizeFitReviewProducts(
   return items;
 }
 
-/** Contagem pro badge do menu ("Revisar numerações (27)") — some quando chega a 0. */
-export async function countPendingSizeFitProducts(): Promise<number> {
-  const items = await listSizeFitReviewProducts({ status: "pending" });
-  return items.length;
+/**
+ * Contagem leve pro badge do menu ("Revisar numerações (6)") — roda em
+ * TODA página do Admin (layout.tsx), então busca só o estritamente
+ * necessário pra contar: nunca nome, foto, preço, categoria, cor ou
+ * descrição (isso é responsabilidade só da própria tela Revisar
+ * numerações, que continua usando listSizeFitReviewProducts pra montar
+ * os cards completos — layout e página nunca compartilham esse objeto
+ * grande, cada um busca só o que precisa).
+ *
+ * 3 consultas pequenas, em paralelo — nenhuma depende do resultado das
+ * outras. `product_sizes` e `product_size_fit_compatibilities` vêm
+ * inteiras (sem filtrar por produto): as duas tabelas são pequenas no
+ * catálogo real, e buscar tudo de uma vez evita depender do resultado da
+ * consulta de `products` antes de disparar as outras duas. Produto
+ * arquivado é descartado depois, em memória, cruzando com o Set de ids
+ * ativos. Mesma regra de sempre: produto pendente = pelo menos um
+ * label_size atual sem nenhuma linha de compatibilidade correspondente.
+ */
+export async function countPendingSizeFitProductsLight(): Promise<number> {
+  const supabase = await createClient();
+
+  const [
+    { data: products, error: productsError },
+    { data: sizes, error: sizesError },
+    { data: fits, error: fitsError },
+  ] = await Promise.all([
+    supabase.from("products").select("id").neq("status", "ARCHIVED"),
+    supabase.from("product_sizes").select("product_id, size"),
+    supabase.from("product_size_fit_compatibilities").select("product_id, label_size"),
+  ]);
+
+  if (productsError) throw new Error(productsError.message);
+  if (sizesError) throw new Error(sizesError.message);
+  if (fitsError) throw new Error(fitsError.message);
+
+  const activeProductIds = new Set((products ?? []).map((p) => p.id));
+  const compatKeys = new Set((fits ?? []).map((f) => `${f.product_id}::${f.label_size}`));
+
+  const pendingIds = new Set<string>();
+  for (const row of sizes ?? []) {
+    if (!activeProductIds.has(row.product_id) || pendingIds.has(row.product_id)) continue;
+    if (!compatKeys.has(`${row.product_id}::${row.size}`)) pendingIds.add(row.product_id);
+  }
+
+  return pendingIds.size;
 }
 
 /**

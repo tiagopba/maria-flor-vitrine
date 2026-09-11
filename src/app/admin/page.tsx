@@ -84,10 +84,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
           hint={`${data.cards.favoritesAddedRawCount} adições`}
         />
         <DashboardCard
-          label="Cliques em Tirar dúvidas"
+          label="Cliques em Comprar"
           comparison={data.cards.whatsappStarted}
           icon={MessageCircle}
-          hint="Sessões distintas que seguiram para o WhatsApp — não confirma envio da mensagem."
+          hint="Sessões distintas que clicaram em Comprar e seguiram para o WhatsApp — não confirma a compra."
         />
         <DashboardCard
           label="Cadastros no Grupo de Ofertas"
@@ -110,11 +110,11 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
           hint="Sessões com seleção ÷ sessões únicas"
         />
         <DashboardCard
-          label="Taxa de WhatsApp"
+          label="Taxa de clique em Comprar"
           comparison={data.cards.whatsappClickRate}
           icon={MousePointerClick}
           formatValue={formatPercent}
-          hint="Sessões com WhatsApp ÷ sessões únicas"
+          hint="Sessões com clique em Comprar ÷ sessões únicas"
         />
       </div>
 
@@ -148,24 +148,25 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
           secondaryUnitLabel="visualizações"
         />
         <RankingList
-          title="Tamanhos mais procurados"
+          title="Tamanhos escolhidos nas peças"
           rows={data.topSizes}
           emptyLabel="Sem tamanho registrado neste período."
           primaryUnitLabel="sessões buscaram"
           secondaryUnitLabel="menções"
+          hint="Tamanho da etiqueta escolhido pela cliente."
         />
         <RankingList title="Origem do tráfego (sessões)" rows={data.trafficSources} emptyLabel="Sem sessões neste período." />
         <RankingList
-          title="Tirar dúvidas por vendedora"
+          title="Cliques em Comprar por vendedora"
           rows={data.whatsappBySeller}
-          emptyLabel="Sem cliques em tirar dúvidas neste período."
+          emptyLabel="Sem cliques em Comprar neste período."
           primaryUnitLabel="sessões"
           hint="Uma mesma sessão pode aparecer em mais de uma vendedora."
         />
         <RankingList
           title="Forma de direcionamento"
           rows={data.whatsappByDirectionMode}
-          emptyLabel="Sem cliques em tirar dúvidas neste período."
+          emptyLabel="Sem cliques em Comprar neste período."
           primaryUnitLabel="sessões"
         />
       </div>
