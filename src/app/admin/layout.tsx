@@ -1,7 +1,7 @@
 import Image from "next/image";
 import { LogOut, Menu } from "lucide-react";
 import { getCurrentAdmin } from "@/lib/auth/permissions";
-import { countPendingSizeFitProducts } from "@/lib/db/product-size-fit";
+import { countPendingSizeFitProductsLight } from "@/lib/db/product-size-fit";
 import { AdminNav } from "./AdminNav";
 import { logout } from "./login/actions";
 
@@ -23,7 +23,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
     return children;
   }
 
-  const pendingSizeFitCount = await countPendingSizeFitProducts();
+  const pendingSizeFitCount = await countPendingSizeFitProductsLight();
 
   return (
     <div className="flex min-h-screen flex-col bg-[#faf6f3] sm:flex-row">
