@@ -306,11 +306,15 @@ export interface DashboardData {
   whatsappByDirectionMode: RankingRow[];
 }
 
+// PRODUCT_FLOW_STARTED deliberadamente FORA desta lista — auditoria de
+// performance confirmou que nenhum card/funil/ranking do Dashboard lê esse
+// tipo (grep no arquivo inteiro só encontra a própria declaração antiga).
+// O evento continua sendo gravado normalmente em analytics_events (nunca
+// apagado) — só parou de ser transferido pro Dashboard, que não o usa.
 const RELEVANT_EVENT_TYPES = [
   "PAGE_VIEW",
   "PRODUCT_VIEW",
   "CATEGORY_VIEW",
-  "PRODUCT_FLOW_STARTED",
   "SIZE_SELECTED",
   "FAVORITE_ADDED",
   "WHATSAPP_CLICK",
@@ -480,37 +484,97 @@ const EVENT_COLUMNS =
  */
 const PAGE_SIZE = 1000;
 
+/**
+ * Quantas páginas buscar ao mesmo tempo (item 1 da auditoria de
+ * performance). Nem sequencial (a causa medida de ~13s do Dashboard em
+ * períodos longos) nem um `Promise.all` sem limite nenhum (rajada de até
+ * 24+ requests simultâneas no mesmo Supabase compartilhado) — um meio
+ * termo deliberado.
+ */
+const PAGE_CONCURRENCY = 6;
+
+/**
+ * Busca uma página específica (`.range`) — nunca lança: um erro numa
+ * página vira log + página vazia, pras outras páginas do mesmo lote (já
+ * em voo em paralelo) continuarem normalmente em vez de derrubar a
+ * consulta inteira por causa de uma falha isolada.
+ */
+async function fetchAnalyticsEventsPage(
+  supabase: ReturnType<typeof createAdminClient>,
+  startIso: string,
+  endIso: string,
+  pageIndex: number
+): Promise<RawEvent[]> {
+  const from = pageIndex * PAGE_SIZE;
+  const { data, error } = await supabase
+    .from("analytics_events")
+    .select(EVENT_COLUMNS)
+    .in("event_type", RELEVANT_EVENT_TYPES)
+    .gte("created_at", startIso)
+    .lte("created_at", endIso)
+    .order("created_at", { ascending: true })
+    .range(from, from + PAGE_SIZE - 1);
+
+  if (error) {
+    console.error(`[getDashboardData] falha ao consultar analytics_events (página ${pageIndex}):`, error.message);
+    return [];
+  }
+
+  return (data ?? []) as RawEvent[];
+}
+
+/**
+ * Mesmos eventos e mesma lógica de agregação de sempre — só a forma de
+ * buscar mudou. Descobre quantas páginas existem de verdade (1 consulta
+ * `count`, sem transferir linha nenhuma) e busca em lotes de até
+ * PAGE_CONCURRENCY páginas simultâneas, nunca todas de uma vez.
+ *
+ * Ordem: nenhuma métrica/ranking depende da ordem de chegada das linhas
+ * (auditado antes desta mudança — `distinctSessionIds`/`bucketSessionsAndEvents`
+ * só usam Set/Map, e o único lugar que precisa do evento MAIS ANTIGO por
+ * sessão — `firstPageViewBySession`, usado pra dispositivo/origem de
+ * tráfego — já compara `created_at` explicitamente linha a linha, nunca
+ * assume que a primeira ocorrência no array é a mais antiga). Mesmo assim,
+ * as páginas são remontadas na ordem certa (por índice, não pela ordem de
+ * conclusão do Promise.all) antes de devolver — sem custo extra, só mais
+ * fácil de raciocinar sobre o resultado.
+ */
 async function fetchAllAnalyticsEvents(
   supabase: ReturnType<typeof createAdminClient>,
   startIso: string,
   endIso: string
 ): Promise<RawEvent[]> {
-  const allRows: RawEvent[] = [];
-  let from = 0;
+  const { count, error: countError } = await supabase
+    .from("analytics_events")
+    .select("*", { count: "exact", head: true })
+    .in("event_type", RELEVANT_EVENT_TYPES)
+    .gte("created_at", startIso)
+    .lte("created_at", endIso);
 
-  while (allRows.length < MAX_EVENTS) {
-    const { data, error } = await supabase
-      .from("analytics_events")
-      .select(EVENT_COLUMNS)
-      .in("event_type", RELEVANT_EVENT_TYPES)
-      .gte("created_at", startIso)
-      .lte("created_at", endIso)
-      .order("created_at", { ascending: true })
-      .range(from, from + PAGE_SIZE - 1);
-
-    if (error) {
-      console.error("[getDashboardData] falha ao consultar analytics_events:", error.message);
-      break;
-    }
-
-    const page = (data ?? []) as RawEvent[];
-    allRows.push(...page);
-
-    if (page.length < PAGE_SIZE) break; // última página
-    from += PAGE_SIZE;
+  if (countError) {
+    console.error("[getDashboardData] falha ao contar analytics_events:", countError.message);
+    return [];
   }
 
-  return allRows;
+  const totalRows = Math.min(count ?? 0, MAX_EVENTS);
+  if (totalRows === 0) return [];
+
+  const pageCount = Math.ceil(totalRows / PAGE_SIZE);
+  const pagesByIndex: RawEvent[][] = new Array(pageCount);
+
+  for (let batchStart = 0; batchStart < pageCount; batchStart += PAGE_CONCURRENCY) {
+    const batchEnd = Math.min(batchStart + PAGE_CONCURRENCY, pageCount);
+    const batchResults = await Promise.all(
+      Array.from({ length: batchEnd - batchStart }, (_, i) =>
+        fetchAnalyticsEventsPage(supabase, startIso, endIso, batchStart + i)
+      )
+    );
+    for (let i = 0; i < batchResults.length; i++) {
+      pagesByIndex[batchStart + i] = batchResults[i];
+    }
+  }
+
+  return pagesByIndex.flat();
 }
 
 export async function getDashboardData(period: DashboardPeriod): Promise<DashboardData> {
@@ -586,17 +650,7 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
     }
   }
 
-  // Nome só pras vendedoras que realmente aparecem no período — mesmo
-  // padrão de productNameById/categoryNameById (join no momento da
-  // leitura, nunca duplicado em analytics_events). Uma vendedora inativa
-  // (mas não excluída) continua com nome resolvido normalmente; só some se
-  // a linha em `sellers` for excluída de verdade (aí a FK já vira null por
-  // "on delete set null", e cai em noSellerSessions).
   const sellerIdsInPeriod = [...sellerSessionSets.keys()];
-  const { data: sellersInPeriod } = await (sellerIdsInPeriod.length > 0
-    ? supabase.from("sellers").select("id, name").in("id", sellerIdsInPeriod)
-    : Promise.resolve({ data: [] as { id: string; name: string }[] }));
-  const sellerNameById = new Map((sellersInPeriod ?? []).map((s) => [s.id, s.name]));
 
   // Dispositivo e origem de tráfego são atribuídos por SESSÃO, não por
   // evento — usa o PAGE_VIEW mais antigo de cada sessão no período atual
@@ -638,14 +692,19 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   );
   const sizeBuckets = bucketSessionsAndEvents(currentRows, extractSize);
 
-  // Nomes reais só pros produtos/categorias que aparecem no ranking (join
-  // no momento da leitura, nunca snapshot no evento — nome/categoria de um
-  // produto pode mudar depois de visualizado, e o dashboard deve sempre
-  // mostrar o dado atual, não uma foto velha).
   const productIds = [...new Set([...productViewBuckets.keys(), ...productAddBuckets.keys()])];
   const categoryIds = [...categoryBuckets.keys()];
 
-  const [{ data: products }, { data: dbCategories }] = await Promise.all([
+  // sellers/products/categories são independentes entre si (cada um só
+  // depende de ids já calculados acima, em memória, a partir de
+  // currentRows) — item 3 da auditoria de performance: antes, sellers era
+  // aguardada sozinha e só DEPOIS products+categories entravam num
+  // Promise.all separado; agora os três disparam juntos, nenhuma mudança
+  // de resultado, só de quando cada request sai.
+  const [{ data: sellersInPeriod }, { data: products }, { data: dbCategories }] = await Promise.all([
+    sellerIdsInPeriod.length > 0
+      ? supabase.from("sellers").select("id, name").in("id", sellerIdsInPeriod)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
     productIds.length > 0
       ? supabase.from("products").select("id, name").in("id", productIds)
       : Promise.resolve({ data: [] as { id: string; name: string }[] }),
@@ -654,6 +713,17 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
       : Promise.resolve({ data: [] as { id: string; name: string }[] }),
   ]);
 
+  // Nome só pras vendedoras que realmente aparecem no período — mesmo
+  // padrão de productNameById/categoryNameById (join no momento da
+  // leitura, nunca duplicado em analytics_events). Uma vendedora inativa
+  // (mas não excluída) continua com nome resolvido normalmente; só some se
+  // a linha em `sellers` for excluída de verdade (aí a FK já vira null por
+  // "on delete set null", e cai em noSellerSessions).
+  const sellerNameById = new Map((sellersInPeriod ?? []).map((s) => [s.id, s.name]));
+  // Nomes reais só pros produtos/categorias que aparecem no ranking (join
+  // no momento da leitura, nunca snapshot no evento — nome/categoria de um
+  // produto pode mudar depois de visualizado, e o dashboard deve sempre
+  // mostrar o dado atual, não uma foto velha).
   const productNameById = new Map((products ?? []).map((p) => [p.id, p.name]));
   const categoryNameById = new Map((dbCategories ?? []).map((c) => [c.id, c.name]));
   // Tamanho não tem tabela pra buscar nome — o próprio valor já é o label.
