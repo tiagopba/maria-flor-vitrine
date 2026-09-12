@@ -6,6 +6,7 @@ import { DashboardPeriodFilter } from "./DashboardPeriodFilter";
 import { DashboardCard } from "./DashboardCard";
 import { RankingList } from "./DashboardCharts";
 import { ConversionFunnel, DeviceBreakdown } from "./DashboardFunnel";
+import { RaioXFunnel } from "./RaioXFunnel";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -130,6 +131,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <ConversionFunnel funnel={data.funnel} />
         <DeviceBreakdown devices={data.devices} />
+      </div>
+
+      <div className="mt-6">
+        <RaioXFunnel data={data.raioXFunnel} />
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
