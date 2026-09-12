@@ -30,6 +30,13 @@ function initialOf(name: string | undefined): string {
   return name?.trim()?.[0]?.toUpperCase() ?? "?";
 }
 
+/** "1 sessão distinta" / "N sessões distintas" — só usado na linha discreta
+ * do card "Cliques em Comprar" (ver auditoria: cliques brutos e sessões
+ * distintas podem divergir quando a mesma sessão gera mais de um clique). */
+function formatDistinctSessions(count: number): string {
+  return count === 1 ? "1 sessão distinta" : `${count} sessões distintas`;
+}
+
 export default async function AdminDashboardPage({ searchParams }: PageProps<"/admin">) {
   const [admin, rawParams] = await Promise.all([getCurrentAdmin(), searchParams]);
 
@@ -87,7 +94,9 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
           label="Cliques em Comprar"
           comparison={data.cards.whatsappStarted}
           icon={MessageCircle}
-          hint="Sessões distintas que clicaram em Comprar e seguiram para o WhatsApp — não confirma a compra."
+          formatValue={(n) => `${Math.round(n)} cliques`}
+          secondaryLine={formatDistinctSessions(data.funnel.whatsappSessions)}
+          hint="Cliques que seguiram para o WhatsApp. Não confirma envio da mensagem nem compra concluída."
         />
         <DashboardCard
           label="Cadastros no Grupo de Ofertas"
@@ -160,8 +169,11 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
           title="Cliques em Comprar por vendedora"
           rows={data.whatsappBySeller}
           emptyLabel="Sem cliques em Comprar neste período."
-          primaryUnitLabel="sessões"
-          hint="Uma mesma sessão pode aparecer em mais de uma vendedora."
+          primaryUnitLabel="cliques"
+          secondaryUnitLabel="sessões distintas"
+          secondaryUnitLabelSingular="sessão distinta"
+          badgeLabel="Cliques"
+          hint="Uma mesma sessão pode gerar mais de um clique em Comprar."
         />
         <RankingList
           title="Forma de direcionamento"

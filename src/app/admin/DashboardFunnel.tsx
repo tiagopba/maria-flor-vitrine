@@ -8,7 +8,7 @@ function formatPercent(value: number): string {
 const FUNNEL_STEPS: { key: keyof FunnelData; label: string }[] = [
   { key: "productViewSessions", label: "Visualizou produto" },
   { key: "selectionSessions", label: "Adicionou às Minhas Roupas" },
-  { key: "whatsappSessions", label: "Clicou em Comprar" },
+  { key: "whatsappSessions", label: "Sessões que clicaram em Comprar" },
 ];
 
 /**
