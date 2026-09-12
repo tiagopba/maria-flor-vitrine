@@ -232,6 +232,67 @@ export interface FunnelData {
   whatsappSessions: number;
 }
 
+/**
+ * Uma etapa do "Raio-X do Funil" (ver RaioXFunnelData) — sempre sessões
+ * distintas com pelo menos um evento do tipo daquela etapa no período
+ * atual, mesmo espírito de FunnelData (sem exigir ordem entre sessões).
+ */
+export interface RaioXFunnelStep {
+  id: string;
+  label: string;
+  sessions: number;
+  /** % desta etapa em relação à etapa ANTERIOR — null só na primeira
+   * etapa (não existe "anterior" pra Visualizou produto). */
+  conversionFromPreviousPct: number | null;
+  /** 100 - conversionFromPreviousPct — sempre junto (nunca calculado de
+   * novo pela UI), null só na primeira etapa. */
+  dropoffFromPreviousPct: number | null;
+}
+
+/**
+ * Raio-X do Funil — 5 etapas, todas com evento já existente antes desta
+ * mudança (auditoria: nenhum evento novo foi criado). Cada etapa é
+ * sessões distintas no período atual:
+ * 1. Visualizou produto — PRODUCT_VIEW.
+ * 2. Clicou em Quero essa peça — PRODUCT_FLOW_STARTED (auditado: dispara
+ *    só em ProductWhatsAppFlow.handleWantThis, uma vez por clique real no
+ *    botão, tanto pra peça de tamanho único quanto pra peça com vários
+ *    tamanhos — antes de saber se o tamanho será escolhido).
+ * 3. Adicionou às Minhas Roupas — FAVORITE_ADDED, mas SÓ com
+ *    `source = "product_page"`. Auditoria encontrou FAVORITE_ADDED com
+ *    DUAS origens diferentes: o coração de favoritar (FavoriteButton, em
+ *    qualquer card/vitrine — grava `source: "favorites"`, o default de
+ *    recordFavoriteEvent) e o fluxo guiado "Quero essa peça"
+ *    (ProductWhatsAppFlow.addToSelection — grava `source: "product_page"`
+ *    explicitamente). Misturar as duas responderia uma pergunta errada
+ *    ("quantas sessões favoritaram algo, de qualquer forma") em vez da
+ *    pedida ("de quem clicou em Quero essa peça, quantas conseguiram
+ *    adicionar") — por isso o filtro por `source` é obrigatório aqui.
+ *    SIZE_SELECTED deliberadamente NÃO é uma etapa própria: audita-se que
+ *    ele dispara sempre junto de FAVORITE_ADDED (mesmo bloco de código,
+ *    mesmo instante, sempre que existe um tamanho de verdade — inclusive
+ *    tamanho único/"Único" auto-selecionado) — nunca captura sozinho um
+ *    abandono que o vão 2→3 já não capture.
+ * 4. Abriu Minhas Roupas — FAVORITES_VIEW (dispara 1x por visita a
+ *    /favoritos, independente de a sessão ter chegado lá pelo fluxo
+ *    guiado ou por outro caminho — ex.: link direto, nav "Minhas Roupas".
+ *    Por isso este número pode, em tese, ser um pouco maior que a etapa
+ *    anterior dentro do MESMO período: uma sessão que adicionou uma peça
+ *    num período anterior e só abre /favoritos de novo agora entra aqui
+ *    sem um novo FAVORITE_ADDED neste período. Não é erro de cálculo —
+ *    é a mesma limitação, já aceita, de todo o funil existente: contagem
+ *    por sessão-com-evento-no-período, não um funil sequencial de coorte).
+ * 5. Clicou em Comprar — FAVORITES_WHATSAPP_CLICK, sessões distintas
+ *    (Set já usado em funnel.whatsappSessions — REUTILIZADO aqui, nunca
+ *    recalculado, pra nunca divergir). Deliberadamente NÃO usa a contagem
+ *    bruta de cliques do card "Cliques em Comprar" (cards.whatsappStarted)
+ *    — as duas métricas medem coisas diferentes e não devem ser
+ *    misturadas (instrução explícita).
+ */
+export interface RaioXFunnelData {
+  steps: RaioXFunnelStep[];
+}
+
 export interface DashboardData {
   cards: {
     pageViews: MetricComparison;
@@ -290,6 +351,10 @@ export interface DashboardData {
    * tiveram pelo menos um evento daquele tipo no período atual (não
    * quantidade bruta de eventos, e as etapas não exigem ordem entre si). */
   funnel: FunnelData;
+  /** Raio-X do Funil — ver RaioXFunnelData/RaioXFunnelStep. Seção nova e
+   * separada do funil de 3 etapas acima (funnel/FunnelData, inalterado);
+   * não substitui nem reinterpreta nada dele. */
+  raioXFunnel: RaioXFunnelData;
   /** Mobile / Desktop / Outros (tablet + desconhecido) — sessões distintas,
    * classificadas pelo `device_type` do primeiro PAGE_VIEW de cada sessão
    * no período. */
@@ -323,11 +388,14 @@ export interface DashboardData {
   whatsappByDirectionMode: RankingRow[];
 }
 
-// PRODUCT_FLOW_STARTED deliberadamente FORA desta lista — auditoria de
-// performance confirmou que nenhum card/funil/ranking do Dashboard lê esse
-// tipo (grep no arquivo inteiro só encontra a própria declaração antiga).
-// O evento continua sendo gravado normalmente em analytics_events (nunca
-// apagado) — só parou de ser transferido pro Dashboard, que não o usa.
+// PRODUCT_FLOW_STARTED voltou pra esta lista com a Raio-X do Funil (ver
+// RaioXFunnelData abaixo) — é o evento de "clicou em Quero essa peça"
+// (auditado: só dispara em ProductWhatsAppFlow.handleWantThis, uma vez por
+// clique, nada mais usa esse tipo). Tinha sido removido daqui numa
+// auditoria de performance anterior por não ter consumidor nenhum no
+// Dashboard; agora tem. FAVORITES_VIEW ("abriu Minhas Roupas") entra pelo
+// mesmo motivo — nenhum dos dois é um evento novo, os dois já eram
+// gravados normalmente em analytics_events, só não eram buscados aqui.
 const RELEVANT_EVENT_TYPES = [
   "PAGE_VIEW",
   "PRODUCT_VIEW",
@@ -337,6 +405,8 @@ const RELEVANT_EVENT_TYPES = [
   "WHATSAPP_CLICK",
   "FAVORITES_WHATSAPP_CLICK",
   "OFFER_LEAD_CONFIRMED",
+  "PRODUCT_FLOW_STARTED",
+  "FAVORITES_VIEW",
 ] as const;
 
 /**
@@ -645,6 +715,40 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
     whatsappSessions: currentWhatsappSessions.size,
   };
 
+  // Raio-X do Funil — só as duas sessões novas (ver RaioXFunnelData pro
+  // porquê de cada uma); as outras três etapas REUTILIZAM sets já
+  // calculados acima (currentProductViewSessions, currentWhatsappSessions),
+  // nunca recalculados. Etapa 3 filtra `source === "product_page"` — sem
+  // esse filtro, o coração de favoritar (source "favorites", em qualquer
+  // card da vitrine) contaminaria a etapa, que é especificamente sobre o
+  // fluxo "Quero essa peça".
+  const currentFlowStartedSessions = distinctSessionIds(currentRows, ["PRODUCT_FLOW_STARTED"]);
+  const currentAddedViaFlowSessions = distinctSessionIds(
+    currentRows.filter((r) => r.source === "product_page"),
+    ["FAVORITE_ADDED"]
+  );
+  const currentFavoritesViewSessions = distinctSessionIds(currentRows, ["FAVORITES_VIEW"]);
+
+  const raioXSteps: { id: string; label: string; sessions: number }[] = [
+    { id: "product_view", label: "Visualizou produto", sessions: currentProductViewSessions.size },
+    { id: "flow_started", label: "Clicou em Quero essa peça", sessions: currentFlowStartedSessions.size },
+    { id: "added_to_selection", label: "Adicionou às Minhas Roupas", sessions: currentAddedViaFlowSessions.size },
+    { id: "favorites_view", label: "Abriu Minhas Roupas", sessions: currentFavoritesViewSessions.size },
+    { id: "whatsapp_click", label: "Clicou em Comprar", sessions: currentWhatsappSessions.size },
+  ];
+
+  const raioXFunnel: RaioXFunnelData = {
+    steps: raioXSteps.map((step, index) => {
+      if (index === 0) {
+        return { ...step, conversionFromPreviousPct: null, dropoffFromPreviousPct: null };
+      }
+      const previousSessions = raioXSteps[index - 1].sessions;
+      const conversionFromPreviousPct = ratePct(step.sessions, previousSessions);
+      const dropoffFromPreviousPct = previousSessions > 0 ? 100 - conversionFromPreviousPct : null;
+      return { ...step, conversionFromPreviousPct, dropoffFromPreviousPct };
+    }),
+  };
+
   // "Tirar dúvidas por vendedora" e "Forma de direcionamento" — só
   // FAVORITES_WHATSAPP_CLICK (mesma base de currentWhatsappSessions), nunca
   // o WHATSAPP_CLICK antigo. Uma sessão que clica várias vezes pra MESMA
@@ -772,6 +876,7 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
       offersLeadsConfirmed: compare(currentOffersConfirmed, previousOffersConfirmed),
     },
     funnel,
+    raioXFunnel,
     devices: DEVICE_BUCKETS.map((bucket) => ({ id: bucket, label: bucket, count: deviceCounts.get(bucket) ?? 0 })),
     topViewedProducts: topNBySessions(productViewBuckets, productNameById, 10, "Produto removido"),
     topAddedProducts: topNBySessions(productAddBuckets, productNameById, 10, "Produto removido"),
