@@ -269,7 +269,7 @@ export function FavoritesPageClient({
       <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-border px-4 py-16 text-center">
         <p className="font-display text-lg text-text">Você ainda não escolheu nenhuma peça ❤️</p>
         <p className="max-w-xs text-sm text-text-muted">
-          Explore a vitrine e toque em &quot;Quero essa peça&quot; nas peças que gostar.
+          Explore a vitrine e toque em &quot;EU QUERO&quot; nas peças que gostar.
         </p>
         <Link href="/novidades">
           <Button className="mt-2">Ver novidades</Button>
