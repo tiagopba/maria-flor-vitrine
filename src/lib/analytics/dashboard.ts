@@ -206,10 +206,14 @@ export interface RankingRow {
    * (ver topNBySessions), contagem simples nos que já eram por sessão
    * (dispositivos, origem do tráfego). */
   count: number;
-  /** Quantidade bruta de eventos por trás de `count`, mostrada de forma
-   * discreta (ex.: "31 sessões interessadas" + "43 visualizações"). Só
-   * presente nos rankings de produto/categoria/tamanho — ausente onde não
-   * faz sentido (dispositivos, origem do tráfego, que já são só sessão). */
+  /** Métrica secundária discreta por trás de `count`. Na maioria dos
+   * rankings (produto/categoria/tamanho) é a quantidade bruta de eventos
+   * por trás de uma contagem principal por sessão (ex.: "31 sessões
+   * interessadas" + "43 visualizações"). Em "Cliques em Comprar por
+   * vendedora" é o inverso: `count` já é a quantidade bruta de cliques, e
+   * `secondaryCount` traz as sessões distintas por trás dela — ver
+   * getDashboardData. Ausente onde não faz sentido (dispositivos, origem do
+   * tráfego, que já são só sessão). */
   secondaryCount?: number;
 }
 
@@ -252,18 +256,28 @@ export interface DashboardData {
      * favoritesAdded (ex.: "124 sessões" + "255 adições"), nunca como a
      * métrica principal. */
     favoritesAddedRawCount: number;
-    /** "Cliques em Tirar dúvidas" — sessões distintas com pelo menos um
-     * FAVORITES_WHATSAPP_CLICK no período (nunca quantidade bruta de
-     * evento: uma sessão que clica 3x conta 1). Deliberadamente NÃO inclui
-     * o WHATSAPP_CLICK antigo (fluxo "Tirar dúvidas" da página de produto,
-     * removido; hoje só "Quero algo parecido" de SOLD_OUT) — ver
+    /** "Cliques em Comprar" — quantidade BRUTA de eventos
+     * FAVORITES_WHATSAPP_CLICK no período (nunca deduplicado por sessão:
+     * duas seleções distintas na mesma sessão contam 2). Auditoria real
+     * (2026-09-10, sessão bd0e0dc3-...) mostrou duas seleções genuínas —
+     * CALÇA SARJA/G e SAIA RENDA/M, ambas pra Maria Abadia — no mesmo
+     * navegador/sessão a poucos minutos de intervalo; contar por sessão
+     * escondia o volume real de ações. `funnel.whatsappSessions` continua
+     * disponível (e inalterado) pra quem quer a base por sessão — a UI
+     * mostra os dois números juntos (cliques brutos como valor principal do
+     * card, sessões distintas discretamente abaixo). Deliberadamente NÃO
+     * inclui o WHATSAPP_CLICK antigo (fluxo "Tirar dúvidas" da página de
+     * produto, removido; hoje só "Quero algo parecido" de SOLD_OUT) — ver
      * DOUBT_WHATSAPP_EVENT_TYPES. O evento em si só marca que o site gerou
      * o link wa.me e redirecionou — não é confirmação de mensagem enviada
-     * de verdade, por isso o nome do card não diz "conversas iniciadas". */
+     * nem de compra concluída, por isso nem o nome do card nem o hint dizem
+     * isso. */
     whatsappStarted: MetricComparison;
     /** Sessões com FAVORITES_WHATSAPP_CLICK ÷ sessões únicas (visita) —
-     * mesma base de whatsappStarted, nunca dividido pela quantidade bruta
-     * de PRODUCT_VIEW. */
+     * deliberadamente continua por SESSÃO distinta (nunca por quantidade
+     * bruta de clique, ao contrário de whatsappStarted acima): uma mesma
+     * sessão clicando várias vezes não pode inflar nem estourar 100% desta
+     * taxa. */
     whatsappClickRate: MetricComparison;
     /** Sessões com PRODUCT_VIEW ÷ sessões únicas (visita). */
     productViewRate: MetricComparison;
@@ -292,12 +306,15 @@ export interface DashboardData {
    * referrer do primeiro PAGE_VIEW de cada sessão no período (ver
    * classifyTrafficSource). */
   trafficSources: RankingRow[];
-  /** "Tirar dúvidas por vendedora" — sessões distintas por vendedora, só
-   * FAVORITES_WHATSAPP_CLICK (nunca o WHATSAPP_CLICK antigo). Nome
-   * resolvido via `sellers`, nunca duplicado em analytics_events — só
-   * vendedoras que realmente receberam algum clique no período; sem
-   * entrada nenhuma quando não há seller_id nulo no período (ver
-   * getDashboardData). */
+  /** "Cliques em Comprar por vendedora" — quantidade BRUTA de eventos
+   * FAVORITES_WHATSAPP_CLICK por vendedora (`count`, métrica principal
+   * deste ranking — mesmo motivo de whatsappStarted acima), com a
+   * quantidade de sessões distintas por trás disso em `secondaryCount`,
+   * mostrada discretamente. Só FAVORITES_WHATSAPP_CLICK (nunca o
+   * WHATSAPP_CLICK antigo). Nome resolvido via `sellers`, nunca duplicado em
+   * analytics_events — só vendedoras que realmente receberam algum clique
+   * no período; sem entrada nenhuma quando não há seller_id nulo no período
+   * (ver getDashboardData). */
   whatsappBySeller: RankingRow[];
   /** "Vendedora escolhida" / "Qualquer vendedora / round-robin" / "Sem
    * informação" — sempre as 3 categorias (mesmo padrão de devices), ver
@@ -595,6 +612,10 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   const currentFavorites = countByType(currentRows, "FAVORITE_ADDED");
   const currentOffersConfirmed = countByType(currentRows, "OFFER_LEAD_CONFIRMED");
   const previousOffersConfirmed = countByType(previousRows, "OFFER_LEAD_CONFIRMED");
+  // "Cliques em Comprar" — quantidade bruta de FAVORITES_WHATSAPP_CLICK,
+  // nunca deduplicada por sessão (ver doc de whatsappStarted acima).
+  const currentWhatsappClicks = countByType(currentRows, "FAVORITES_WHATSAPP_CLICK");
+  const previousWhatsappClicks = countByType(previousRows, "FAVORITES_WHATSAPP_CLICK");
 
   // Sessões distintas por etapa — base do funil, das taxas e do card de
   // sessões únicas. Sempre COUNT DISTINCT session_id, nunca quantidade
@@ -633,6 +654,12 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   const directionModeBuckets = new Map<string, Set<string>>(DIRECTION_MODE_BUCKETS.map((b) => [b, new Set()]));
   const sellerSessionSets = new Map<string, Set<string>>();
   const noSellerSessions = new Set<string>();
+  // Contagem BRUTA de cliques por vendedora (nunca deduplicada por sessão) —
+  // base do ranking "Cliques em Comprar por vendedora" (ver whatsappBySeller
+  // abaixo); sellerSessionSets continua existindo do jeito que já existia,
+  // agora só como métrica SECUNDÁRIA desse ranking.
+  const sellerEventCounts = new Map<string, number>();
+  let noSellerEventCount = 0;
   for (const row of currentRows) {
     if (!row.session_id || !DOUBT_WHATSAPP_EVENT_TYPES.includes(row.event_type as (typeof DOUBT_WHATSAPP_EVENT_TYPES)[number])) {
       continue;
@@ -645,8 +672,10 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
       const set = sellerSessionSets.get(row.seller_id) ?? new Set<string>();
       set.add(row.session_id);
       sellerSessionSets.set(row.seller_id, set);
+      sellerEventCounts.set(row.seller_id, (sellerEventCounts.get(row.seller_id) ?? 0) + 1);
     } else {
       noSellerSessions.add(row.session_id);
+      noSellerEventCount++;
     }
   }
 
@@ -736,7 +765,7 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
       productViews: compare(currentProductViews, previousProductViews),
       favoritesAdded: compare(currentSelectionSessions.size, previousSelectionSessions.size),
       favoritesAddedRawCount: currentFavorites,
-      whatsappStarted: compare(currentWhatsappSessions.size, previousWhatsappSessions.size),
+      whatsappStarted: compare(currentWhatsappClicks, previousWhatsappClicks),
       whatsappClickRate: compare(currentClickRate, previousClickRate),
       productViewRate: compare(currentProductViewRate, previousProductViewRate),
       selectionRate: compare(currentSelectionRate, previousSelectionRate),
@@ -757,10 +786,18 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
       ...sellerIdsInPeriod.map((sellerId) => ({
         id: sellerId,
         label: sellerNameById.get(sellerId) ?? "Vendedora removida",
-        count: sellerSessionSets.get(sellerId)?.size ?? 0,
+        count: sellerEventCounts.get(sellerId) ?? 0,
+        secondaryCount: sellerSessionSets.get(sellerId)?.size ?? 0,
       })),
       ...(noSellerSessions.size > 0
-        ? [{ id: "sem-vendedora", label: "Sem vendedora atribuída", count: noSellerSessions.size }]
+        ? [
+            {
+              id: "sem-vendedora",
+              label: "Sem vendedora atribuída",
+              count: noSellerEventCount,
+              secondaryCount: noSellerSessions.size,
+            },
+          ]
         : []),
     ].sort((a, b) => b.count - a.count),
     whatsappByDirectionMode: DIRECTION_MODE_BUCKETS.map((bucket) => ({
