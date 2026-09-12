@@ -437,13 +437,13 @@ export function ProductDetailView({
         </p>
 
         {/* Tamanhos reais do produto (nunca fixo) + "veste" (quando
-            cadastrado) + nota de frete — sempre que houver ao menos 1
-            tamanho cadastrado; sem isso não há o que mostrar (produto sem
-            tamanho nenhum é o único caso omitido). O tamanho que a cliente
-            escolhe continua sendo o da etiqueta — "veste" é só informativo,
-            nunca substitui P/M/G/Único por um número. */}
+            cadastrado) — sempre que houver ao menos 1 tamanho cadastrado;
+            sem isso não há o que mostrar (produto sem tamanho nenhum é o
+            único caso omitido). O tamanho que a cliente escolhe continua
+            sendo o da etiqueta — "veste" é só informativo, nunca substitui
+            P/M/G/Único por um número. */}
         {sortedSizes.length > 0 && (
-          <div className="flex flex-col gap-1 text-sm">
+          <div className="flex flex-col gap-0.5 text-sm">
             {sortedSizes.length === 1 ? (
               <p className="text-text">
                 <span className="font-medium text-text-muted">Tamanho: </span>
@@ -463,14 +463,15 @@ export function ProductDetailView({
                 ))}
               </div>
             )}
-            <p className="text-text-muted">🚚 Enviamos para todo o Brasil</p>
           </div>
         )}
 
-        {/* Informativo de confiança, opcional — nunca calcula elegibilidade
-            nem bloqueia o CTA abaixo; fechado por padrão, zero requisição
-            de frete até a cliente tocar em "Consulte condições" (ver
-            FreeShippingAccordion). */}
+        {/* Único bloco de envio/frete da página — informativo de confiança,
+            opcional, nunca calcula elegibilidade nem bloqueia o CTA abaixo;
+            fechado por padrão, zero requisição de frete até a cliente tocar
+            em "Consultar condições" (ver FreeShippingAccordion). Substitui
+            a antiga linha estática "🚚 Enviamos para todo o Brasil", que
+            duplicava esta informação. */}
         <FreeShippingAccordion variant="compact" />
 
         <div className="mt-2">

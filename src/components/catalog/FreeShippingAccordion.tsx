@@ -59,11 +59,14 @@ function ShippingRulesStatus({
  * FavoritesPageClient) — este componente não precisa expor nenhum estado
  * pro pai pra isso.
  *
- * `variant`: "default" é o bloco em caixa usado em /favoritos, inalterado
- * por esta mudança. "compact" é o usado na página de produto — mesmo
- * estado/fetch/regras, só um trigger mais discreto (duas linhas de texto,
- * sem caixa) e o painel aberto mais enxuto (sem borda ao redor, texto
- * menor) pra não virar um banner na página.
+ * O gatilho fechado ("🚚 Enviamos para todo o Brasil • Confira as
+ * condições de FRETE GRÁTIS" + "Consultar condições") é IGUAL nas duas
+ * variantes — mesmo texto, mesma tipografia, em /favoritos e na página de
+ * produto (pedido explícito: um único padrão visual nos dois lugares).
+ * `variant` só diferencia o PAINEL ABERTO: "default" é a caixa com borda
+ * usada em /favoritos; "compact" é o painel mais enxuto (sem borda ao
+ * redor, texto menor) usado na página de produto, pra não virar um banner
+ * ali.
  */
 export function FreeShippingAccordion({ variant = "default" }: { variant?: "default" | "compact" } = {}) {
   const [open, setOpen] = useState(false);
@@ -97,18 +100,24 @@ export function FreeShippingAccordion({ variant = "default" }: { variant?: "defa
 
   const rulesForState = selectedState ? (rules ?? []).filter((r) => r.stateCode === selectedState) : [];
 
-  if (variant === "compact") {
-    if (!open) {
-      return (
-        <div className="flex flex-col items-start gap-0.5 text-xs">
-          <span className="text-text-muted">🚚 Frete grátis disponível</span>
-          <button type="button" onClick={handleOpen} className="font-medium text-primary hover:underline">
-            Consulte condições
-          </button>
-        </div>
-      );
-    }
+  if (!open) {
+    return (
+      <div className="flex flex-col items-start gap-1">
+        <p className="text-base font-semibold leading-snug text-text">
+          🚚 Enviamos para todo o Brasil • Confira as condições de FRETE GRÁTIS
+        </p>
+        <button
+          type="button"
+          onClick={handleOpen}
+          className="-mx-1 -my-1 rounded-md px-1 py-2 text-left text-[15px] font-semibold text-primary hover:underline"
+        >
+          Consultar condições
+        </button>
+      </div>
+    );
+  }
 
+  if (variant === "compact") {
     return (
       <div className="flex flex-col gap-2 border-t border-border pt-2.5 text-xs">
         <button
@@ -142,19 +151,6 @@ export function FreeShippingAccordion({ variant = "default" }: { variant?: "defa
           </div>
         )}
       </div>
-    );
-  }
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={handleOpen}
-        className="flex w-full items-center justify-between rounded-xl border border-dashed border-border px-3.5 py-2.5 text-left text-sm text-text-muted hover:border-primary/40 hover:text-text"
-      >
-        <span>Consulte as condições de 🚚 FRETE GRÁTIS</span>
-        <span aria-hidden="true">▾</span>
-      </button>
     );
   }
 
