@@ -218,7 +218,7 @@ export interface RankingRow {
 }
 
 /**
- * Funil simplificado ao novo fluxo da cliente ("Quero essa peça" manda
+ * Funil simplificado ao novo fluxo da cliente ("Eu quero" manda
  * direto pra /favoritos; conversa com vendedora só acontece lá) — três
  * etapas, cada uma sessões distintas com pelo menos um evento do tipo,
  * nunca quantidade bruta:
@@ -254,7 +254,7 @@ export interface RaioXFunnelStep {
  * mudança (auditoria: nenhum evento novo foi criado). Cada etapa é
  * sessões distintas no período atual:
  * 1. Visualizou produto — PRODUCT_VIEW.
- * 2. Clicou em Quero essa peça — PRODUCT_FLOW_STARTED (auditado: dispara
+ * 2. Clicou em Eu quero — PRODUCT_FLOW_STARTED (auditado: dispara
  *    só em ProductWhatsAppFlow.handleWantThis, uma vez por clique real no
  *    botão, tanto pra peça de tamanho único quanto pra peça com vários
  *    tamanhos — antes de saber se o tamanho será escolhido).
@@ -262,11 +262,13 @@ export interface RaioXFunnelStep {
  *    `source = "product_page"`. Auditoria encontrou FAVORITE_ADDED com
  *    DUAS origens diferentes: o coração de favoritar (FavoriteButton, em
  *    qualquer card/vitrine — grava `source: "favorites"`, o default de
- *    recordFavoriteEvent) e o fluxo guiado "Quero essa peça"
+ *    recordFavoriteEvent) e o fluxo guiado "Eu quero" (nome do CTA na
+ *    tela; o evento técnico e o componente continuam chamados
+ *    ProductWhatsAppFlow/PRODUCT_FLOW_STARTED, nunca renomeados)
  *    (ProductWhatsAppFlow.addToSelection — grava `source: "product_page"`
  *    explicitamente). Misturar as duas responderia uma pergunta errada
  *    ("quantas sessões favoritaram algo, de qualquer forma") em vez da
- *    pedida ("de quem clicou em Quero essa peça, quantas conseguiram
+ *    pedida ("de quem clicou em Eu quero, quantas conseguiram
  *    adicionar") — por isso o filtro por `source` é obrigatório aqui.
  *    SIZE_SELECTED deliberadamente NÃO é uma etapa própria: audita-se que
  *    ele dispara sempre junto de FAVORITE_ADDED (mesmo bloco de código,
@@ -389,7 +391,8 @@ export interface DashboardData {
 }
 
 // PRODUCT_FLOW_STARTED voltou pra esta lista com a Raio-X do Funil (ver
-// RaioXFunnelData abaixo) — é o evento de "clicou em Quero essa peça"
+// RaioXFunnelData abaixo) — é o evento de "clicou em Eu quero" (nome do
+// CTA na tela; o event_type técnico nunca muda de nome, ver doc acima)
 // (auditado: só dispara em ProductWhatsAppFlow.handleWantThis, uma vez por
 // clique, nada mais usa esse tipo). Tinha sido removido daqui numa
 // auditoria de performance anterior por não ter consumidor nenhum no
@@ -721,7 +724,7 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   // nunca recalculados. Etapa 3 filtra `source === "product_page"` — sem
   // esse filtro, o coração de favoritar (source "favorites", em qualquer
   // card da vitrine) contaminaria a etapa, que é especificamente sobre o
-  // fluxo "Quero essa peça".
+  // fluxo "Eu quero".
   const currentFlowStartedSessions = distinctSessionIds(currentRows, ["PRODUCT_FLOW_STARTED"]);
   const currentAddedViaFlowSessions = distinctSessionIds(
     currentRows.filter((r) => r.source === "product_page"),
@@ -731,7 +734,7 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
 
   const raioXSteps: { id: string; label: string; sessions: number }[] = [
     { id: "product_view", label: "Visualizou produto", sessions: currentProductViewSessions.size },
-    { id: "flow_started", label: "Clicou em Quero essa peça", sessions: currentFlowStartedSessions.size },
+    { id: "flow_started", label: "Clicou em Eu quero", sessions: currentFlowStartedSessions.size },
     { id: "added_to_selection", label: "Adicionou às Minhas Roupas", sessions: currentAddedViaFlowSessions.size },
     { id: "favorites_view", label: "Abriu Minhas Roupas", sessions: currentFavoritesViewSessions.size },
     { id: "whatsapp_click", label: "Clicou em Comprar", sessions: currentWhatsappSessions.size },

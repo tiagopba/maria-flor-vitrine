@@ -224,9 +224,9 @@ export function ProductWhatsAppFlow({
   return (
     <div className="flex flex-col gap-3">
       <Button type="button" onClick={handleWantThis} className="h-12">
-        Quero essa peça
+        Eu quero
       </Button>
-      <p className="text-center text-xs text-text-muted">Escolha seu tamanho e adicione às Minhas Roupas.</p>
+      <p className="text-center text-[15px] font-medium text-text-muted">Escolha seu tamanho para continuar.</p>
 
       <Drawer open={sizeSheetOpen} onClose={() => setSizeSheetOpen(false)} title="Qual tamanho você procura?">
         <SingleSizeSelector sizes={sizes} value={null} onChange={addToSelection} label="" fitHintByLabel={fitHintByLabel} />
