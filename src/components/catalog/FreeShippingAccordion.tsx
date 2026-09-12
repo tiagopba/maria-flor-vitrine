@@ -12,19 +12,60 @@ interface PublicFreeShippingRule {
 
 const formatPrice = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+/** Conteúdo (loading/erro/regras) compartilhado pelas duas variantes —
+ * só o texto muda de tamanho conforme o `className` do container em volta;
+ * a lógica de qual mensagem mostrar é sempre a mesma. */
+function ShippingRulesStatus({
+  loading,
+  loadError,
+  rules,
+  rulesForState,
+}: {
+  loading: boolean;
+  loadError: boolean;
+  rules: PublicFreeShippingRule[] | null;
+  rulesForState: PublicFreeShippingRule[];
+}) {
+  if (loading) return <p className="text-text-muted">Consultando...</p>;
+  if (loadError) {
+    return <p className="text-text-muted">Não foi possível consultar as condições agora. Fale com uma vendedora.</p>;
+  }
+  if (rules === null) return null;
+  if (rulesForState.length === 0) {
+    return <p className="text-text-muted">Consulte as opções de frete com uma vendedora.</p>;
+  }
+  return (
+    <ul className="flex flex-col gap-0.5">
+      {rulesForState.map((r) => (
+        <li key={r.service}>
+          {r.service} grátis acima de {formatPrice(r.minimumAmount)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /**
- * Bloco compacto e opcional de "condições de frete grátis" em /favoritos —
- * fechado por padrão, ZERO requisições enquanto fechado. O único fetch
- * (GET /api/frete-gratis) só dispara no primeiro clique de abrir, e só uma
- * vez por visita (fetchedRef); reabrir depois de fechar reaproveita o que
- * já veio. Nunca bloqueia a lista de peças nem o botão de WhatsApp — os
- * dois vivem inteiramente fora deste componente, no FavoritesPageClient.
+ * Bloco opcional de "condições de frete grátis" — fechado por padrão, ZERO
+ * requisições enquanto fechado. O único fetch (GET /api/frete-gratis) só
+ * dispara no primeiro clique de abrir, e só uma vez por visita
+ * (fetchedRef); reabrir depois de fechar reaproveita o que já veio. Nunca
+ * bloqueia o resto da página (lista de peças em /favoritos, CTA "Quero essa
+ * peça" na página de produto) — os dois vivem inteiramente fora deste
+ * componente.
  *
  * A UF escolhida é lida direto do localStorage por quem monta a mensagem
- * do WhatsApp (getSavedShippingState em favorites-click-action/FavoritesPageClient)
- * — este componente não precisa expor nenhum estado pro pai pra isso.
+ * do WhatsApp (getSavedShippingState em favorites-click-action/
+ * FavoritesPageClient) — este componente não precisa expor nenhum estado
+ * pro pai pra isso.
+ *
+ * `variant`: "default" é o bloco em caixa usado em /favoritos, inalterado
+ * por esta mudança. "compact" é o usado na página de produto — mesmo
+ * estado/fetch/regras, só um trigger mais discreto (duas linhas de texto,
+ * sem caixa) e o painel aberto mais enxuto (sem borda ao redor, texto
+ * menor) pra não virar um banner na página.
  */
-export function FreeShippingAccordion() {
+export function FreeShippingAccordion({ variant = "default" }: { variant?: "default" | "compact" } = {}) {
   const [open, setOpen] = useState(false);
   const [selectedState, setSelectedState] = useState<string | null>(() => getSavedShippingState());
   const [rules, setRules] = useState<PublicFreeShippingRule[] | null>(null);
@@ -55,6 +96,54 @@ export function FreeShippingAccordion() {
   }
 
   const rulesForState = selectedState ? (rules ?? []).filter((r) => r.stateCode === selectedState) : [];
+
+  if (variant === "compact") {
+    if (!open) {
+      return (
+        <div className="flex flex-col items-start gap-0.5 text-xs">
+          <span className="text-text-muted">🚚 Frete grátis disponível</span>
+          <button type="button" onClick={handleOpen} className="font-medium text-primary hover:underline">
+            Consulte condições
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col gap-2 border-t border-border pt-2.5 text-xs">
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="flex w-full items-center justify-between text-left font-medium text-text"
+        >
+          <span>🚚 Frete grátis</span>
+          <span aria-hidden="true">▴</span>
+        </button>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-text-muted">Para qual estado será o envio?</span>
+          <select
+            value={selectedState ?? ""}
+            onChange={(e) => handleSelectState(e.target.value)}
+            className="h-9 rounded-lg border border-border bg-surface px-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40"
+          >
+            <option value="">Selecione seu estado</option>
+            {BRAZILIAN_STATES.map((s) => (
+              <option key={s.code} value={s.code}>
+                {s.name} ({s.code})
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {selectedState && (
+          <div className="text-text">
+            <ShippingRulesStatus loading={loading} loadError={loadError} rules={rules} rulesForState={rulesForState} />
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (!open) {
     return (
@@ -98,26 +187,7 @@ export function FreeShippingAccordion() {
 
       {selectedState && (
         <div className="text-sm text-text">
-          {loading && <p className="text-text-muted">Consultando...</p>}
-          {!loading && loadError && (
-            <p className="text-text-muted">
-              Não foi possível consultar as condições agora. Fale com uma vendedora.
-            </p>
-          )}
-          {!loading &&
-            !loadError &&
-            rules !== null &&
-            (rulesForState.length > 0 ? (
-              <ul className="flex flex-col gap-0.5">
-                {rulesForState.map((r) => (
-                  <li key={r.service}>
-                    {r.service} grátis acima de {formatPrice(r.minimumAmount)}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-text-muted">Consulte as opções de frete com uma vendedora.</p>
-            ))}
+          <ShippingRulesStatus loading={loading} loadError={loadError} rules={rules} rulesForState={rulesForState} />
         </div>
       )}
     </div>

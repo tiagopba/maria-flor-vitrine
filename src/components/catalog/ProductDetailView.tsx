@@ -6,6 +6,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { DualPriceBlock, Price } from "@/components/ui/Price";
 import { FavoriteButton } from "@/components/catalog/FavoriteButton";
+import { FreeShippingAccordion } from "@/components/catalog/FreeShippingAccordion";
 import { ProductWhatsAppFlow } from "@/components/catalog/ProductWhatsAppFlow";
 import { formatFitSizesLabel } from "@/lib/catalog/fit-size-format";
 import { resolveProductPricing, resolveTrackingPrice } from "@/lib/catalog/pricing";
@@ -465,6 +466,12 @@ export function ProductDetailView({
             <p className="text-text-muted">🚚 Enviamos para todo o Brasil</p>
           </div>
         )}
+
+        {/* Informativo de confiança, opcional — nunca calcula elegibilidade
+            nem bloqueia o CTA abaixo; fechado por padrão, zero requisição
+            de frete até a cliente tocar em "Consulte condições" (ver
+            FreeShippingAccordion). */}
+        <FreeShippingAccordion variant="compact" />
 
         <div className="mt-2">
           <ProductWhatsAppFlow
