@@ -7,7 +7,7 @@ function formatPercent(value: number): string {
 
 /**
  * "Raio-X do Funil" — 5 etapas reais do fluxo público (Visualizou produto
- * → Clicou em Eu quero → Adicionou às Minhas Roupas → Abriu Minhas
+ * → Clicou em EU QUERO → Adicionou às Minhas Roupas → Abriu Minhas
  * Roupas → Clicou em Comprar), cada uma sessões distintas no período (ver
  * getDashboardData/RaioXFunnelStep). Seção nova e separada do "Funil da
  * Vitrine" (ConversionFunnel, em DashboardFunnel.tsx) — não substitui nem

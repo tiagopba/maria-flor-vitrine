@@ -224,7 +224,7 @@ export function ProductWhatsAppFlow({
   return (
     <div className="flex flex-col gap-3">
       <Button type="button" onClick={handleWantThis} className="h-12">
-        Eu quero
+        EU QUERO
       </Button>
       <p className="text-center text-[15px] font-medium text-text-muted">Escolha seu tamanho para continuar.</p>
 
