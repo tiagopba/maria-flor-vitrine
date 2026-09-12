@@ -59,10 +59,12 @@ function ShippingRulesStatus({
  * FavoritesPageClient) — este componente não precisa expor nenhum estado
  * pro pai pra isso.
  *
- * O gatilho fechado ("🚚 Enviamos para todo o Brasil • Confira as
- * condições de FRETE GRÁTIS" + "Consultar condições") é IGUAL nas duas
- * variantes — mesmo texto, mesma tipografia, em /favoritos e na página de
- * produto (pedido explícito: um único padrão visual nos dois lugares).
+ * O gatilho fechado ("🚚 Enviamos para todo o Brasil" / "Confira as
+ * condições de FRETE GRÁTIS" em 2 linhas + "Consultar condições") é IGUAL
+ * nas duas variantes — mesmo texto, mesma tipografia, em /favoritos e na
+ * página de produto (pedido explícito: um único padrão visual nos dois
+ * lugares, com peso visual reduzido pra não competir com QUERO ESSA
+ * PEÇA/COMPRAR).
  * `variant` só diferencia o PAINEL ABERTO: "default" é a caixa com borda
  * usada em /favoritos; "compact" é o painel mais enxuto (sem borda ao
  * redor, texto menor) usado na página de produto, pra não virar um banner
@@ -102,14 +104,15 @@ export function FreeShippingAccordion({ variant = "default" }: { variant?: "defa
 
   if (!open) {
     return (
-      <div className="flex flex-col items-start gap-1">
-        <p className="text-base font-semibold leading-snug text-text">
-          🚚 Enviamos para todo o Brasil • Confira as condições de FRETE GRÁTIS
+      <div className="flex flex-col items-start gap-0.5">
+        <p className="text-[15px] font-semibold leading-snug text-text">🚚 Enviamos para todo o Brasil</p>
+        <p className="text-sm font-medium leading-snug text-text-muted">
+          Confira as condições de <span className="font-semibold text-text">FRETE GRÁTIS</span>
         </p>
         <button
           type="button"
           onClick={handleOpen}
-          className="-mx-1 -my-1 rounded-md px-1 py-2 text-left text-[15px] font-semibold text-primary hover:underline"
+          className="-mx-1 -my-1 mt-0.5 rounded-md px-1 py-2 text-left text-sm font-semibold text-primary hover:underline"
         >
           Consultar condições
         </button>
