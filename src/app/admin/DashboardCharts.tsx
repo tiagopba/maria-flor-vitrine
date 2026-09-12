@@ -40,6 +40,8 @@ export function RankingList({
   withAvatar = false,
   primaryUnitLabel,
   secondaryUnitLabel,
+  secondaryUnitLabelSingular,
+  badgeLabel,
   hint,
 }: {
   title: string;
@@ -48,6 +50,18 @@ export function RankingList({
   withAvatar?: boolean;
   primaryUnitLabel?: string;
   secondaryUnitLabel?: string;
+  /** Forma singular de `secondaryUnitLabel`, usada só quando
+   * `row.secondaryCount === 1` (ex.: "1 sessão distinta" em vez de "1
+   * sessões distintas"). Opcional — omitir mantém sempre a forma plural,
+   * comportamento antigo de todo ranking que já usava `secondaryUnitLabel`. */
+  secondaryUnitLabelSingular?: string;
+  /** Selo curto no canto superior direito (ex.: "Sessões", "Cliques").
+   * Default (quando omitido): "Sessões" se `primaryUnitLabel` existir —
+   * comportamento antigo, correto pra todo ranking já existente, que sempre
+   * era por sessão — senão "Adições"/"Total" como já era. Só precisa ser
+   * passado quando o ranking NÃO é por sessão (ex.: "Cliques em Comprar por
+   * vendedora", cujo `primaryUnitLabel` agora é "cliques"). */
+  badgeLabel?: string;
   /** Texto discreto, sempre visível sob a lista (ex.: aviso de que uma
    * mesma sessão pode contar em mais de uma linha do ranking) — diferente
    * de `emptyLabel`, que só aparece quando `rows` está vazio. */
@@ -60,7 +74,7 @@ export function RankingList({
       <div className="flex items-center justify-between">
         <h3 className="font-display text-base text-text">{title}</h3>
         <span className="text-xs text-text-muted">
-          {rows.length > 0 ? (primaryUnitLabel ? "Sessões" : withAvatar ? "Adições" : "Total") : ""}
+          {rows.length > 0 ? (badgeLabel ?? (primaryUnitLabel ? "Sessões" : withAvatar ? "Adições" : "Total")) : ""}
         </span>
       </div>
       {rows.length === 0 ? (
@@ -89,7 +103,10 @@ export function RankingList({
                     </span>
                     {secondaryUnitLabel && row.secondaryCount !== undefined && (
                       <span className="block text-[10px] font-normal text-text-muted/70">
-                        {row.secondaryCount} {secondaryUnitLabel}
+                        {row.secondaryCount}{" "}
+                        {row.secondaryCount === 1 && secondaryUnitLabelSingular
+                          ? secondaryUnitLabelSingular
+                          : secondaryUnitLabel}
                       </span>
                     )}
                   </span>

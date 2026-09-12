@@ -11,12 +11,17 @@ export function DashboardCard({
   comparison,
   icon: Icon,
   formatValue = (n) => String(Math.round(n)),
+  secondaryLine,
   hint,
 }: {
   label: string;
   comparison: MetricComparison;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   formatValue?: (value: number) => string;
+  /** Linha discreta extra, entre a comparação e o hint — ex.: a contagem de
+   * sessões distintas por trás do valor bruto principal ("Cliques em
+   * Comprar", que mostra cliques como valor principal e sessões aqui). */
+  secondaryLine?: string;
   hint?: string;
 }) {
   const delta = comparison.deltaPct;
@@ -49,6 +54,7 @@ export function DashboardCard({
           </>
         )}
       </div>
+      {secondaryLine && <p className="mt-1 text-[11px] text-text-muted">{secondaryLine}</p>}
       {hint && <p className="mt-1 text-[11px] text-text-muted">{hint}</p>}
     </div>
   );
