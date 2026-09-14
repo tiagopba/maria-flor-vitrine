@@ -18,8 +18,9 @@ const CARD_SIZES = {
 /**
  * Só a variante "detail" (página do produto) — "Modelo 1": o preço cheio
  * vira riscado/secundário acima do Pix, que segue como destaque principal
- * (mesmo tamanho de sempre, `text-2xl sm:text-3xl`), com um selo de
- * desconto e a economia em reais explícita. O cartão desce pra um bloco
+ * (`text-[27px] sm:text-[33px]` — +3px sobre o tamanho anterior, ajuste
+ * pedido explicitamente), com um selo de desconto e a economia em reais
+ * explícita. O cartão desce pra um bloco
  * visualmente secundário, sem nenhuma palavra que sugira taxa/acréscimo —
  * ele é só "outra forma de pagamento", nunca o preço de referência.
  *
@@ -57,7 +58,7 @@ function DetailDualPrice({
           </span>
         )}
         <span className="flex flex-wrap items-baseline gap-2">
-          <span className="text-2xl font-semibold leading-tight text-primary sm:text-3xl">
+          <span className="text-[27px] font-semibold leading-tight text-primary sm:text-[33px]">
             {formatBRL(pricing.cashPrice)}
           </span>
           {hasCashDiscount && discountPercent >= 1 && (
@@ -66,7 +67,7 @@ function DetailDualPrice({
             </Badge>
           )}
         </span>
-        <span className="text-[13px] font-normal leading-tight text-text-muted">à vista</span>
+        <span className="text-[15px] font-normal leading-tight text-text-muted">à vista</span>
         {hasCashDiscount && (
           <span className="text-sm font-medium leading-tight text-primary/80">
             🩷 Você economiza {formatBRL(discountAmount)}
