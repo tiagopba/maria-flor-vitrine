@@ -6,17 +6,21 @@ function formatPercent(value: number): string {
 }
 
 /**
- * "Raio-X do Funil" — 5 etapas reais do fluxo público (Visualizou produto
- * → Clicou em EU QUERO → Adicionou às Minhas Roupas → Abriu Minhas
- * Roupas → Clicou em Comprar), cada uma sessões distintas no período (ver
- * getDashboardData/RaioXFunnelStep). Seção nova e separada do "Funil da
- * Vitrine" (ConversionFunnel, em DashboardFunnel.tsx) — não substitui nem
- * altera aquele, os dois convivem no Dashboard.
+ * "Raio-X do Funil" — funil SEQUENCIAL real (Visualizou produto → Clicou
+ * em EU QUERO → Adicionou às Minhas Roupas → Abriu Minhas Roupas →
+ * Clicou em Comprar): cada etapa é a coorte de sessões que completou
+ * TODAS as anteriores, em ordem temporal, no período (ver
+ * getDashboardData/computeSequentialFunnelCounts) — nunca 5 contagens
+ * independentes. Por construção, `sessions` nunca cresce de uma etapa pra
+ * próxima, `dropoffFromPreviousPct` nunca é negativo. Seção separada do
+ * "Funil da Vitrine" (ConversionFunnel, em DashboardFunnel.tsx, que
+ * continua contando por evento independente) — não substitui nem altera
+ * aquele, os dois convivem no Dashboard.
  *
  * Entre cada etapa mostra "↓ X% abandonaram" — a etapa com a maior
  * porcentagem aqui é o maior vazamento do funil no período selecionado.
  * Nenhum cálculo de elegibilidade/compra é feito aqui; é só leitura de
- * sessões distintas por evento já existente.
+ * sessões já existentes, reorganizadas em ordem.
  */
 export function RaioXFunnel({ data }: { data: RaioXFunnelData }) {
   const maxSessions = Math.max(1, ...data.steps.map((s) => s.sessions));
@@ -25,7 +29,7 @@ export function RaioXFunnel({ data }: { data: RaioXFunnelData }) {
     <div className={dashboardCardClass}>
       <h3 className="font-display text-base text-text">Raio-X do Funil</h3>
       <p className="mt-1 text-xs text-text-muted">
-        Sessões distintas em cada etapa do fluxo público, no período selecionado.
+        Funil sequencial: sessões que completaram cada etapa e todas as anteriores, no período selecionado.
       </p>
 
       <ul className="mt-4 flex flex-col gap-1">
