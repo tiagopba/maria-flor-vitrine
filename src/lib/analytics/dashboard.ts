@@ -233,63 +233,55 @@ export interface FunnelData {
 }
 
 /**
- * Uma etapa do "Raio-X do Funil" (ver RaioXFunnelData) — sempre sessões
- * distintas com pelo menos um evento do tipo daquela etapa no período
- * atual, mesmo espírito de FunnelData (sem exigir ordem entre sessões).
+ * Uma etapa do "Raio-X do Funil" (ver RaioXFunnelData/computeSequentialFunnelCounts) —
+ * sessões que completaram esta etapa E TODAS as anteriores, em ordem
+ * temporal, dentro do período. Nunca "tem pelo menos um evento deste tipo
+ * em algum momento" isolado — é sempre uma COORTE que progrediu no funil.
+ * Por isso `sessions` é sempre <= à etapa anterior (nunca o contrário).
  */
 export interface RaioXFunnelStep {
   id: string;
   label: string;
   sessions: number;
   /** % desta etapa em relação à etapa ANTERIOR — null só na primeira
-   * etapa (não existe "anterior" pra Visualizou produto). */
+   * etapa (não existe "anterior" pra Visualizou produto). Nunca > 100%,
+   * porque `sessions` desta etapa nunca é maior que o da anterior (ver
+   * computeSequentialFunnelCounts). */
   conversionFromPreviousPct: number | null;
   /** 100 - conversionFromPreviousPct — sempre junto (nunca calculado de
-   * novo pela UI), null só na primeira etapa. */
+   * novo pela UI), null só na primeira etapa. Nunca negativo, pelo mesmo
+   * motivo acima. */
   dropoffFromPreviousPct: number | null;
 }
 
 /**
- * Raio-X do Funil — 5 etapas, todas com evento já existente antes desta
- * mudança (auditoria: nenhum evento novo foi criado). Cada etapa é
- * sessões distintas no período atual:
+ * Raio-X do Funil — funil SEQUENCIAL real (não 5 contagens independentes
+ * — ver bug corrigido e documentado em computeSequentialFunnelCounts).
+ * Todos os 5 eventos já existiam antes desta seção (nenhum evento novo
+ * criado). Etapas, na ordem exigida:
  * 1. Visualizou produto — PRODUCT_VIEW.
- * 2. Clicou em EU QUERO — PRODUCT_FLOW_STARTED (auditado: dispara
- *    só em ProductWhatsAppFlow.handleWantThis, uma vez por clique real no
- *    botão, tanto pra peça de tamanho único quanto pra peça com vários
- *    tamanhos — antes de saber se o tamanho será escolhido).
- * 3. Adicionou às Minhas Roupas — FAVORITE_ADDED, mas SÓ com
- *    `source = "product_page"`. Auditoria encontrou FAVORITE_ADDED com
- *    DUAS origens diferentes: o coração de favoritar (FavoriteButton, em
- *    qualquer card/vitrine — grava `source: "favorites"`, o default de
- *    recordFavoriteEvent) e o fluxo guiado "EU QUERO" (nome do CTA na
- *    tela; o evento técnico e o componente continuam chamados
- *    ProductWhatsAppFlow/PRODUCT_FLOW_STARTED, nunca renomeados)
- *    (ProductWhatsAppFlow.addToSelection — grava `source: "product_page"`
- *    explicitamente). Misturar as duas responderia uma pergunta errada
- *    ("quantas sessões favoritaram algo, de qualquer forma") em vez da
- *    pedida ("de quem clicou em EU QUERO, quantas conseguiram
- *    adicionar") — por isso o filtro por `source` é obrigatório aqui.
- *    SIZE_SELECTED deliberadamente NÃO é uma etapa própria: audita-se que
- *    ele dispara sempre junto de FAVORITE_ADDED (mesmo bloco de código,
- *    mesmo instante, sempre que existe um tamanho de verdade — inclusive
- *    tamanho único/"Único" auto-selecionado) — nunca captura sozinho um
- *    abandono que o vão 2→3 já não capture.
- * 4. Abriu Minhas Roupas — FAVORITES_VIEW (dispara 1x por visita a
- *    /favoritos, independente de a sessão ter chegado lá pelo fluxo
- *    guiado ou por outro caminho — ex.: link direto, nav "Minhas Roupas".
- *    Por isso este número pode, em tese, ser um pouco maior que a etapa
- *    anterior dentro do MESMO período: uma sessão que adicionou uma peça
- *    num período anterior e só abre /favoritos de novo agora entra aqui
- *    sem um novo FAVORITE_ADDED neste período. Não é erro de cálculo —
- *    é a mesma limitação, já aceita, de todo o funil existente: contagem
- *    por sessão-com-evento-no-período, não um funil sequencial de coorte).
- * 5. Clicou em Comprar — FAVORITES_WHATSAPP_CLICK, sessões distintas
- *    (Set já usado em funnel.whatsappSessions — REUTILIZADO aqui, nunca
- *    recalculado, pra nunca divergir). Deliberadamente NÃO usa a contagem
- *    bruta de cliques do card "Cliques em Comprar" (cards.whatsappStarted)
- *    — as duas métricas medem coisas diferentes e não devem ser
- *    misturadas (instrução explícita).
+ * 2. Clicou em EU QUERO — PRODUCT_FLOW_STARTED (auditado: dispara só em
+ *    ProductWhatsAppFlow.handleWantThis, uma vez por clique real no botão).
+ * 3. Adicionou às Minhas Roupas — FAVORITE_ADDED com
+ *    `source = "product_page"` (nunca o coração de favoritar solto,
+ *    `source: "favorites"` — ver auditoria original; misturar os dois
+ *    responderia uma pergunta diferente da pedida). SIZE_SELECTED
+ *    deliberadamente não é etapa própria: dispara sempre junto de
+ *    FAVORITE_ADDED, nunca captura sozinho um abandono que o vão 2→3 já
+ *    não capture.
+ * 4. Abriu Minhas Roupas — FAVORITES_VIEW, mas só conta se aconteceu
+ *    DEPOIS do FAVORITE_ADDED (etapa 3) da MESMA sessão, dentro do
+ *    período. Uma sessão que só visita /favoritos sem ter completado a
+ *    etapa 3 antes (link direto, nav "Minhas Roupas", ou o FAVORITES_VIEW
+ *    veio antes do FAVORITE_ADDED na linha do tempo) NUNCA conta aqui —
+ *    era exatamente isso que inflava esta etapa no método antigo.
+ * 5. Clicou em Comprar — FAVORITES_WHATSAPP_CLICK, só conta se aconteceu
+ *    depois da etapa 4 da mesma sessão. Deliberadamente DESACOPLADO de
+ *    `funnel.whatsappSessions` (funil de 3 etapas antigo, independente
+ *    por evento, inalterado) e de `cards.whatsappStarted` (cliques
+ *    brutos do card "Cliques em Comprar", também inalterado) — as três
+ *    métricas medem coisas diferentes agora, de propósito, e não devem
+ *    ser misturadas.
  */
 export interface RaioXFunnelData {
   steps: RaioXFunnelStep[];
@@ -453,6 +445,74 @@ function distinctSessionIds(rows: RawEvent[], types: readonly string[]): Set<str
     if (row.session_id && types.includes(row.event_type)) ids.add(row.session_id);
   }
   return ids;
+}
+
+/**
+ * Uma condição por etapa do Raio-X, na ORDEM em que precisam acontecer —
+ * ver computeSequentialFunnelCounts logo abaixo. Índice do array = etapa
+ * (0 = Visualizou produto, ..., 4 = Clicou em Comprar).
+ */
+const RAIO_X_STEP_MATCHERS: readonly ((row: RawEvent) => boolean)[] = [
+  (row) => row.event_type === "PRODUCT_VIEW",
+  (row) => row.event_type === "PRODUCT_FLOW_STARTED",
+  (row) => row.event_type === "FAVORITE_ADDED" && row.source === "product_page",
+  (row) => row.event_type === "FAVORITES_VIEW",
+  (row) => row.event_type === "FAVORITES_WHATSAPP_CLICK",
+];
+
+/**
+ * Funil sequencial de verdade — corrige o bug de contagem independente por
+ * evento (cada etapa era `distinctSessionIds` isolado, sem exigir nada da
+ * etapa anterior; uma sessão podia entrar na etapa 4 sem nunca ter
+ * completado a etapa 3 no período, produzindo etapa4 > etapa3 e "abandono
+ * negativo" — caso real auditado e documentado no PR que introduziu esta
+ * função).
+ *
+ * Por sessão: ordena os eventos por `created_at`, e anda etapa a etapa —
+ * só avança pra etapa N+1 quando encontra (em ordem temporal) um evento
+ * que bate com `RAIO_X_STEP_MATCHERS[N]` TENDO JÁ alcançado a etapa N.
+ * `stepIndex` final = quantas etapas essa sessão completou de verdade, em
+ * ordem, dentro do período — nunca "tem pelo menos um evento de cada tipo,
+ * em qualquer ordem". Por construção matemática (uma sessão só conta na
+ * etapa K se já contou em TODAS as 1..K-1), `stepCounts` sai sempre
+ * monotonicamente decrescente: nunca existe etapa posterior > anterior,
+ * nunca abandono negativo, nunca conversão > 100%.
+ *
+ * O card operacional "Cliques em Comprar" (cards.whatsappStarted, cliques
+ * brutos) e `funnel.whatsappSessions` (funil de 3 etapas antigo,
+ * independente por evento, inalterado) são métricas DELIBERADAMENTE
+ * diferentes desta — nenhuma das duas é recalculada nem substituída aqui.
+ */
+function computeSequentialFunnelCounts(rows: RawEvent[]): number[] {
+  const relevantTypes = new Set([
+    "PRODUCT_VIEW",
+    "PRODUCT_FLOW_STARTED",
+    "FAVORITE_ADDED",
+    "FAVORITES_VIEW",
+    "FAVORITES_WHATSAPP_CLICK",
+  ]);
+
+  const bySession = new Map<string, RawEvent[]>();
+  for (const row of rows) {
+    if (!row.session_id || !relevantTypes.has(row.event_type)) continue;
+    const list = bySession.get(row.session_id) ?? [];
+    list.push(row);
+    bySession.set(row.session_id, list);
+  }
+
+  const stepCounts = new Array(RAIO_X_STEP_MATCHERS.length).fill(0);
+  for (const events of bySession.values()) {
+    const sorted = [...events].sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
+    let stepIndex = 0;
+    for (const row of sorted) {
+      if (stepIndex < RAIO_X_STEP_MATCHERS.length && RAIO_X_STEP_MATCHERS[stepIndex](row)) {
+        stepIndex++;
+      }
+    }
+    for (let i = 0; i < stepIndex; i++) stepCounts[i]++;
+  }
+
+  return stepCounts;
 }
 
 function ratePct(numerator: number, denominator: number): number {
@@ -718,26 +778,20 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
     whatsappSessions: currentWhatsappSessions.size,
   };
 
-  // Raio-X do Funil — só as duas sessões novas (ver RaioXFunnelData pro
-  // porquê de cada uma); as outras três etapas REUTILIZAM sets já
-  // calculados acima (currentProductViewSessions, currentWhatsappSessions),
-  // nunca recalculados. Etapa 3 filtra `source === "product_page"` — sem
-  // esse filtro, o coração de favoritar (source "favorites", em qualquer
-  // card da vitrine) contaminaria a etapa, que é especificamente sobre o
-  // fluxo "EU QUERO".
-  const currentFlowStartedSessions = distinctSessionIds(currentRows, ["PRODUCT_FLOW_STARTED"]);
-  const currentAddedViaFlowSessions = distinctSessionIds(
-    currentRows.filter((r) => r.source === "product_page"),
-    ["FAVORITE_ADDED"]
-  );
-  const currentFavoritesViewSessions = distinctSessionIds(currentRows, ["FAVORITES_VIEW"]);
+  // Raio-X do Funil — funil sequencial de verdade (ver
+  // computeSequentialFunnelCounts): cada etapa só conta sessão que já
+  // completou TODAS as anteriores, na ordem certa, dentro do período.
+  // Nenhuma reutiliza os Sets independentes calculados acima (nem
+  // currentProductViewSessions, nem currentWhatsappSessions) — são
+  // cálculos deliberadamente diferentes agora.
+  const raioXStepCounts = computeSequentialFunnelCounts(currentRows);
 
   const raioXSteps: { id: string; label: string; sessions: number }[] = [
-    { id: "product_view", label: "Visualizou produto", sessions: currentProductViewSessions.size },
-    { id: "flow_started", label: "Clicou em EU QUERO", sessions: currentFlowStartedSessions.size },
-    { id: "added_to_selection", label: "Adicionou às Minhas Roupas", sessions: currentAddedViaFlowSessions.size },
-    { id: "favorites_view", label: "Abriu Minhas Roupas", sessions: currentFavoritesViewSessions.size },
-    { id: "whatsapp_click", label: "Clicou em Comprar", sessions: currentWhatsappSessions.size },
+    { id: "product_view", label: "Visualizou produto", sessions: raioXStepCounts[0] },
+    { id: "flow_started", label: "Clicou em EU QUERO", sessions: raioXStepCounts[1] },
+    { id: "added_to_selection", label: "Adicionou às Minhas Roupas", sessions: raioXStepCounts[2] },
+    { id: "favorites_view", label: "Abriu Minhas Roupas", sessions: raioXStepCounts[3] },
+    { id: "whatsapp_click", label: "Clicou em Comprar", sessions: raioXStepCounts[4] },
   ];
 
   const raioXFunnel: RaioXFunnelData = {
