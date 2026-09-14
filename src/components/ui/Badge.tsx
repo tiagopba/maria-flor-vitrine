@@ -1,11 +1,15 @@
 import { cn } from "@/lib/utils";
 
-type Tone = "neutral" | "primary" | "warning";
+type Tone = "neutral" | "primary" | "warning" | "success";
 
 const toneClasses: Record<Tone, string> = {
   neutral: "bg-muted text-text-muted",
   primary: "bg-primary/10 text-primary",
   warning: "bg-amber-100 text-amber-800",
+  /** Selo de desconto à vista (ver DualPriceBlock, variant "detail") —
+   * verde suave, único uso hoje; tom novo e aditivo, os outros três
+   * continuam exatamente iguais. */
+  success: "bg-emerald-50 text-emerald-700",
 };
 
 export function Badge({
