@@ -55,9 +55,13 @@ function DetailDualPrice({
         )}
         <span className="flex flex-wrap items-baseline gap-2">
           <span className="text-2xl font-semibold leading-tight text-primary sm:text-3xl">
-            {formatBRL(pricing.cashPrice)} no Pix
+            {formatBRL(pricing.cashPrice)}
           </span>
-          {hasCashDiscount && discountPercent >= 1 && <Badge tone="success">{discountPercent}% OFF no Pix</Badge>}
+          {hasCashDiscount && discountPercent >= 1 && (
+            <Badge tone="success" className="px-2.5 py-1 text-[13px] font-semibold sm:text-sm">
+              {discountPercent}% OFF no Pix
+            </Badge>
+          )}
         </span>
         <span className="text-[13px] font-normal leading-tight text-text-muted">
           {hasCashDiscount ? "à vista com desconto" : "à vista"}
