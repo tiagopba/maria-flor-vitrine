@@ -23,16 +23,19 @@ const CARD_SIZES = {
  * visualmente secundário, sem nenhuma palavra que sugira taxa/acréscimo —
  * ele é só "outra forma de pagamento", nunca o preço de referência.
  *
- * `hasCashDiscount` é a ÚNICA condição que liga riscado/selo/economia —
- * exatamente a regra pedida: preço cheio riscado, "% OFF" e "Economize
- * R$X" só existem quando `cashPrice < cardPrice` de verdade (nunca um
- * desconto inventado). Com os dois preços iguais, "à vista com desconto"
- * também cai pra só "à vista" — dizer "com desconto" sem desconto real
- * seria uma afirmação falsa. `discountPercent` só aparece como selo
- * quando arredonda pra 1% ou mais — um desconto real de poucos centavos
- * arredondaria pra "0% OFF", que não comunica nada e pareceria bug; a
- * linha de economia em reais continua aparecendo mesmo nesse caso raro,
- * porque ali o valor exato (nunca arredondado a zero) sempre faz sentido.
+ * `hasCashDiscount` é a ÚNICA condição que liga riscado/selo/"Você
+ * economiza R$X" — exatamente a regra pedida: só existem quando
+ * `cashPrice < cardPrice` de verdade (nunca um desconto inventado). O
+ * texto "à vista" é sempre o mesmo, com ou sem desconto (nenhuma alegação
+ * de desconto embutida nele — quem afirma o desconto é a linha "Você
+ * economiza", que só aparece quando é real). `discountPercent` só aparece
+ * como selo quando arredonda pra 1% ou mais — um desconto real de poucos
+ * centavos arredondaria pra "0% OFF", que não comunica nada e pareceria
+ * bug; a linha de economia em reais continua aparecendo mesmo nesse caso
+ * raro, porque ali o valor exato (nunca arredondado a zero) sempre faz
+ * sentido. "ou R$Y no cartão" é sempre mostrado (com ou sem desconto) —
+ * o cartão nunca é escondido, só apresentado como alternativa, nunca como
+ * acréscimo.
  */
 function DetailDualPrice({
   pricing,
@@ -46,7 +49,7 @@ function DetailDualPrice({
   const discountPercent = hasCashDiscount ? Math.round((discountAmount / pricing.cardPrice) * 100) : 0;
 
   return (
-    <span className="flex flex-col gap-3">
+    <span className="flex flex-col gap-2.5">
       <span className="flex flex-col gap-1">
         {hasCashDiscount && (
           <span className="text-sm font-normal leading-tight text-text-muted line-through">
@@ -63,20 +66,17 @@ function DetailDualPrice({
             </Badge>
           )}
         </span>
-        <span className="text-[13px] font-normal leading-tight text-text-muted">
-          {hasCashDiscount ? "à vista com desconto" : "à vista"}
-        </span>
+        <span className="text-[13px] font-normal leading-tight text-text-muted">à vista</span>
         {hasCashDiscount && (
           <span className="text-sm font-medium leading-tight text-primary/80">
-            🩷 Economize {formatBRL(discountAmount)} no pagamento à vista
+            🩷 Você economiza {formatBRL(discountAmount)}
           </span>
         )}
       </span>
 
       <span className="flex flex-col gap-0.5">
-        <span className="text-[13px] font-normal leading-tight text-text-muted">No cartão</span>
-        <span className="text-lg font-semibold leading-tight text-text sm:text-xl">
-          {formatBRL(pricing.cardPrice)}
+        <span className="text-base font-semibold leading-tight text-text sm:text-lg">
+          ou {formatBRL(pricing.cardPrice)} no cartão
         </span>
         {hasInstallments && (
           <span className="text-sm font-medium leading-tight text-primary sm:text-base">
