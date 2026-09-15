@@ -10,6 +10,7 @@ import { formatFitSizesLabel } from "@/lib/catalog/fit-size-format";
 import { resolveProductPricing, resolveTrackingPrice } from "@/lib/catalog/pricing";
 import { getSizeFitCompatibilityWithClient } from "@/lib/db/product-size-fit";
 import { getStateLabel } from "@/lib/shipping/brazilian-states";
+import { isValidPostalCode } from "@/lib/shipping/postal-code";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { sendCapiEvent } from "@/lib/analytics/meta-capi";
 import type { Database } from "@/types/database";
@@ -59,6 +60,15 @@ export interface FavoritesWhatsAppInput {
    * idêntica à de sempre, sem nenhuma linha extra.
    */
   shippingStateCode?: string | null;
+  /**
+   * CEP opcional informado no bloco de frete de /favoritos quando a UF
+   * escolhida não tem regra de frete grátis cadastrada — revalidado aqui
+   * (formato 00000-000) antes de entrar na mensagem, nunca confiado sem
+   * checar de novo (mesmo espírito de shippingStateCode acima). Nunca
+   * consultado nos Correios. null/ausente/inválido = mensagem sai
+   * idêntica à de sempre, sem a linha de CEP.
+   */
+  shippingPostalCode?: string | null;
 }
 
 /** Dado agregado da seleção só pro Meta Pixel (`Lead`) — nunca inclui PII. */
@@ -156,6 +166,8 @@ export async function submitFavoritesWhatsAppClick(
   );
 
   const shippingStateLabel = input.shippingStateCode ? (getStateLabel(input.shippingStateCode) ?? undefined) : undefined;
+  const shippingPostalCode =
+    input.shippingPostalCode && isValidPostalCode(input.shippingPostalCode) ? input.shippingPostalCode : undefined;
 
   const message = buildFavoritesWhatsAppMessage(
     available.map((p) => {
@@ -178,7 +190,8 @@ export async function submitFavoritesWhatsAppClick(
       };
     }),
     selectionUrl,
-    shippingStateLabel
+    shippingStateLabel,
+    shippingPostalCode
   );
 
   const eventsToInsert: AnalyticsEventInsert[] = [
