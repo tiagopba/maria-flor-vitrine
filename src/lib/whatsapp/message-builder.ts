@@ -187,7 +187,8 @@ export interface FavoritesSelectionItem {
 export function buildFavoritesWhatsAppMessage(
   products: FavoritesSelectionItem[],
   selectionUrl?: string,
-  shippingStateLabel?: string
+  shippingStateLabel?: string,
+  shippingPostalCode?: string
 ): string {
   const lines = [`Oi! Separei algumas peças na Vitrine Maria Flor ${HEART}`, ""];
 
@@ -230,6 +231,15 @@ export function buildFavoritesWhatsAppMessage(
   // Ausente, a mensagem fica idêntica à de sempre.
   if (shippingStateLabel) {
     lines.push("", `Estado para envio: ${shippingStateLabel}`);
+  }
+
+  // Só entra quando a cliente informou um CEP válido no bloco de frete de
+  // /favoritos (ver SmartShippingBlock) — nunca consultado nos Correios,
+  // só repassado pra vendedora calcular. Ausente, mensagem idêntica à de
+  // sempre.
+  if (shippingPostalCode) {
+    if (!shippingStateLabel) lines.push("");
+    lines.push(`CEP para cálculo do frete: ${shippingPostalCode}`);
   }
 
   return lines.join("\n");

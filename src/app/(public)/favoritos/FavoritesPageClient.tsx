@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { FavoriteProductRow, type FavoriteProductDetail } from "@/components/catalog/FavoriteProductRow";
-import { FreeShippingAccordion } from "@/components/catalog/FreeShippingAccordion";
 import { SellerSelectionDrawer } from "@/components/catalog/SellerSelectionDrawer";
+import { SmartShippingBlock } from "@/components/catalog/SmartShippingBlock";
 import { recordFavoriteEvent } from "@/lib/favorites/analytics";
 import { markJustContactedSeller } from "@/lib/favorites/post-contact";
 import {
@@ -15,7 +15,9 @@ import {
   removeFavoritesNotIn,
   type FavoriteEntry,
 } from "@/lib/favorites/storage";
+import { resolveProductPricing, resolveTrackingPrice } from "@/lib/catalog/pricing";
 import { getSavedShippingState } from "@/lib/shipping/state-storage";
+import { getSavedPostalCode } from "@/lib/shipping/postal-code-storage";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
 import { submitFavoritesWhatsAppClick } from "@/lib/whatsapp/favorites-click-action";
@@ -235,6 +237,11 @@ export function FavoritesPageClient({
         // montar a mensagem; sem UF salva isso é null e a mensagem sai
         // idêntica à de sempre (ver buildFavoritesWhatsAppMessage).
         shippingStateCode: getSavedShippingState(),
+        // Mesmo espírito acima — só preenchido quando a cliente informou
+        // um CEP completo no SmartShippingBlock (UF sem regra de frete
+        // grátis); revalidado de novo no servidor antes de entrar na
+        // mensagem.
+        shippingPostalCode: getSavedPostalCode(),
       });
 
       if ("error" in result) {
@@ -280,6 +287,16 @@ export function FavoritesPageClient({
 
   const entryByProductId = new Map(entries.map((e) => [e.product_id, e]));
 
+  // Base do benefício de frete grátis: soma do preço Pix/à vista (nunca o
+  // do cartão — resolveTrackingPrice já resolve essa regra) só das peças
+  // ainda DISPONÍVEIS (SOLD_OUT nunca entra na seleção que vai pra
+  // vendedora, então também não conta pro frete). Recalcula sozinho a
+  // cada render — nenhuma busca nova, os produtos já vieram do fetch
+  // desta página.
+  const totalPix = products
+    .filter((p) => p.status !== "SOLD_OUT")
+    .reduce((sum, p) => sum + resolveTrackingPrice(resolveProductPricing(p, paymentSettings)), 0);
+
   return (
     <div className="flex flex-col gap-4">
       {products.length > MAX_ITEMS_TO_SEND && (
@@ -305,7 +322,7 @@ export function FavoritesPageClient({
         ))}
       </div>
 
-      <FreeShippingAccordion />
+      <SmartShippingBlock totalPix={totalPix} />
 
       {validationError && <p className="text-sm text-red-600">{validationError}</p>}
 
