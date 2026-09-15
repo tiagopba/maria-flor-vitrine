@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { formatBRL } from "@/components/ui/Price";
 import { BRAZILIAN_STATES } from "@/lib/shipping/brazilian-states";
 import { getSavedShippingState, saveShippingState } from "@/lib/shipping/state-storage";
@@ -11,6 +11,35 @@ interface PublicFreeShippingRule {
   stateCode: string;
   service: "PAC" | "SEDEX";
   minimumAmount: number;
+}
+
+/**
+ * Cache em nível de módulo (não de componente) — sobrevive a remontagens
+ * do SmartShippingBlock dentro da MESMA página. Necessário porque
+ * FavoritesPageClient passa por um estado de loading (skeleton) a cada
+ * adicionar/remover peça (novo fetch de /api/favoritos/produtos), o que
+ * desmonta e remonta este componente; sem esse cache no módulo, cada
+ * remontagem perderia o `rules` já buscado e refaria o GET
+ * /api/frete-gratis, violando "no máximo 1 GET por carregamento". Um
+ * `Promise` compartilhado garante isso mesmo com chamadas concorrentes —
+ * e volta a zero no carregamento de página seguinte, já que módulos ES
+ * reiniciam num hard reload/nova navegação.
+ */
+let rulesPromise: Promise<PublicFreeShippingRule[]> | null = null;
+
+function fetchRulesOnce(): Promise<PublicFreeShippingRule[]> {
+  if (!rulesPromise) {
+    rulesPromise = fetch("/api/frete-gratis", { cache: "no-store" })
+      .then((res) => {
+        if (!res.ok) throw new Error("bad status");
+        return res.json() as Promise<PublicFreeShippingRule[]>;
+      })
+      .catch((err) => {
+        rulesPromise = null; // permite tentar de novo numa próxima chamada
+        throw err;
+      });
+  }
+  return rulesPromise;
 }
 
 const selectClass =
@@ -58,29 +87,26 @@ function StateSelect({
 export function SmartShippingBlock({ totalPix }: { totalPix: number }) {
   const [selectedState, setSelectedState] = useState<string | null>(() => getSavedShippingState());
   const [rules, setRules] = useState<PublicFreeShippingRule[] | null>(null);
-  const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [postalCode, setPostalCode] = useState<string>(() => getSavedPostalCode() ?? "");
-  const fetchedRef = useRef(false);
+  // Derivado (nunca setState síncrono dentro do efeito de montagem abaixo):
+  // "carregando" é só "tem UF, ainda sem regras, sem erro" — nada a
+  // despachar antes do fetch resolver.
+  const loading = selectedState !== null && rules === null && !loadError;
 
   function fetchRules() {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
-    setLoading(true);
-    setLoadError(false);
-
-    fetch("/api/frete-gratis", { cache: "no-store" })
-      .then((res) => {
-        if (!res.ok) throw new Error("bad status");
-        return res.json() as Promise<PublicFreeShippingRule[]>;
+    fetchRulesOnce()
+      .then((data) => {
+        setRules(data);
+        setLoadError(false);
       })
-      .then((data) => setRules(data))
-      .catch(() => setLoadError(true))
-      .finally(() => setLoading(false));
+      .catch(() => setLoadError(true));
   }
 
   // Só dispara ao montar quando já existe UF salva de uma visita anterior
-  // — sem UF, fica parado até a cliente escolher (handleSelectState).
+  // — sem UF, fica parado até a cliente escolher (handleSelectState). Se
+  // este componente remontar (ver comentário de rulesPromise acima),
+  // fetchRulesOnce() reaproveita a promise já resolvida — nenhum novo GET.
   useEffect(() => {
     if (selectedState) fetchRules();
     // eslint-disable-next-line react-hooks/exhaustive-deps
