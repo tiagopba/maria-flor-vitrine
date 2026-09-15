@@ -30,7 +30,7 @@ export default async function FavoritosPage() {
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-8 sm:px-6">
       <h1 className="font-display text-2xl text-text sm:text-3xl">Minhas Roupas</h1>
       <p className="mt-1 mb-6 text-sm text-text-muted">
-        Confira as peças que você escolheu, selecione os tamanhos e envie tudo para uma vendedora.
+        Confira suas escolhas e finalize seu atendimento com uma vendedora.
       </p>
 
       <FavoritesPageClient sellers={sellers} paymentSettings={paymentSettings} />
