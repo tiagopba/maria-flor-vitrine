@@ -20,6 +20,10 @@ function parseStatusFilter(value: unknown): ListProductsAdminFilters["status"] {
     : undefined;
 }
 
+function formatAdminDate(value: string): string {
+  return new Date(value).toLocaleDateString("pt-BR");
+}
+
 export default async function ProductsPage({
   searchParams,
 }: PageProps<"/admin/produtos">) {
@@ -117,8 +121,15 @@ export default async function ProductsPage({
                 </div>
                 <p className="mt-0.5 text-xs text-text-muted">
                   {product.code} · {product.categoryName ?? "Sem categoria"} ·{" "}
-                  {new Date(product.created_at).toLocaleDateString("pt-BR")}
+                  {product.status === "ARCHIVED"
+                    ? `Arquivado em ${formatAdminDate(product.archived_at ?? product.created_at)}`
+                    : `Criado em ${formatAdminDate(product.created_at)}`}
                 </p>
+                {product.status === "ARCHIVED" && (
+                  <p className="mt-0.5 text-[11px] text-text-muted/70">
+                    Criado em {formatAdminDate(product.created_at)}
+                  </p>
+                )}
                 <div className="mt-1">
                   <Price product={product} paymentSettings={paymentSettings} />
                 </div>
