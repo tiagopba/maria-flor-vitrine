@@ -73,7 +73,15 @@ export async function listProductsAdmin(
   const supabase = await createClient();
   const { status } = filters;
 
-  let query = supabase.from("products").select("*").order("created_at", { ascending: false });
+  let query = supabase.from("products").select("*");
+
+  if (status === "ARCHIVED") {
+    query = query
+      .order("archived_at", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false });
+  } else {
+    query = query.order("created_at", { ascending: false });
+  }
 
   if (status && status !== "ALL") {
     query = query.eq("status", status);
