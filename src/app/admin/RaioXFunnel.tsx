@@ -8,7 +8,7 @@ function formatPercent(value: number): string {
 /**
  * "Raio-X do Funil" — funil SEQUENCIAL real (Visualizou produto → Clicou
  * em EU QUERO → Adicionou às Minhas Roupas → Abriu Minhas Roupas →
- * Clicou em Comprar): cada etapa é a coorte de sessões que completou
+ * Completou o funil e clicou em COMPRAR): cada etapa é a coorte de sessões que completou
  * TODAS as anteriores, em ordem temporal, no período (ver
  * getDashboardData/computeSequentialFunnelCounts) — nunca 5 contagens
  * independentes. Por construção, `sessions` nunca cresce de uma etapa pra
@@ -22,8 +22,22 @@ function formatPercent(value: number): string {
  * Nenhum cálculo de elegibilidade/compra é feito aqui; é só leitura de
  * sessões já existentes, reorganizadas em ordem.
  */
-export function RaioXFunnel({ data }: { data: RaioXFunnelData }) {
+export function RaioXFunnel({
+  data,
+  whatsappSessions,
+}: {
+  data: RaioXFunnelData;
+  /** `funnel.whatsappSessions` (mesma base do card "Cliques no botão
+   * COMPRAR", já calculada em getDashboardData) — sessões distintas com
+   * FAVORITES_WHATSAPP_CLICK no período, SEM exigir ordem/etapas
+   * anteriores. Deliberadamente diferente da última etapa deste funil
+   * sequencial (data.steps, última posição) — as duas convivem lado a
+   * lado abaixo do funil pra deixar claro que medem coisas diferentes,
+   * nunca pra fazer os números baterem. */
+  whatsappSessions: number;
+}) {
   const maxSessions = Math.max(1, ...data.steps.map((s) => s.sessions));
+  const completedFunnelSessions = data.steps[data.steps.length - 1]?.sessions ?? 0;
 
   return (
     <div className={dashboardCardClass}>
@@ -53,6 +67,16 @@ export function RaioXFunnel({ data }: { data: RaioXFunnelData }) {
           </li>
         ))}
       </ul>
+
+      {/* Discreto de propósito: esclarece a diferença entre "clicou em
+          COMPRAR" (qualquer sessão, sem exigir etapas anteriores) e
+          "completou este funil sequencial" — nunca para fazer os dois
+          números baterem, eles medem coisas diferentes. */}
+      <p className="mt-3 border-t border-black/[0.04] pt-3 text-xs text-text-muted">
+        {whatsappSessions} sessões clicaram em COMPRAR no período
+        <br />
+        {completedFunnelSessions} completaram todas as etapas deste funil no período
+      </p>
     </div>
   );
 }
