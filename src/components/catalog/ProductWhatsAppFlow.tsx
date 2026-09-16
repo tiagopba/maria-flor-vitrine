@@ -16,12 +16,14 @@ import { sendAddToCartCapi } from "@/lib/analytics/capi-actions";
 import type { ProductStatus } from "@/types/database";
 
 /**
- * "Quero essa peça" na página de produto — adiciona a peça à MESMA
- * infraestrutura de Favoritos/Seleção usada em /favoritos (localStorage,
- * selected_size) e manda direto pra lá; toda conversa com vendedora
- * (round-robin, Lead/CAPI) acontece em /favoritos, não mais aqui. SOLD_OUT
- * é a única exceção: continua no fluxo antigo e isolado (submitWhatsAppClick),
- * porque uma peça esgotada nunca entra na seleção.
+ * "EU QUERO" na página de produto — adiciona a peça à MESMA infraestrutura
+ * de Favoritos/Seleção usada em /favoritos (localStorage, selected_size) e,
+ * depois de adicionar com sucesso, mostra um popup deixando a cliente
+ * escolher entre continuar comprando ou ir direto pro carrinho (nunca mais
+ * um redirect automático); toda conversa com vendedora (round-robin,
+ * Lead/CAPI) acontece em /favoritos, não mais aqui. SOLD_OUT é a única
+ * exceção: continua no fluxo antigo e isolado (submitWhatsAppClick), porque
+ * uma peça esgotada nunca entra na seleção.
  */
 export function ProductWhatsAppFlow({
   productId,
@@ -91,6 +93,12 @@ export function ProductWhatsAppFlow({
 
   // ---- Fluxo guiado (peça disponível) ----
   const [sizeSheetOpen, setSizeSheetOpen] = useState(false);
+  // Popup mostrado só DEPOIS que a peça foi adicionada com sucesso (nunca
+  // antes da escolha de tamanho, quando há mais de um) — troca o redirect
+  // automático anterior pra /favoritos por uma escolha explícita da
+  // cliente; fechar pelo X/backdrop simplesmente não navega, mantendo a
+  // cliente na própria página do produto.
+  const [addedModalOpen, setAddedModalOpen] = useState(false);
 
   function trackFlowEvent(eventType: "PRODUCT_FLOW_STARTED") {
     const utm = captureAndPersistUtm();
@@ -185,6 +193,16 @@ export function ProductWhatsAppFlow({
     }
 
     setSizeSheetOpen(false);
+    setAddedModalOpen(true);
+  }
+
+  function handleContinueShopping() {
+    setAddedModalOpen(false);
+    router.push("/novidades");
+  }
+
+  function handleGoToCart() {
+    setAddedModalOpen(false);
     router.push("/favoritos");
   }
 
@@ -230,6 +248,24 @@ export function ProductWhatsAppFlow({
 
       <Drawer open={sizeSheetOpen} onClose={() => setSizeSheetOpen(false)} title="Qual tamanho você procura?">
         <SingleSizeSelector sizes={sizes} value={null} onChange={addToSelection} label="" fitHintByLabel={fitHintByLabel} />
+      </Drawer>
+
+      <Drawer
+        open={addedModalOpen}
+        onClose={() => setAddedModalOpen(false)}
+        title="🛍️ Produto adicionado ao Meu Carrinho!"
+      >
+        <div className="flex flex-col gap-4 pb-1">
+          <p className="text-sm text-text-muted">O que você deseja fazer agora?</p>
+          <div className="flex flex-col gap-2">
+            <Button type="button" onClick={handleGoToCart} className="h-12 uppercase tracking-wide">
+              Ir para Meu Carrinho
+            </Button>
+            <Button type="button" variant="secondary" onClick={handleContinueShopping} className="h-12 uppercase tracking-wide">
+              Continuar comprando
+            </Button>
+          </div>
+        </div>
       </Drawer>
     </div>
   );
