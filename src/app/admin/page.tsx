@@ -7,6 +7,7 @@ import { DashboardCard } from "./DashboardCard";
 import { RankingList } from "./DashboardCharts";
 import { ConversionFunnel, DeviceBreakdown } from "./DashboardFunnel";
 import { RaioXFunnel } from "./RaioXFunnel";
+import { RealtimeVisitorsCard } from "./RealtimeVisitorsCard";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -78,6 +79,13 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
 
       <div className="mt-6 flex justify-end">
         <DashboardPeriodFilter current={period} />
+      </div>
+
+      {/* Client component isolado — conecta ao Presence por conta própria,
+          nunca espera getDashboardData (dados históricos acima) nem
+          bloqueia o resto do Dashboard se o Realtime falhar. */}
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <RealtimeVisitorsCard />
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

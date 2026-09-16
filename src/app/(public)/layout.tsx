@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { NavigationTracker } from "@/components/layout/NavigationTracker";
+import { SitePresenceTracker } from "@/components/layout/SitePresenceTracker";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { FavoritesDiscoveryTip } from "@/components/catalog/FavoritesDiscoveryTip";
@@ -32,6 +33,9 @@ export default async function PublicLayout({ children }: { children: React.React
         <PageViewTracker />
         <MetaPixel />
       </Suspense>
+      {/* Só usa usePathname (não useSearchParams) — não precisa do
+          Suspense acima, que existe só por causa do PageViewTracker. */}
+      <SitePresenceTracker />
       <SiteHeader categories={categories} />
       <FavoritesDiscoveryTip />
       <PostContactPrompt />
