@@ -326,13 +326,17 @@ export function FavoritesPageClient({
 
       {validationError && <p className="text-sm text-red-600">{validationError}</p>}
 
-      <Button type="button" onClick={handleSendClick} className="h-12 w-full gap-2 uppercase tracking-wide">
+      <Button
+        type="button"
+        onClick={handleSendClick}
+        className="h-12 w-full gap-2 text-base font-semibold uppercase tracking-wide"
+      >
         <WhatsAppIcon />
         Comprar
       </Button>
 
       <Link href="/novidades">
-        <Button type="button" variant="secondary" className="h-12 w-full uppercase tracking-wide">
+        <Button type="button" variant="secondary" className="h-12 w-full text-[15px] font-semibold uppercase tracking-wide">
           Ver mais peças
         </Button>
       </Link>
@@ -340,9 +344,9 @@ export function FavoritesPageClient({
       <button
         type="button"
         onClick={handleClearAll}
-        className="self-center text-xs text-text-muted hover:text-red-600"
+        className="self-center rounded-lg px-3 py-2 text-sm font-medium text-text-muted hover:text-red-600"
       >
-        LIMPAR SELEÇÃO ROUPAS
+        LIMPAR MEU CARRINHO
       </button>
 
       <SellerSelectionDrawer

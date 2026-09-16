@@ -93,7 +93,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
         <DashboardCard label="Sessões únicas" comparison={data.cards.uniqueSessions} icon={Users} />
         <DashboardCard label="Visualizações de produtos" comparison={data.cards.productViews} icon={ShoppingBag} />
         <DashboardCard
-          label="Adições às Minhas Roupas"
+          label="Adições ao Meu Carrinho"
           comparison={data.cards.favoritesAdded}
           icon={Heart}
           formatValue={(n) => `${Math.round(n)} sessões`}
@@ -155,9 +155,9 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
           secondaryUnitLabel="visualizações"
         />
         <RankingList
-          title="Peças mais adicionadas às Minhas Roupas"
+          title="Peças mais adicionadas ao Meu Carrinho"
           rows={data.topAddedProducts}
-          emptyLabel="Nenhuma peça adicionada às Minhas Roupas neste período."
+          emptyLabel="Nenhuma peça adicionada ao Meu Carrinho neste período."
           withAvatar
           primaryUnitLabel="sessões adicionaram"
           secondaryUnitLabel="adições"

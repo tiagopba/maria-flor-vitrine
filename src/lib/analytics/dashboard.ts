@@ -222,7 +222,7 @@ export interface RankingRow {
  * direto pra /favoritos; conversa com vendedora só acontece lá) — três
  * etapas, cada uma sessões distintas com pelo menos um evento do tipo,
  * nunca quantidade bruta:
- * Visualizou produto (PRODUCT_VIEW) → Adicionou às Minhas Roupas
+ * Visualizou produto (PRODUCT_VIEW) → Adicionou ao Meu Carrinho
  * (FAVORITE_ADDED) → Tirar dúvidas no WhatsApp (FAVORITES_WHATSAPP_CLICK,
  * nunca o WHATSAPP_CLICK antigo — ver DOUBT_WHATSAPP_EVENT_TYPES).
  */
@@ -262,17 +262,17 @@ export interface RaioXFunnelStep {
  * 1. Visualizou produto — PRODUCT_VIEW.
  * 2. Clicou em EU QUERO — PRODUCT_FLOW_STARTED (auditado: dispara só em
  *    ProductWhatsAppFlow.handleWantThis, uma vez por clique real no botão).
- * 3. Adicionou às Minhas Roupas — FAVORITE_ADDED com
+ * 3. Adicionou ao Meu Carrinho — FAVORITE_ADDED com
  *    `source = "product_page"` (nunca o coração de favoritar solto,
  *    `source: "favorites"` — ver auditoria original; misturar os dois
  *    responderia uma pergunta diferente da pedida). SIZE_SELECTED
  *    deliberadamente não é etapa própria: dispara sempre junto de
  *    FAVORITE_ADDED, nunca captura sozinho um abandono que o vão 2→3 já
  *    não capture.
- * 4. Abriu Minhas Roupas — FAVORITES_VIEW, mas só conta se aconteceu
+ * 4. Abriu Meu Carrinho — FAVORITES_VIEW, mas só conta se aconteceu
  *    DEPOIS do FAVORITE_ADDED (etapa 3) da MESMA sessão, dentro do
  *    período. Uma sessão que só visita /favoritos sem ter completado a
- *    etapa 3 antes (link direto, nav "Minhas Roupas", ou o FAVORITES_VIEW
+ *    etapa 3 antes (link direto, nav "Meu Carrinho", ou o FAVORITES_VIEW
  *    veio antes do FAVORITE_ADDED na linha do tempo) NUNCA conta aqui —
  *    era exatamente isso que inflava esta etapa no método antigo.
  * 5. Completou o funil e clicou em COMPRAR — FAVORITES_WHATSAPP_CLICK, só
@@ -301,7 +301,7 @@ export interface DashboardData {
      * diferença, não é reescrita. */
     uniqueSessions: MetricComparison;
     productViews: MetricComparison;
-    /** "Adições às Minhas Roupas" — sessões distintas com pelo menos um
+    /** "Adições ao Meu Carrinho" — sessões distintas com pelo menos um
      * FAVORITE_ADDED no período (nunca quantidade bruta de evento: uma
      * sessão que adiciona 3 peças conta 1). O total bruto de eventos vem
      * em `favoritesAddedRawCount`, mostrado discretamente abaixo pela UI. */
@@ -340,7 +340,7 @@ export interface DashboardData {
     selectionRate: MetricComparison;
     offersLeadsConfirmed: MetricComparison;
   };
-  /** Funil da Vitrine (Visualizou produto → Adicionou às Minhas Roupas →
+  /** Funil da Vitrine (Visualizou produto → Adicionou ao Meu Carrinho →
    * Tirar dúvidas no WhatsApp) — cada etapa conta sessões distintas que
    * tiveram pelo menos um evento daquele tipo no período atual (não
    * quantidade bruta de eventos, e as etapas não exigem ordem entre si). */
@@ -388,7 +388,7 @@ export interface DashboardData {
 // (auditado: só dispara em ProductWhatsAppFlow.handleWantThis, uma vez por
 // clique, nada mais usa esse tipo). Tinha sido removido daqui numa
 // auditoria de performance anterior por não ter consumidor nenhum no
-// Dashboard; agora tem. FAVORITES_VIEW ("abriu Minhas Roupas") entra pelo
+// Dashboard; agora tem. FAVORITES_VIEW ("abriu Meu Carrinho") entra pelo
 // mesmo motivo — nenhum dos dois é um evento novo, os dois já eram
 // gravados normalmente em analytics_events, só não eram buscados aqui.
 const RELEVANT_EVENT_TYPES = [
@@ -789,8 +789,8 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   const raioXSteps: { id: string; label: string; sessions: number }[] = [
     { id: "product_view", label: "Visualizou produto", sessions: raioXStepCounts[0] },
     { id: "flow_started", label: "Clicou em EU QUERO", sessions: raioXStepCounts[1] },
-    { id: "added_to_selection", label: "Adicionou às Minhas Roupas", sessions: raioXStepCounts[2] },
-    { id: "favorites_view", label: "Abriu Minhas Roupas", sessions: raioXStepCounts[3] },
+    { id: "added_to_selection", label: "Adicionou ao Meu Carrinho", sessions: raioXStepCounts[2] },
+    { id: "favorites_view", label: "Abriu Meu Carrinho", sessions: raioXStepCounts[3] },
     { id: "whatsapp_click", label: "Completou o funil e clicou em COMPRAR", sessions: raioXStepCounts[4] },
   ];
 

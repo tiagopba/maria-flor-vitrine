@@ -51,7 +51,7 @@ export function PostContactPrompt() {
         </p>
         <div className="flex flex-col gap-2">
           <Button type="button" onClick={handleKeep} className="h-12">
-            Manter minhas roupas
+            Manter meu carrinho
           </Button>
           <Button type="button" variant="secondary" onClick={handleStartNew} className="h-12">
             Começar de novo
