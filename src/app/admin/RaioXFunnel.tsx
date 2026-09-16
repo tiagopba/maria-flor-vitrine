@@ -7,7 +7,7 @@ function formatPercent(value: number): string {
 
 /**
  * "Raio-X do Funil" — funil SEQUENCIAL real (Visualizou produto → Clicou
- * em EU QUERO → Adicionou às Minhas Roupas → Abriu Minhas Roupas →
+ * em EU QUERO → Adicionou ao Meu Carrinho → Abriu Meu Carrinho →
  * Completou o funil e clicou em COMPRAR): cada etapa é a coorte de sessões que completou
  * TODAS as anteriores, em ordem temporal, no período (ver
  * getDashboardData/computeSequentialFunnelCounts) — nunca 5 contagens
