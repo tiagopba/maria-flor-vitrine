@@ -141,7 +141,7 @@ export function CategoryMenuDrawer({ categories }: { categories: { name: string;
             tabIndex={open ? 0 : -1}
             className="block rounded-lg px-3 py-2.5 text-base font-semibold text-text hover:bg-muted"
           >
-            ❤️ Minhas Roupas
+            🛍️ Meu Carrinho
           </Link>
 
           {categories.length > 0 && (

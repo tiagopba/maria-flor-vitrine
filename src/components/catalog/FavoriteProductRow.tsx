@@ -70,8 +70,9 @@ export function FavoriteProductRow({
           <button
             type="button"
             onClick={() => removeFavorite(product.id)}
-            className="shrink-0 text-xs font-medium text-text-muted hover:text-red-600"
+            className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1.5 text-sm font-medium text-red-500 hover:bg-red-50 hover:text-red-600"
           >
+            <span aria-hidden="true">✕</span>
             Remover
           </button>
         </div>
