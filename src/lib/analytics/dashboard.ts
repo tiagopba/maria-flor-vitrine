@@ -275,13 +275,13 @@ export interface RaioXFunnelStep {
  *    etapa 3 antes (link direto, nav "Minhas Roupas", ou o FAVORITES_VIEW
  *    veio antes do FAVORITE_ADDED na linha do tempo) NUNCA conta aqui —
  *    era exatamente isso que inflava esta etapa no método antigo.
- * 5. Clicou em Comprar — FAVORITES_WHATSAPP_CLICK, só conta se aconteceu
- *    depois da etapa 4 da mesma sessão. Deliberadamente DESACOPLADO de
- *    `funnel.whatsappSessions` (funil de 3 etapas antigo, independente
- *    por evento, inalterado) e de `cards.whatsappStarted` (cliques
- *    brutos do card "Cliques em Comprar", também inalterado) — as três
- *    métricas medem coisas diferentes agora, de propósito, e não devem
- *    ser misturadas.
+ * 5. Completou o funil e clicou em COMPRAR — FAVORITES_WHATSAPP_CLICK, só
+ *    conta se aconteceu depois da etapa 4 da mesma sessão. Deliberadamente
+ *    DESACOPLADO de `funnel.whatsappSessions` (funil de 3 etapas antigo,
+ *    independente por evento, inalterado) e de `cards.whatsappStarted`
+ *    (cliques brutos do card "Cliques no botão COMPRAR", também
+ *    inalterado) — as três métricas medem coisas diferentes agora, de
+ *    propósito, e não devem ser misturadas nem igualadas.
  */
 export interface RaioXFunnelData {
   steps: RaioXFunnelStep[];
@@ -311,22 +311,22 @@ export interface DashboardData {
      * favoritesAdded (ex.: "124 sessões" + "255 adições"), nunca como a
      * métrica principal. */
     favoritesAddedRawCount: number;
-    /** "Cliques em Comprar" — quantidade BRUTA de eventos
-     * FAVORITES_WHATSAPP_CLICK no período (nunca deduplicado por sessão:
-     * duas seleções distintas na mesma sessão contam 2). Auditoria real
-     * (2026-09-10, sessão bd0e0dc3-...) mostrou duas seleções genuínas —
-     * CALÇA SARJA/G e SAIA RENDA/M, ambas pra Maria Abadia — no mesmo
-     * navegador/sessão a poucos minutos de intervalo; contar por sessão
-     * escondia o volume real de ações. `funnel.whatsappSessions` continua
-     * disponível (e inalterado) pra quem quer a base por sessão — a UI
-     * mostra os dois números juntos (cliques brutos como valor principal do
-     * card, sessões distintas discretamente abaixo). Deliberadamente NÃO
-     * inclui o WHATSAPP_CLICK antigo (fluxo "Tirar dúvidas" da página de
-     * produto, removido; hoje só "Quero algo parecido" de SOLD_OUT) — ver
-     * DOUBT_WHATSAPP_EVENT_TYPES. O evento em si só marca que o site gerou
-     * o link wa.me e redirecionou — não é confirmação de mensagem enviada
-     * nem de compra concluída, por isso nem o nome do card nem o hint dizem
-     * isso. */
+    /** "Cliques no botão COMPRAR" (rótulo do card — antes "Cliques em
+     * Comprar") — quantidade BRUTA de eventos FAVORITES_WHATSAPP_CLICK no
+     * período (nunca deduplicado por sessão: duas seleções distintas na
+     * mesma sessão contam 2). Auditoria real (2026-09-10, sessão
+     * bd0e0dc3-...) mostrou duas seleções genuínas — CALÇA SARJA/G e SAIA
+     * RENDA/M, ambas pra Maria Abadia — no mesmo navegador/sessão a poucos
+     * minutos de intervalo; contar por sessão escondia o volume real de
+     * ações. `funnel.whatsappSessions` continua disponível (e inalterado)
+     * pra quem quer a base por sessão — a UI mostra os dois números juntos
+     * (cliques brutos como valor principal do card, sessões distintas
+     * discretamente abaixo). Deliberadamente NÃO inclui o WHATSAPP_CLICK
+     * antigo (fluxo "Tirar dúvidas" da página de produto, removido; hoje só
+     * "Quero algo parecido" de SOLD_OUT) — ver DOUBT_WHATSAPP_EVENT_TYPES. O
+     * evento em si só marca que o site gerou o link wa.me e redirecionou —
+     * não é confirmação de mensagem enviada nem de compra concluída, por
+     * isso nem o nome do card nem o hint dizem isso. */
     whatsappStarted: MetricComparison;
     /** Sessões com FAVORITES_WHATSAPP_CLICK ÷ sessões únicas (visita) —
      * deliberadamente continua por SESSÃO distinta (nunca por quantidade
@@ -478,8 +478,8 @@ const RAIO_X_STEP_MATCHERS: readonly ((row: RawEvent) => boolean)[] = [
  * monotonicamente decrescente: nunca existe etapa posterior > anterior,
  * nunca abandono negativo, nunca conversão > 100%.
  *
- * O card operacional "Cliques em Comprar" (cards.whatsappStarted, cliques
- * brutos) e `funnel.whatsappSessions` (funil de 3 etapas antigo,
+ * O card operacional "Cliques no botão COMPRAR" (cards.whatsappStarted,
+ * cliques brutos) e `funnel.whatsappSessions` (funil de 3 etapas antigo,
  * independente por evento, inalterado) são métricas DELIBERADAMENTE
  * diferentes desta — nenhuma das duas é recalculada nem substituída aqui.
  */
@@ -745,7 +745,7 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   const currentFavorites = countByType(currentRows, "FAVORITE_ADDED");
   const currentOffersConfirmed = countByType(currentRows, "OFFER_LEAD_CONFIRMED");
   const previousOffersConfirmed = countByType(previousRows, "OFFER_LEAD_CONFIRMED");
-  // "Cliques em Comprar" — quantidade bruta de FAVORITES_WHATSAPP_CLICK,
+  // "Cliques no botão COMPRAR" — quantidade bruta de FAVORITES_WHATSAPP_CLICK,
   // nunca deduplicada por sessão (ver doc de whatsappStarted acima).
   const currentWhatsappClicks = countByType(currentRows, "FAVORITES_WHATSAPP_CLICK");
   const previousWhatsappClicks = countByType(previousRows, "FAVORITES_WHATSAPP_CLICK");
@@ -791,7 +791,7 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
     { id: "flow_started", label: "Clicou em EU QUERO", sessions: raioXStepCounts[1] },
     { id: "added_to_selection", label: "Adicionou às Minhas Roupas", sessions: raioXStepCounts[2] },
     { id: "favorites_view", label: "Abriu Minhas Roupas", sessions: raioXStepCounts[3] },
-    { id: "whatsapp_click", label: "Clicou em Comprar", sessions: raioXStepCounts[4] },
+    { id: "whatsapp_click", label: "Completou o funil e clicou em COMPRAR", sessions: raioXStepCounts[4] },
   ];
 
   const raioXFunnel: RaioXFunnelData = {

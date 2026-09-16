@@ -100,12 +100,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
           hint={`${data.cards.favoritesAddedRawCount} adições`}
         />
         <DashboardCard
-          label="Cliques em Comprar"
+          label="Cliques no botão COMPRAR"
           comparison={data.cards.whatsappStarted}
           icon={MessageCircle}
           formatValue={(n) => `${Math.round(n)} cliques`}
           secondaryLine={formatDistinctSessions(data.funnel.whatsappSessions)}
-          hint="Cliques que seguiram para o WhatsApp. Não confirma envio da mensagem nem compra concluída."
+          hint="Todos os cliques no período, inclusive de clientes que iniciaram a seleção anteriormente."
         />
         <DashboardCard
           label="Cadastros no Grupo de Ofertas"
@@ -142,7 +142,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
       </div>
 
       <div className="mt-6">
-        <RaioXFunnel data={data.raioXFunnel} />
+        <RaioXFunnel data={data.raioXFunnel} whatsappSessions={data.funnel.whatsappSessions} />
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
