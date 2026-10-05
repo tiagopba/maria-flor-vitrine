@@ -20,6 +20,7 @@ export interface PublicSubmitValues {
   addressLine: string;
   addressNumber: string;
   addressComplement: string;
+  noComplement: boolean;
   neighborhood: string;
   city: string;
   state: string;
@@ -61,7 +62,7 @@ export async function submitPublicIntakeAction(token: string, values: PublicSubm
     submitted_postal_code: d.postalCode,
     submitted_address_line: d.addressLine,
     submitted_address_number: d.addressNumber,
-    submitted_address_complement: d.addressComplement,
+    submitted_address_complement: d.noComplement ? null : d.addressComplement,
     submitted_neighborhood: d.neighborhood,
     submitted_city: d.city,
     submitted_state: d.state,

@@ -81,12 +81,18 @@ export type AdminIntakeInput = z.output<typeof adminIntakeSchema>;
 export const publicSubmitSchema = z
   .object({
     fullName: fullName("Nome completo"),
-    cpf: z.string().transform((v) => v.replace(/\D/g, "")).refine((v) => isValidCpf(v), "CPF inválido."),
+    // CPF: obrigatório, com dígitos verificadores (isValidCpf). Vazio e inválido têm mensagens distintas.
+    cpf: z
+      .string()
+      .transform((v) => v.replace(/\D/g, ""))
+      .refine((v) => v.length > 0, "Informe o CPF.")
+      .refine((v) => v.length === 0 || isValidCpf(v), "Informe um CPF válido."),
+    // E-mail obrigatório (não aceita só espaços) e em formato válido.
     email: z
       .string()
       .trim()
-      .transform((v) => (v === "" ? null : v))
-      .refine((v) => v === null || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), "E-mail inválido."),
+      .min(1, "Informe o e-mail.")
+      .refine((v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), "Informe um e-mail válido."),
     whatsapp: whatsappField,
     deliveryToCustomer: z.boolean(),
     recipientName: z.string().trim(),
@@ -96,7 +102,9 @@ export const publicSubmitSchema = z
       .refine((v) => v.length === 8, "CEP deve ter 8 dígitos."),
     addressLine: requiredText("Rua", 200),
     addressNumber: requiredText("Número", 30),
-    addressComplement: optionalText(200, "Complemento muito longo."),
+    // Complemento: texto OU a declaração "não possui complemento". Nunca vazio sem declarar.
+    addressComplement: z.string().trim().max(200, "Complemento muito longo."),
+    noComplement: z.boolean(),
     neighborhood: requiredText("Bairro", 120),
     city: requiredText("Cidade", 120),
     state: z
@@ -108,6 +116,13 @@ export const publicSubmitSchema = z
   .superRefine((v, ctx) => {
     if (!v.deliveryToCustomer && v.recipientName.split(/\s+/).filter(Boolean).length < 2) {
       ctx.addIssue({ code: "custom", path: ["recipientName"], message: "Informe o nome completo do destinatário." });
+    }
+    if (!v.noComplement && v.addressComplement === "") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["addressComplement"],
+        message: "Informe o complemento ou marque 'Não possui complemento'.",
+      });
     }
   });
 

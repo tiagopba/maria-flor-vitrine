@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { publicSubmitSchema } from "@/lib/intake/schema";
 import { submitPublicIntakeAction, type PublicSubmitValues } from "./actions";
 
 const EMPTY: PublicSubmitValues = {
@@ -16,6 +17,7 @@ const EMPTY: PublicSubmitValues = {
   addressLine: "",
   addressNumber: "",
   addressComplement: "",
+  noComplement: false,
   neighborhood: "",
   city: "",
   state: "",
@@ -32,10 +34,24 @@ export function PublicIntakeForm({ token }: { token: string }) {
   const set = (key: keyof PublicSubmitValues) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setValues((v) => ({ ...v, [key]: e.target.value }));
 
+  /** Validação imediata no navegador (mesmo schema do servidor). O servidor valida de novo antes de gravar. */
+  const clientErrors = (v: PublicSubmitValues): Record<string, string> => {
+    const parsed = publicSubmitSchema.safeParse(v);
+    if (parsed.success) return {};
+    const out: Record<string, string> = {};
+    for (const issue of parsed.error.issues) out[String(issue.path[0] ?? "form")] ??= issue.message;
+    return out;
+  };
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    setErrors({});
     setFormError(null);
+    const local = clientErrors(values);
+    setErrors(local);
+    if (Object.keys(local).length > 0) {
+      setFormError("Confira os campos destacados.");
+      return;
+    }
     startTransition(async () => {
       const result = await submitPublicIntakeAction(token, values);
       if (result.ok) {
@@ -62,7 +78,7 @@ export function PublicIntakeForm({ token }: { token: string }) {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted">Dados pessoais</h2>
         <Input id="fullName" label="Nome completo *" value={values.fullName} onChange={set("fullName")} error={errors.fullName} autoComplete="name" />
         <Input id="cpf" label="CPF *" value={values.cpf} onChange={set("cpf")} error={errors.cpf} inputMode="numeric" autoComplete="off" />
-        <Input id="email" label="E-mail" value={values.email} onChange={set("email")} error={errors.email} inputMode="email" autoComplete="email" />
+        <Input id="email" label="E-mail *" value={values.email} onChange={set("email")} error={errors.email} inputMode="email" autoComplete="email" />
         <Input id="whatsapp" label="WhatsApp *" value={values.whatsapp} onChange={set("whatsapp")} error={errors.whatsapp} inputMode="tel" autoComplete="tel" placeholder="(67) 99999-9999" />
       </section>
 
@@ -71,7 +87,29 @@ export function PublicIntakeForm({ token }: { token: string }) {
         <Input id="postalCode" label="CEP *" value={values.postalCode} onChange={set("postalCode")} error={errors.postalCode} inputMode="numeric" autoComplete="postal-code" />
         <Input id="addressLine" label="Rua *" value={values.addressLine} onChange={set("addressLine")} error={errors.addressLine} autoComplete="address-line1" />
         <Input id="addressNumber" label="Número *" value={values.addressNumber} onChange={set("addressNumber")} error={errors.addressNumber} autoComplete="address-line2" />
-        <Input id="addressComplement" label="Complemento" value={values.addressComplement} onChange={set("addressComplement")} error={errors.addressComplement} />
+
+        <div className="flex flex-col gap-2">
+          <Input
+            id="addressComplement"
+            label="Complemento *"
+            value={values.addressComplement}
+            onChange={set("addressComplement")}
+            error={errors.addressComplement}
+            disabled={values.noComplement}
+          />
+          <label className="flex items-center gap-3 text-sm text-text">
+            <input
+              type="checkbox"
+              checked={values.noComplement}
+              onChange={(e) =>
+                setValues((v) => ({ ...v, noComplement: e.target.checked, addressComplement: e.target.checked ? "" : v.addressComplement }))
+              }
+              className="h-5 w-5 accent-primary"
+            />
+            Não possui complemento
+          </label>
+        </div>
+
         <Input id="neighborhood" label="Bairro *" value={values.neighborhood} onChange={set("neighborhood")} error={errors.neighborhood} />
         <Input id="city" label="Cidade *" value={values.city} onChange={set("city")} error={errors.city} autoComplete="address-level2" />
         <Input id="state" label="UF *" value={values.state} onChange={set("state")} error={errors.state} maxLength={2} autoComplete="address-level1" />

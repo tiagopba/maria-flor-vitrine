@@ -54,7 +54,7 @@ describe("formulário interno SOLICITAR DADOS", () => {
 const PUBLIC = {
   fullName: "Neusa Cardim",
   cpf: "529.982.247-25",
-  email: "",
+  email: "teste.sintetico@example.com",
   whatsapp: "(67) 99999-9999",
   deliveryToCustomer: true,
   recipientName: "",
@@ -62,18 +62,19 @@ const PUBLIC = {
   addressLine: "Rua Ceará",
   addressNumber: "123",
   addressComplement: "",
+  noComplement: true,
   neighborhood: "Centro",
   city: "Campo Grande",
   state: "ms",
 };
 
 describe("formulário público da cliente", () => {
-  it("dados válidos: CPF só dígitos, UF maiúscula, complemento vazio vira null", () => {
+  it("dados válidos: CPF só dígitos, UF maiúscula, sem complemento declarado", () => {
     const r = publicSubmitSchema.safeParse(PUBLIC);
     assert.ok(r.success);
     assert.equal(r.data.cpf, "52998224725");
     assert.equal(r.data.state, "MS");
-    assert.equal(r.data.addressComplement, null);
+    assert.equal(r.data.noComplement, true);
     assert.equal(r.data.postalCode, "79000000");
   });
 
@@ -186,5 +187,74 @@ describe("segurança do pré-faturamento (estático)", () => {
     assert.match(sql, /revoke all on table public\.fulfillment_intakes from anon;/);
     assert.match(sql, /function public\.approve_fulfillment_intake/);
     assert.match(sql, /revoke all on function public\.approve_fulfillment_intake\(uuid, integer, jsonb\) from public, anon;/);
+  });
+});
+
+describe("campos obrigatórios e validações do formulário público", () => {
+  const base = PUBLIC;
+  const hasIssueOn = (input: object, field: string) => {
+    const r = publicSubmitSchema.safeParse(input);
+    return !r.success && r.error.issues.some((i) => i.path[0] === field);
+  };
+
+  it("CPF válido com máscara é aceito", () => {
+    assert.ok(publicSubmitSchema.safeParse({ ...base, cpf: "529.982.247-25" }).success);
+  });
+
+  it("CPF com dígito verificador incorreto → 'Informe um CPF válido.'", () => {
+    const r = publicSubmitSchema.safeParse({ ...base, cpf: "529.982.247-24" });
+    assert.equal(r.success, false);
+    assert.equal(r.success ? "" : r.error.issues.find((i) => i.path[0] === "cpf")!.message, "Informe um CPF válido.");
+  });
+
+  it("CPF com menos de 11 dígitos é recusado", () => {
+    assert.equal(hasIssueOn({ ...base, cpf: "5299822472" }, "cpf"), true);
+  });
+
+  it("CPF repetido 11111111111 é recusado", () => {
+    assert.equal(hasIssueOn({ ...base, cpf: "11111111111" }, "cpf"), true);
+  });
+
+  it("CPF vazio → 'Informe o CPF.'", () => {
+    const r = publicSubmitSchema.safeParse({ ...base, cpf: "" });
+    assert.equal(r.success ? "" : r.error.issues.find((i) => i.path[0] === "cpf")!.message, "Informe o CPF.");
+  });
+
+  it("formulário com campo obrigatório vazio é recusado (rua, número, bairro, cidade, nome, WhatsApp)", () => {
+    for (const f of ["addressLine", "addressNumber", "neighborhood", "city", "fullName", "whatsapp"]) {
+      assert.equal(hasIssueOn({ ...base, [f]: "   " }, f), true, f);
+    }
+  });
+
+  it("complemento vazio SEM marcar 'Não possui complemento' → recusado", () => {
+    const r = publicSubmitSchema.safeParse({ ...base, addressComplement: "", noComplement: false });
+    assert.equal(r.success, false);
+    assert.equal(r.success ? "" : r.error.issues.find((i) => i.path[0] === "addressComplement")!.message, "Informe o complemento ou marque 'Não possui complemento'.");
+  });
+
+  it("complemento vazio COM 'Não possui complemento' marcado → aceito", () => {
+    assert.ok(publicSubmitSchema.safeParse({ ...base, addressComplement: "", noComplement: true }).success);
+  });
+
+  it("complemento preenchido → aceito, mesmo sem marcar a declaração", () => {
+    assert.ok(publicSubmitSchema.safeParse({ ...base, addressComplement: "Apto 4", noComplement: false }).success);
+  });
+
+  it("e-mail vazio é recusado (obrigatório)", () => {
+    assert.equal(hasIssueOn({ ...base, email: "" }, "email"), true);
+    assert.equal(hasIssueOn({ ...base, email: "   " }, "email"), true);
+  });
+
+  it("e-mail inválido é recusado", () => {
+    assert.equal(hasIssueOn({ ...base, email: "sem-arroba.com" }, "email"), true);
+    assert.equal(hasIssueOn({ ...base, email: "a@b" }, "email"), true);
+  });
+
+  it("CEP inválido (menos de 8 dígitos) é recusado", () => {
+    assert.equal(hasIssueOn({ ...base, postalCode: "7900" }, "postalCode"), true);
+  });
+
+  it("UF inválida é recusada", () => {
+    assert.equal(hasIssueOn({ ...base, state: "XX" }, "state"), true);
   });
 });
