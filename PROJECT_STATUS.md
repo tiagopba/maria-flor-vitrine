@@ -155,10 +155,13 @@ recriar `sellers_admin_all`, remover as constraints novas, restaurar
 `whatsapp_number NOT NULL`, remover as colunas novas.
 
 ### Estado real dos dados (2026-10-05, leitura)
-- `sellers`: 4, **todas ativas e no rodízio**: Bruniani (`523af886…`, 1 registro
-  no Faturamento, 149 eventos de analytics), Camila (`eba293a0…`), Lidiane
+- `sellers`: 4, **todas ativas e no rodízio**: `523af886…` (1 registro no
+  Faturamento, 149 eventos de analytics), Camila (`eba293a0…`), Lidiane
   (`0bc9a509…`), Maria Abadia (`40f74bcc…`). Todas com WhatsApp válido.
-  **A Bruniani NÃO foi desativada.**
+  **Atualização:** o seller `523af886…`, que era "Bruniani", agora tem o nome
+  **Mayra** no banco. Foi decisão operacional do usuário, feita com o **mesmo
+  `seller_id` mantido** (histórico preservado). Não é uma nova vendedora.
+  Ele continua ativo; não foi desativado.
 - `fulfillment_records`: **2 registros reais, criados pelo usuário** —
   `62bbd574-702c-4c31-9e51-a92f97325e50` (J&T, EM TRÂNSITO, com vendedora +
   origem ONLINE) e `6bbabf84…` (PENDING). **Não alterar nem apagar.**
@@ -271,8 +274,11 @@ Ações por linha (Nome · Situação · ações):
   usam **service role** (ignoram RLS); WhatsApp/round-robin/modal já filtram
   `active = true`. `resolve-seller.ts` ganhou só uma defesa de tipo (ignora
   número nulo).
-- **Bruniani continua ativa.** A planilha antiga escreve "Bruniane"; no banco o
-  nome já é "Bruniani" (EDITAR NOME existe para corrigir grafia se preciso).
+- *(Registro histórico de 2026-10-05.)* **Bruniani** era o nome do seller
+  `523af886…` naquela data. **Atualização posterior:** esse mesmo `seller_id`
+  foi renomeado para **Mayra** pelo usuário (decisão operacional; ID mantido).
+  Ver a seção "Estado real dos dados". Qualquer referência à "Bruniani" acima
+  deve ser lida como esse seller.
 
 ### 7.3 Faturamento preparado para histórico sem PDFs
 - `record_source`: `PDF_UPLOAD` (default; fluxo de PDF) | `HISTORICAL_IMPORT`.
@@ -550,3 +556,43 @@ dry-run com o CSV real; apply do importador.
    escrever arquivos/patches use a ferramenta Write/Edit. Arquivos têm CRLF.
 8. Mudanças consolidadas (poucos Previews), relatórios curtos e honestos, e
    **PARE** quando o usuário pedir.
+
+---
+
+## 17. Pós-venda por WhatsApp no Faturamento (feature/pos-venda-whatsapp)
+
+- **Branch:** `feature/pos-venda-whatsapp`, commit de funcionalidade `f311aa4`.
+- **Migrations aplicadas:** `20261005220000_fulfillment_post_sale_audit_actions`
+  (amplia a constraint de `fulfillment_audit_logs.action` com as 6 ações de
+  pós-venda) e `20261005230000_fulfillment_customer_whatsapp` (coluna
+  `fulfillment_records.customer_whatsapp`, nullable, com check de formato
+  `55 + DDD + celular`). Ambas confirmadas por leitura e no SQL Editor.
+- **Teste funcional no Preview: aprovado** (sessão Admin do usuário). Registro
+  **sintético** criado para o teste e **removido** por ID exato, junto com as
+  linhas de auditoria desse ID. Nenhuma mensagem real foi enviada. Os 2
+  registros reais ficaram intactos (`customer_whatsapp = null`, mesmos
+  `updated_at`).
+- **Comportamento:**
+  - Três ações por registro: ENVIAR RASTREIO (J&T e Correios), CONFIRMAR
+    ENTREGA (status `IN_TRANSIT` ou `DELIVERED`), PEDIR AVALIAÇÃO NO GOOGLE
+    (somente `DELIVERED`).
+  - ABRIR WHATSAPP registra só `*_WHATSAPP_OPENED`. Envio confirmado só com
+    CONFIRMAR QUE ENVIEI (`*_CONFIRMED`), manual e precedido por uma abertura.
+  - Reabrir depois de confirmar gera novo ciclo pendente; o histórico é
+    preservado.
+  - Sem `customer_whatsapp`: COPIAR MENSAGEM funciona e a tela orienta a
+    cadastrar o WhatsApp; ABRIR fica indisponível.
+  - Popup: a aba é aberta dentro do clique e recebe o link só depois do
+    OPENED gravado. Se a gravação falhar, a aba é fechada e nada é aberto.
+- **Auditoria:** guarda só ação, registro, ator e data. `details` nunca tem
+  telefone, CPF, endereço ou texto da mensagem. Edição do WhatsApp usa
+  `DELIVERY_UPDATED` com `changed_fields` (só o nome do campo).
+- **Links:** J&T `https://www.jtexpress.com.br/trajectoryQuery`; Correios
+  `https://rastreamento.correios.com.br/app/index.php` (**ainda sem
+  confirmação formal de uso**); Google `https://g.page/r/CZ1LzmpdDum5EBM/review`.
+  O link `api.whatsapp.com/send` é usado no lugar de `wa.me` (ver seção 13).
+- **Pendências:** teste ao vivo da mensagem dos Correios (não coberto no teste
+  do Preview; coberto por teste automatizado).
+- **Merge:** `feature/pos-venda-whatsapp` → `main` (`--no-ff`) autorizado pelo
+  usuário nesta rodada; deploy de Production e smoke test somente leitura
+  registrados na própria conversa.
