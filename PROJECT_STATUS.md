@@ -596,3 +596,68 @@ dry-run com o CSV real; apply do importador.
 - **Merge:** `feature/pos-venda-whatsapp` → `main` (`--no-ff`) autorizado pelo
   usuário nesta rodada; deploy de Production e smoke test somente leitura
   registrados na própria conversa.
+
+---
+
+## 18. Coleta de Dados + Confere Geral (pré-faturamento) — ESTADO ATUAL
+
+**Branch:** `feature/coleta-dados-faturamento` (NÃO mergeada em `main`).
+**Último commit da branch:** `5aeb59d` — `feat: número da venda STI3 e pagamento Itaú (4 formas), sem parcelas`.
+**Commits anteriores relevantes:** `80a0534` (pagamento no detalhe), `b7caa53` (vendedora obrigatória e reabertura), `b9421f8` (campos obrigatórios), `9dfc251` (least privilege), `d3f6723`/`050bdc7`/`b6e7654` (J&T e complemento).
+
+### Migrations
+- **Aplicadas no Supabase:**
+  - `20261005220000_fulfillment_post_sale_audit_actions` (constraint de ações de pós-venda na auditoria);
+  - `20261005230000_fulfillment_customer_whatsapp` (`customer_whatsapp`);
+  - `20261005240000_fulfillment_intakes` (tabelas `fulfillment_intakes`, `fulfillment_intake_audit_logs`, `fulfillment_verification_attempts`, colunas de pagamento e função `approve_fulfillment_intake`);
+  - `20261005241000_fulfillment_intakes_least_privilege` (least privilege: `anon`/`authenticated`/`PUBLIC` sem privilégios indevidos; `authenticated` só select/insert/update conforme a tabela);
+  - `20261005250000_fulfillment_sti3_payment` (`sti3_sale_id` nas duas tabelas, índices UNIQUE parciais, constraints de pagamento, função copiando STI3).
+- **Já aplicadas antes (pós-venda e privilégios):** `20261005190000`, `20261005190100`, `20261005200000`.
+- Validação por leitura da `20261005250000` (colunas e nulabilidade confirmadas pela API). Constraints, índices, grants e corpo da função ainda aguardam confirmação no SQL Editor.
+
+### Regras finais de negócio (vigentes)
+- **Venda STI3 obrigatória** no Admin (texto, sem espaços nas pontas, não vai para a cliente, WhatsApp, analytics, Pixel ou CAPI). Duplicidade recusada (consulta + UNIQUE parcial). Preservada até `fulfillment_records`.
+- **Vendedora obrigatória** (ativa, conferida no servidor; a linha da vendedora não é alterada).
+- **Valor da venda obrigatório** (`sale_total > 0`), comparado em centavos com a NF-e, sem tolerância.
+- **Pagamento somente:** `ITAU_CREDIT_ELO_AMEX`, `ITAU_CREDIT_MASTER`, `ITAU_CREDIT_VISA`, `ITAU_PIX` (nomes exibidos em caixa alta). Códigos genéricos antigos ficam só para registros existentes.
+- **Sem parcelas no fluxo novo:** `installments` continua existindo e fica `NULL`.
+- **CPF com validação real** (dígitos verificadores, sequências repetidas recusadas), no navegador e no servidor. Mensagem: "Informe um CPF válido.".
+- **Campos da cliente obrigatórios:** nome completo, CPF, e-mail, WhatsApp, CEP, rua, número, bairro, cidade e UF. Destinatário obrigatório se a entrega não for para a própria cliente.
+- **Complemento:** texto OU a opção "Não possui complemento" (grava NULL; sem string falsa).
+- **Token de 7 dias**, guardado só como hash. **REABRIR COLETA** invalida o token anterior e mostra o novo link na própria tela. Se a página for recarregada, o token bruto não é recuperado: gera-se um novo.
+- **J&T:** identificada pelo padrão de rastreio (888…) quando o logo não tem texto. Correios (AD…BR) nunca é classificado como J&T. Bairro e complemento ausentes na etiqueta J&T são `NOT_COMPARABLE` (não geram aviso).
+- **Divergência crítica (vermelho) bloqueia totalmente**, sem bypass. Amarelo exige revisão de todos os avisos.
+- **Tentativas anteriores são preservadas**; cada reenvio recalcula tudo do zero.
+- **Aprovação atômica e idempotente** no banco: só a tentativa atual, nunca BLOCKED, `is_admin()` obrigatório, clique duplo devolve o mesmo registro. Cria `fulfillment_records` com `PENDING`, copiando STI3, valor, pagamento, vendedora, data e WhatsApp.
+- **Pós-venda** já está em Production (ver seções 15 a 17).
+
+### Testes funcionais intermediários já executados (no Preview, com dados sintéticos)
+- Criação de solicitação com vendedora obrigatória (bloqueio sem vendedora confirmado).
+- Página pública: validação de campos, CPF inválido com mensagem, token bloqueado após envio.
+- REABRIR COLETA: token antigo invalidado, novo link exibido, novo envio aceito.
+- Conferência com DANFE de valor divergente: BLOCKED, sem aprovação, sem registro criado.
+- Recomeço: tentativa 2 criada com a tentativa 1 preservada no histórico; tentativa 2 TUDO CERTO (J&T com bairro/complemento NOT_COMPARABLE).
+- Aprovação: 1 registro criado com `PENDING`; segunda aprovação não duplicou.
+- Ressalva: esses testes usaram a regra de pagamento ANTIGA (`CREDIT_CARD` com 3 parcelas) e antes da regra STI3. Não contam como teste final.
+
+### Dados sintéticos que ainda precisam ser limpos (IDs exatos)
+- Intake: `92d965dd-04ff-455a-ba14-32842ae4de0f` (aprovado; tentativas 1 e 2; logs de auditoria da intake).
+- Registro: `59fb9ac5-8f69-47a9-9e39-5a42b9f3f082` (criado pela aprovação; `fulfillment_audit_logs` sem linhas próprias).
+- PDFs de teste no Storage: `intakes/92d965dd-04ff-455a-ba14-32842ae4de0f/attempt-1/*` e `attempt-2/*`.
+- Intake de teste anterior (`c945b74b-454a-42ae-823d-5338d1fced6d`) já foi removido.
+
+### Registros reais — PROTEGIDOS
+- `62bbd574-702c-4c31-9e51-a92f97325e50` (Neusa Cardim).
+- `6bbabf84-77a1-4de9-a190-a233b22c930b` (Rosiane Ianel Joaquim de Souza).
+- Ambos são **registros reais e não podem ser usados para escrita de teste**.
+
+### Status
+- **Teste final DO ZERO: PENDENTE.**
+- **Merge da branch de coleta em `main`: NÃO feito.**
+
+### Próximos passos exatos (em ordem)
+1. Validar a migration STI3 por leitura (constraints, índices UNIQUE, função e grants, pelas consultas do SQL Editor).
+2. Limpar os dados sintéticos antigos pelos IDs exatos acima (tentativas, logs, PDFs, intake e registro).
+3. Executar o teste final do zero (com STI3, pagamento Itaú, J&T, duplicidade de STI3, aprovação e Pós-venda).
+4. Limpar o teste final pelos IDs exatos e confirmar que restam só os 2 registros reais.
+5. Somente depois, aprovar o merge da branch de coleta em `main`.
