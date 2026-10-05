@@ -410,6 +410,53 @@ export interface Database {
         },
         "state_code" | "service" | "minimum_amount"
       >;
+
+      // Módulo Faturamento e Envios (DANFE + etiqueta) — ver migration
+      // 20261005120000_fulfillment_records.sql. Dados pessoais: só Admin/Master.
+      fulfillment_records: Table<
+        {
+          id: string;
+          customer_name: string;
+          customer_cpf: string | null;
+          customer_name_search: string;
+          address_line: string | null;
+          address_number: string | null;
+          address_complement: string | null;
+          neighborhood: string | null;
+          postal_code: string | null;
+          city: string | null;
+          state: string | null;
+          nfe_number: string | null;
+          nfe_series: string | null;
+          nfe_key: string | null;
+          nfe_protocol: string | null;
+          nfe_issued_at: string | null;
+          items_count: number | null;
+          invoice_total: number | null;
+          carrier: string | null;
+          tracking_code: string | null;
+          shipping_label_date: string | null;
+          danfe_file_path: string;
+          label_file_path: string;
+          status: "CONFIRMED";
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        },
+        "customer_name" | "danfe_file_path" | "label_file_path"
+      >;
+
+      fulfillment_audit_logs: Table<
+        {
+          id: string;
+          record_id: string;
+          action: "CREATED" | "DOCUMENT_VIEWED";
+          actor_id: string | null;
+          details: Record<string, unknown>;
+          created_at: string;
+        },
+        "record_id" | "action"
+      >;
     };
     Views: Record<string, never>;
     Functions: {

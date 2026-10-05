@@ -4,6 +4,14 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseHostname = supabaseUrl ? new URL(supabaseUrl).hostname : undefined;
 
 const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      // Faturamento e Envios envia 2 PDFs (até 2MB cada) numa Server Action —
+      // o padrão de 1MB não comporta. 4.5mb acompanha o teto de payload das
+      // funções da Vercel; cada PDF é limitado a 2MB na própria action.
+      bodySizeLimit: "4.5mb",
+    },
+  },
   images: {
     remotePatterns: supabaseHostname
       ? [{ protocol: "https", hostname: supabaseHostname, pathname: "/storage/v1/object/public/**" }]
