@@ -137,8 +137,8 @@ describe("CONFERE GERAL: 🔴 divergência crítica = BLOCKED", () => {
 });
 
 describe("CONFERE GERAL: 🟡 revisão", () => {
-  it("campo não legível (bairro ausente na etiqueta) → amarelo, sem bloquear", () => {
-    const r = run({ label: { neighborhood: null } });
+  it("campo não legível (bairro ausente na etiqueta dos Correios) → amarelo, sem bloquear", () => {
+    const r = run({ label: { neighborhood: null, carrier: "Correios" } });
     assert.equal(fieldOf(r, "etiqueta_bairro"), "REVIEW");
     assert.equal(r.verdict, "REVIEW");
   });
@@ -168,5 +168,52 @@ describe("CONFERE GERAL: abreviação não gera falso vermelho", () => {
   it("R. Ceara na DANFE × Rua Ceará do cliente → OK na rua", () => {
     const r = run();
     assert.equal(fieldOf(r, "nf_rua"), "OK");
+  });
+});
+
+describe("J&T: bairro não separado na etiqueta", () => {
+  const jt = (over: Partial<ShippingLabelData> = {}) => ({ neighborhood: null, carrier: "J&T Express", ...over });
+
+  it("bairro ausente na etiqueta J&T → NÃO comparável, NÃO é REVIEW", () => {
+    const r = run({ label: jt() });
+    assert.equal(fieldOf(r, "etiqueta_bairro"), "NOT_COMPARABLE");
+    assert.equal(r.reviewFields.includes("etiqueta_bairro"), false);
+    assert.equal(r.verdict, "GREEN");
+  });
+
+  it("bairro ausente na etiqueta dos Correios continua sendo REVIEW (regra só vale para J&T)", () => {
+    const r = run({ label: { neighborhood: null, carrier: "Correios" } });
+    assert.equal(fieldOf(r, "etiqueta_bairro"), "REVIEW");
+  });
+
+  it("cliente × DANFE com bairro diferente → REVIEW, mesmo com etiqueta J&T", () => {
+    const r = run({ label: jt(), expected: { address: { ...EXPECTED.address, neighborhood: "Jardim Paulista" } } });
+    assert.equal(fieldOf(r, "nf_bairro"), "REVIEW");
+    assert.equal(r.verdict, "REVIEW");
+  });
+
+  it("bairro claramente extraído da etiqueta J&T e incompatível → REVIEW", () => {
+    const r = run({ label: jt({ neighborhood: "Jardim Paulista" }) });
+    assert.equal(fieldOf(r, "etiqueta_bairro"), "REVIEW");
+  });
+
+  it("bairro extraído da etiqueta J&T e igual ao informado → OK", () => {
+    const r = run({ label: jt({ neighborhood: "Centro" }) });
+    assert.equal(fieldOf(r, "etiqueta_bairro"), "OK");
+  });
+
+  it("J&T não enfraquece críticos: rua, número, CEP, cidade, UF e destinatário seguem BLOCKED", () => {
+    assert.equal(fieldOf(run({ label: jt({ addressStreet: "Rua Outra" }) }), "etiqueta_rua"), "BLOCKED");
+    assert.equal(fieldOf(run({ label: jt({ addressNumber: "999" }) }), "etiqueta_numero"), "BLOCKED");
+    assert.equal(fieldOf(run({ label: jt({ postalCode: "79010000" }) }), "etiqueta_cep"), "BLOCKED");
+    assert.equal(fieldOf(run({ label: jt({ city: "Dourados" }) }), "etiqueta_cidade"), "BLOCKED");
+    assert.equal(fieldOf(run({ label: jt({ state: "SP" }) }), "etiqueta_uf"), "BLOCKED");
+    assert.equal(fieldOf(run({ label: jt({ recipientName: "OUTRA PESSOA" }) }), "etiqueta_destinatario"), "BLOCKED");
+  });
+
+  it("NOT_COMPARABLE nunca aparece como aviso nem entra na lista de revisão", () => {
+    const r = run({ label: jt() });
+    assert.equal(r.results.find((x) => x.field === "etiqueta_bairro")!.verdict, "NOT_COMPARABLE");
+    assert.deepEqual(r.reviewFields, []);
   });
 });

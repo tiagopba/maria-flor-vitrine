@@ -114,10 +114,10 @@ export function ConferenciaPanel({
             ))}
           </dl>
 
-          {latest.results.filter((r) => r.verdict !== "OK").length > 0 && (
+          {latest.results.filter((r) => r.verdict === "BLOCKED" || r.verdict === "REVIEW").length > 0 && (
             <ul className="mt-4 flex flex-col gap-2 text-sm">
               {latest.results
-                .filter((r) => r.verdict !== "OK")
+                .filter((r) => r.verdict === "BLOCKED" || r.verdict === "REVIEW")
                 .map((r) => (
                   <li key={r.field} className={r.verdict === "BLOCKED" ? "text-red-800" : "text-amber-800"}>
                     {r.verdict === "BLOCKED" ? "🔴" : "🟡"} {fieldLabel(r.field)}: {r.reason}

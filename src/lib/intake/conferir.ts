@@ -1,6 +1,7 @@
 // CONFERE GERAL — PURO. Compara os dados da cliente com a DANFE e a etiqueta
 // (campos já extraídos pelos parsers existentes; nada é inventado).
 import type { DanfeData, ShippingLabelData } from "../fulfillment/types.ts";
+import { trackingCarrier } from "../fulfillment/post-sale.ts";
 import { normalizeText, compareAddress, compareMoneyCents, toCents, type AddressInput, type FieldResult } from "./address.ts";
 import { decideVerdict, type ConfereResult } from "./confere.ts";
 
@@ -94,7 +95,20 @@ export function conferir(input: ConfereInput): ConfereOutcome {
         postalCode: label.postalCode ?? null,
       }
     : EMPTY_ADDRESS;
-  results.push(...prefixed("etiqueta_", compareAddress(expected.address, labelActual)));
+  const labelResults = compareAddress(expected.address, labelActual);
+  // J&T: a etiqueta real não separa o bairro de forma confiável. Bairro AUSENTE nela não é aviso:
+  // fica não comparável naquele documento. Bairro presente segue a regra normal (REVIEW se diferente).
+  // A comparação cliente × DANFE continua valendo.
+  const isJtLabel = trackingCarrier(label?.carrier) === "jt";
+  if (isJtLabel && !label?.neighborhood) {
+    for (const r of labelResults) {
+      if (r.field === "bairro") {
+        r.verdict = "NOT_COMPARABLE";
+        r.reason = "Bairro não separado na etiqueta J&T: não comparável neste documento.";
+      }
+    }
+  }
+  results.push(...prefixed("etiqueta_", labelResults));
 
   // DANFE × etiqueta: rua, número, cidade, UF e CEP precisam bater quando ambos existem
   if (danfe && label) {

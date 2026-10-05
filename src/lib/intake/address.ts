@@ -2,7 +2,8 @@
 // Regra: só abreviações de uma LISTA FECHADA são equivalentes. Nada de fuzzy matching:
 // ruas realmente diferentes nunca viram iguais.
 
-export type FieldVerdict = "OK" | "REVIEW" | "BLOCKED";
+/** NOT_COMPARABLE: o documento não traz o dado de forma confiável; não é erro nem aviso. */
+export type FieldVerdict = "OK" | "REVIEW" | "BLOCKED" | "NOT_COMPARABLE";
 
 export interface FieldResult {
   field: string;
