@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { normalizeForCompare, onlyDigits, stripLeadingZeros } from "./text.ts";
+import { CORREIOS_TRACKING_PATTERN } from "./parse-label.ts";
 
 /** America/Campo_Grande não tem horário de verão — mesmo fuso fixo usado no Dashboard. */
 export const STORE_UTC_OFFSET = "-04:00";
@@ -83,6 +84,7 @@ export const fulfillmentRecordSchema = z
       .transform(parseMoneyInput)
       .refine((v) => v === null || (Number.isFinite(v) && v < 10_000_000), "Valor total inválido."),
     carrier: optionalText(80, "Transportadora muito longa."),
+    shippingService: optionalText(40, "Serviço muito longo."),
     trackingCode: z
       .string()
       .transform((v) => v.replace(/\s+/g, "").toUpperCase())
@@ -100,6 +102,16 @@ export const fulfillmentRecordSchema = z
         "Data da etiqueta inválida."
       )
       .transform((v) => (v === "" ? null : `${v}${v.length === 16 ? ":00" : ""}${STORE_UTC_OFFSET}`)),
+  })
+  .superRefine((v, ctx) => {
+    // Rastreio dos Correios tem formato fixo: 2 letras + 9 dígitos + BR.
+    if (v.carrier && normalizeForCompare(v.carrier) === "correios" && v.trackingCode && !CORREIOS_TRACKING_PATTERN.test(v.trackingCode)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["trackingCode"],
+        message: "Rastreio dos Correios deve ter 2 letras + 9 dígitos + BR (ex: AB123456789BR).",
+      });
+    }
   })
   .transform((v) => ({
     customer_name: v.customerName,
@@ -120,6 +132,7 @@ export const fulfillmentRecordSchema = z
     items_count: v.itemsCount,
     invoice_total: v.invoiceTotal,
     carrier: v.carrier,
+    shipping_service: v.shippingService,
     tracking_code: v.trackingCode,
     shipping_label_date: v.shippingLabelDate,
   }));
@@ -144,6 +157,7 @@ export const FORM_FIELD_NAMES = [
   "itemsCount",
   "invoiceTotal",
   "carrier",
+  "shippingService",
   "trackingCode",
   "shippingLabelDate",
 ] as const;

@@ -48,3 +48,23 @@ PR123456789BR
 05/10/2026
 REMETENTE:
 LOJA EXEMPLO`;
+
+// Mesmo formato do texto extraído de uma etiqueta real dos Correios (SEDEX
+// contrato): sem cabeçalho "DESTINATÁRIO", rastreio espaçado, "REMETENTE:"
+// colado no fim da linha anterior e nenhuma data impressa. Dados inventados.
+export const LABEL_CORREIOS_REAL_FORMAT_TEXT = `Contrato: 9912345678 SEDEX CONTRATO AG
+AB 123 456 789 BR
+RR
+Recebedor:
+Assinatura: Documento:
+JOANA EXEMPLO DA SILVA
+Avenida das Palmeiras, 1234
+LOJA EXEMPLO CENTRO
+Jardim Modelo
+79000000 Cidade Teste/MS
+LOJA EXEMPLOREMETENTE:
+Rua das Flores, 100
+Centro
+79500000 Cidade Exemplo /MS`;
+
+export const LABEL_CORREIOS_PAC_TEXT = LABEL_CORREIOS_REAL_FORMAT_TEXT.replace("SEDEX CONTRATO AG", "PAC CONTRATO AG");

@@ -36,12 +36,17 @@ export interface ShippingLabelData {
    * pelo texto, onde termina o bairro e começa o complemento.
    */
   addressRemainder: string | null;
+  /** Só em layouts com uma linha por campo (Correios); em J&T fica null (ver addressRemainder). */
+  addressComplement: string | null;
+  neighborhood: string | null;
   postalCode: string | null;
   city: string | null;
   state: string | null;
-  /** aaaa-mm-ddThh:mm:ss (horário local da loja, sem fuso) */
+  /** aaaa-mm-ddThh:mm:ss (horário local da loja, sem fuso). null se a etiqueta não trouxer data. */
   labelDateTime: string | null;
   carrier: string | null;
+  /** Ex: "SEDEX", "PAC". Só preenchido quando o texto da etiqueta diz. */
+  shippingService: string | null;
   trackingCode: string | null;
 }
 
@@ -83,6 +88,7 @@ export interface FulfillmentFormValues {
   itemsCount: string;
   invoiceTotal: string;
   carrier: string;
+  shippingService: string;
   trackingCode: string;
   /** aaaa-mm-ddThh:mm (input datetime-local) */
   shippingLabelDate: string;

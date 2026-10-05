@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { formatCarrier } from "../format.ts";
 import { fulfillmentRecordSchema } from "../schema.ts";
 import { buildDateFilter, buildSearchFilter } from "../search.ts";
 
@@ -72,6 +73,7 @@ const baseInput = {
   itemsCount: "1",
   invoiceTotal: "1.139,99",
   carrier: "",
+  shippingService: "",
   trackingCode: " 8881 0000 9999 999 ",
   shippingLabelDate: "2026-10-05T11:05",
 };
@@ -90,6 +92,7 @@ describe("fulfillmentRecordSchema", () => {
     assert.equal(parsed.items_count, 1);
     assert.equal(parsed.tracking_code, "888100009999999");
     assert.equal(parsed.carrier, null);
+    assert.equal(parsed.shipping_service, null);
     assert.equal(parsed.address_line, null);
     assert.equal(parsed.shipping_label_date, "2026-10-05T11:05:00-04:00");
   });
@@ -111,5 +114,27 @@ describe("fulfillmentRecordSchema", () => {
     assert.equal(bad({ itemsCount: "-1" }), false);
     assert.equal(bad({ shippingLabelDate: "ontem" }), false);
     assert.equal(bad({ trackingCode: "ab;cd" }), false);
+  });
+
+  it("Correios: serviço entra separado e o rastreio é normalizado e validado", () => {
+    const correios = { ...baseInput, carrier: "Correios", shippingService: "SEDEX" };
+
+    const ok = fulfillmentRecordSchema.parse({ ...correios, trackingCode: "AB 123 456 789 BR" });
+    assert.equal(ok.carrier, "Correios");
+    assert.equal(ok.shipping_service, "SEDEX");
+    assert.equal(ok.tracking_code, "AB123456789BR");
+
+    assert.equal(fulfillmentRecordSchema.safeParse({ ...correios, trackingCode: "888100009999999" }).success, false);
+    // Outra transportadora não herda a regra dos Correios.
+    assert.equal(
+      fulfillmentRecordSchema.safeParse({ ...baseInput, carrier: "J&T Express", trackingCode: "888100009999999" }).success,
+      true
+    );
+  });
+
+  it("formatCarrier combina transportadora e serviço", () => {
+    assert.equal(formatCarrier("Correios", "SEDEX"), "Correios · SEDEX");
+    assert.equal(formatCarrier("J&T Express", null), "J&T Express");
+    assert.equal(formatCarrier(null, null), "—");
   });
 });

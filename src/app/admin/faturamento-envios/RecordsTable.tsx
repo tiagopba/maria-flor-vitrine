@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { FulfillmentListItem } from "@/lib/db/fulfillment";
-import { formatBRL, formatStoreDate } from "@/lib/fulfillment/format";
+import { formatBRL, formatCarrier, formatStoreDate } from "@/lib/fulfillment/format";
 import { maskCpfCnpj } from "@/lib/fulfillment/text";
 
 export function RecordsTable({ records }: { records: FulfillmentListItem[] }) {
@@ -26,7 +26,7 @@ export function RecordsTable({ records }: { records: FulfillmentListItem[] }) {
               <td className="px-4 py-3 font-mono text-text-muted">{maskCpfCnpj(record.customer_cpf)}</td>
               <td className="px-4 py-3 text-text">{record.nfe_number ?? "—"}</td>
               <td className="whitespace-nowrap px-4 py-3 text-text">{formatBRL(record.invoice_total)}</td>
-              <td className="px-4 py-3 text-text">{record.carrier ?? "—"}</td>
+              <td className="px-4 py-3 text-text">{formatCarrier(record.carrier, record.shipping_service)}</td>
               <td className="px-4 py-3 font-mono text-text">{record.tracking_code ?? "—"}</td>
               <td className="whitespace-nowrap px-4 py-3 text-text-muted">{formatStoreDate(record.created_at)}</td>
               <td className="px-4 py-3 text-right">

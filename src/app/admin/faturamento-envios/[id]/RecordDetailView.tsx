@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { FulfillmentRecord } from "@/lib/db/fulfillment";
-import { formatBRL, formatIsoDate, formatStoreDateTime } from "@/lib/fulfillment/format";
+import { formatBRL, formatCarrier, formatIsoDate, formatStoreDateTime } from "@/lib/fulfillment/format";
 import { formatCpfCnpj, formatPostalCode } from "@/lib/fulfillment/text";
 import { CopyButton } from "./CopyButton";
 
@@ -85,7 +85,9 @@ export function RecordDetailView({ record }: { record: FulfillmentRecord }) {
         </Section>
 
         <Section title="Envio">
-          <Field label="Transportadora">{record.carrier}</Field>
+          <Field label="Transportadora">
+            {record.carrier ? formatCarrier(record.carrier, record.shipping_service) : record.shipping_service}
+          </Field>
           <Field label="Data da etiqueta">
             {record.shipping_label_date ? formatStoreDateTime(record.shipping_label_date) : ""}
           </Field>

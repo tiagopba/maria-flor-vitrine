@@ -434,6 +434,7 @@ export interface Database {
           items_count: number | null;
           invoice_total: number | null;
           carrier: string | null;
+          shipping_service: string | null;
           tracking_code: string | null;
           shipping_label_date: string | null;
           danfe_file_path: string;

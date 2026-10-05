@@ -136,8 +136,8 @@ export function mergeToFormValues(
     customerDocument: danfe?.customerDocument ?? "",
     addressLine: danfe?.addressLine ?? label?.addressStreet ?? label?.addressLine ?? "",
     addressNumber: danfe?.addressNumber ?? label?.addressNumber ?? "",
-    addressComplement: danfe?.addressComplement ?? "",
-    neighborhood: danfe?.neighborhood ?? "",
+    addressComplement: danfe?.addressComplement ?? label?.addressComplement ?? "",
+    neighborhood: danfe?.neighborhood ?? label?.neighborhood ?? "",
     postalCode: danfe?.postalCode ?? label?.postalCode ?? "",
     city: danfe?.city ?? label?.city ?? "",
     state: danfe?.state ?? label?.state ?? "",
@@ -149,6 +149,7 @@ export function mergeToFormValues(
     itemsCount: danfe?.itemsCount != null ? String(danfe.itemsCount) : "",
     invoiceTotal: danfe?.invoiceTotal != null ? danfe.invoiceTotal.toFixed(2).replace(".", ",") : "",
     carrier: label?.carrier ?? "",
+    shippingService: label?.shippingService ?? "",
     trackingCode: label?.trackingCode ?? "",
     shippingLabelDate: toDateTimeLocal(label?.labelDateTime ?? null),
   };

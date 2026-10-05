@@ -22,12 +22,13 @@ export type FulfillmentListItem = Pick<
   | "nfe_number"
   | "invoice_total"
   | "carrier"
+  | "shipping_service"
   | "tracking_code"
   | "created_at"
 >;
 
 const LIST_COLUMNS =
-  "id, customer_name, customer_cpf, nfe_number, invoice_total, carrier, tracking_code, created_at";
+  "id, customer_name, customer_cpf, nfe_number, invoice_total, carrier, shipping_service, tracking_code, created_at";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

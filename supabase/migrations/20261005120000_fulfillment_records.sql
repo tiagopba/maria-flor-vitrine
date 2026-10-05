@@ -54,6 +54,8 @@ create table if not exists public.fulfillment_records (
 
   -- Envio
   carrier text,
+  -- Ex: 'SEDEX', 'PAC' (Correios). Vazio quando a transportadora não tem serviço no texto da etiqueta (ex: J&T).
+  shipping_service text,
   tracking_code text,
   shipping_label_date timestamptz,
 

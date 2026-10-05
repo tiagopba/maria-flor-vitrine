@@ -462,6 +462,19 @@ export function NewRecordFlow({
           list="carrier-suggestions"
           autoComplete="off"
         />
+        <Input
+          id="shippingService"
+          name="shippingService"
+          label="Serviço"
+          defaultValue={values.shippingService}
+          error={errorFor("shippingService")}
+          list="service-suggestions"
+          autoComplete="off"
+        />
+        <datalist id="service-suggestions">
+          <option value="SEDEX" />
+          <option value="PAC" />
+        </datalist>
         <datalist id="carrier-suggestions">
           <option value="J&T Express" />
           <option value="Correios" />

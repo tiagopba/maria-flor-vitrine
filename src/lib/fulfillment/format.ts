@@ -33,3 +33,9 @@ export function formatBRL(value: number | null | undefined): string {
   if (value == null) return "—";
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
+
+/** "Correios · SEDEX" · "J&T Express" · "—" conforme os dados disponíveis. */
+export function formatCarrier(carrier: string | null | undefined, service: string | null | undefined): string {
+  const text = [carrier, service].filter(Boolean).join(" · ");
+  return text || "—";
+}

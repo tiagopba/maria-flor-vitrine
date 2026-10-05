@@ -4,7 +4,14 @@ import { compareDocuments, mergeToFormValues } from "../compare.ts";
 import { parseDanfeSimplificado } from "../parse-danfe.ts";
 import { parseShippingLabel } from "../parse-label.ts";
 import { formatCpfCnpj, maskCpfCnpj, normalizeForCompare, parseBrazilianMoney, stripLeadingZeros } from "../text.ts";
-import { DANFE_TEXT, LABEL_CORREIOS_TEXT, LABEL_TEXT, NFE_KEY } from "./fixtures.ts";
+import {
+  DANFE_TEXT,
+  LABEL_CORREIOS_PAC_TEXT,
+  LABEL_CORREIOS_REAL_FORMAT_TEXT,
+  LABEL_CORREIOS_TEXT,
+  LABEL_TEXT,
+  NFE_KEY,
+} from "./fixtures.ts";
 
 describe("parseDanfeSimplificado", () => {
   const danfe = parseDanfeSimplificado(DANFE_TEXT);
@@ -91,6 +98,58 @@ describe("parseShippingLabel", () => {
 
   it("texto vazio devolve tudo null", () => {
     assert.ok(Object.values(parseShippingLabel("")).every((value) => value === null));
+  });
+
+  it("J&T: transportadora e serviço seguem vazios (só há logo)", () => {
+    assert.equal(label.carrier, null);
+    assert.equal(label.shippingService, null);
+    assert.equal(label.neighborhood, null);
+  });
+});
+
+describe("parseShippingLabel — Correios (formato real)", () => {
+  const correios = parseShippingLabel(LABEL_CORREIOS_REAL_FORMAT_TEXT);
+
+  it("reconhece transportadora e serviço", () => {
+    assert.equal(correios.carrier, "Correios");
+    assert.equal(correios.shippingService, "SEDEX");
+  });
+
+  it("normaliza o rastreio espaçado para 2 letras + 9 dígitos + BR", () => {
+    assert.equal(correios.trackingCode, "AB123456789BR");
+  });
+
+  it("lê destinatário, endereço, complemento, bairro, CEP e cidade/UF (não o remetente)", () => {
+    assert.equal(correios.recipientName, "JOANA EXEMPLO DA SILVA");
+    assert.equal(correios.addressStreet, "Avenida das Palmeiras");
+    assert.equal(correios.addressNumber, "1234");
+    assert.equal(correios.addressComplement, "LOJA EXEMPLO CENTRO");
+    assert.equal(correios.neighborhood, "Jardim Modelo");
+    assert.equal(correios.postalCode, "79000000");
+    assert.equal(correios.city, "Cidade Teste");
+    assert.equal(correios.state, "MS");
+  });
+
+  it("não inventa data quando a etiqueta não traz", () => {
+    assert.equal(correios.labelDateTime, null);
+    assert.equal(mergeToFormValues(null, correios).shippingLabelDate, "");
+  });
+
+  it("reconhece PAC", () => {
+    assert.equal(parseShippingLabel(LABEL_CORREIOS_PAC_TEXT).shippingService, "PAC");
+  });
+
+  it("aceita rastreio já sem espaços e rejeita sequência que não segue o formato", () => {
+    assert.equal(parseShippingLabel("SEDEX AB123456789BR").trackingCode, "AB123456789BR");
+    assert.equal(parseShippingLabel("SEDEX AB 123 456 78 BR").trackingCode, null);
+  });
+
+  it("formulário traz transportadora, serviço e rastreio separados", () => {
+    const form = mergeToFormValues(null, correios);
+    assert.equal(form.carrier, "Correios");
+    assert.equal(form.shippingService, "SEDEX");
+    assert.equal(form.trackingCode, "AB123456789BR");
+    assert.equal(form.neighborhood, "Jardim Modelo");
   });
 });
 
