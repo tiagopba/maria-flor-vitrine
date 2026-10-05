@@ -41,9 +41,10 @@
   (`record_source`, `UNKNOWN`, selo "Histórico"), filtros paginados (>1000),
   ordenação por data da venda e o **importador histórico (só dry-run
   executável sem aprovação; nada importado)**.
-- **2 migrations novas estão escritas e testadas, mas NÃO aplicadas** no banco
-  real (seção 3). O Preview desta branch **erra na listagem do Faturamento**
-  até elas serem aplicadas (o código lê `record_source`).
+- **As 2 migrations de 05/10 foram aplicadas** no banco real (seção 3). Há **1
+  migration nova, `20261005200000_sellers_least_privilege.sql`, commitada, mas
+  ainda NÃO aplicada** (seção 3): endurece privilégios de `sellers` para
+  `anon`/`authenticated`.
 - **O CSV real do histórico ainda NÃO foi importado — nem sequer rodado em
   dry-run.** A Bruniani **continua ativa** (não foi desativada).
 - Nenhum merge pendente foi feito sem aprovação; nenhum dado real foi alterado
@@ -100,10 +101,28 @@ produção o tempo todo (ver seção 16).
 Todas até `20261005120000_fulfillment_records.sql` **estão aplicadas** (a do
 Faturamento foi aplicada pelo usuário). **NUNCA editar migration já aplicada.**
 
-### Migrations 🔴 PENDENTES (escritas, testadas, NÃO aplicadas)
-Aplicar **nesta ordem**, cada uma como script único, e **antes** do merge da
-branch (aplicar migrations antes do merge é seguro para o Production atual;
-fazer merge antes de aplicar quebra a listagem do Faturamento):
+### Migrations aplicadas em 2026-10-05 (confirmadas por leitura)
+- `20261005190000_sellers_rls_and_optional_whatsapp.sql` — aplicada. WhatsApp
+  anulável confirmado; Preview validado com sessão Admin.
+- `20261005190100_fulfillment_historical_import_support.sql` — aplicada.
+  Colunas `record_source`, `import_batch`, `import_ref` e os 2 registros
+  conferidos. Constraints e índice parcial: **confirmação no SQL Editor
+  pendente** (consultas de `pg_constraint` e `pg_indexes`).
+
+### Migrations 🔴 PENDENTES (escritas e testadas estaticamente, NÃO aplicadas)
+- `20261005200000_sellers_least_privilege.sql` (commit `05430bf`) — objetivo:
+  remover privilégios desnecessários em `public.sellers`. `anon`: `revoke all`
+  (nenhum fluxo usa sellers com o client anon). `authenticated`: `revoke
+  truncate, references, trigger`; mantém SELECT, INSERT e UPDATE, decididos
+  pela RLS `is_admin()`. Sem `CASCADE`, sem mudança em policies, grants de
+  `service_role`/`postgres` intocados. Testes estáticos 172/172
+  (`least-privilege.test.ts`). **Validação real do banco ainda pendente** e
+  **merge da branch ainda pendente**:
+  aplicar só depois de conferir `information_schema.role_table_grants`, e
+  reteste do Preview (listar, editar, contato, criar, reordenar) com sessão
+  Admin.
+
+Conteúdo das duas migrations já aplicadas (referência; não editar):
 
 1. `supabase/migrations/20261005190000_sellers_rls_and_optional_whatsapp.sql`
    - `sellers`: policies `select/insert/update` só com `is_admin()` (Admin/Master);
@@ -375,8 +394,9 @@ Fixture **fictícia** com relatório de exemplo em
 
 ## 11. Testes executados
 
-**No repositório (`npm test`, branch atual): 150/150**, mais `tsc --noEmit`,
-`eslint` e `next build` limpos em `9b76633`. Cobrem: parsers DANFE/J&T/Correios,
+**No repositório (`npm test`, branch atual): 172/172** (22 novos testes
+estáticos de privilégios em `least-privilege.test.ts`), mais `tsc --noEmit`,
+`eslint` e `next build` limpos no commit `05430bf`. Cobrem: parsers DANFE/J&T/Correios,
 comparação, schemas, busca/filtros, plano de atualização de situação,
 vendedoras (nome, WhatsApp ativa/inativa, reativação, ausência de DELETE,
 permissões Admin/Master via varredura estática, WhatsApp/round-robin filtrando
@@ -407,7 +427,8 @@ dry-run com o CSV real; apply do importador.
 
 ## 12. Decisões e pendências abertas
 
-1. **Aplicar as 2 migrations** (seção 3) — aguardam aprovação do usuário.
+1. **Aplicar `20261005200000_sellers_least_privilege`** (seção 3), depois de
+   validar os grants no banco. As 2 migrations de 05/10 já estão aplicadas.
 2. **Ordem:** migrations primeiro, **depois** merge de `feature/gestao-vendedoras`.
 3. **CSV real:** fornecer o arquivo e rodar o **dry-run** antes de qualquer
    decisão de regra (ano de 2 dígitos; células de entrega com textos fora de
@@ -476,8 +497,9 @@ dry-run com o CSV real; apply do importador.
 
 ## 15. Próximos passos exatos (em ordem; nada sem aprovação)
 
-1. Usuário revisa e **aplica** no SQL Editor, como scripts únicos e nesta
-   ordem: `20261005190000_...` e depois `20261005190100_...`.
+1. (Feito) As migrations `20261005190000_...` e `20261005190100_...` foram
+   aplicadas. **Pendente:** usuário aplica `20261005200000_sellers_least_privilege`
+   no SQL Editor, como script único, e confere os grants (seção 3).
 2. Verificar no banco real (somente leitura): policies de `sellers`
    (`select/insert/update` só `is_admin`), colunas `record_source`,
    `import_batch`, `import_ref`, `whatsapp_number` anulável, as 4 vendedoras
