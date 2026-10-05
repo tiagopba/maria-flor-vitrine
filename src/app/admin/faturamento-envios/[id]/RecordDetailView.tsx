@@ -7,6 +7,7 @@ import { formatCpfCnpj, formatPostalCode } from "@/lib/fulfillment/text";
 import { DeliveryStatusBadge } from "../RecordsTable";
 import { CopyButton } from "./CopyButton";
 import { updateDeliveryAction } from "./actions";
+import { PostSalePanel, type PostSaleItem } from "./PostSalePanel";
 import { UpdateSituationPanel } from "./UpdateSituationPanel";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -33,10 +34,13 @@ const documentButton =
 export function RecordDetailView({
   record,
   sellerName,
+  postSale,
 }: {
   record: FulfillmentRecord;
   /** Nome da vendedora de record.seller_id (public.sellers), quando houver. */
   sellerName: string | null;
+  /** Pós-venda: mensagens, links e estados já calculados no servidor. */
+  postSale: PostSaleItem[];
 }) {
   const documents = documentAvailability(record);
 
@@ -80,6 +84,10 @@ export function RecordDetailView({
           {HISTORICAL_NO_DOCUMENTS_MESSAGE}
         </p>
       )}
+
+      <div className="mb-5">
+        <PostSalePanel recordId={record.id} items={postSale} />
+      </div>
 
       <div className="mb-5">
         <UpdateSituationPanel

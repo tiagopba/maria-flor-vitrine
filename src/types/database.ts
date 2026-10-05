@@ -470,7 +470,16 @@ export interface Database {
         {
           id: string;
           record_id: string;
-          action: "CREATED" | "DOCUMENT_VIEWED" | "DELIVERY_UPDATED";
+          action:
+            | "CREATED"
+            | "DOCUMENT_VIEWED"
+            | "DELIVERY_UPDATED"
+            | "TRACKING_WHATSAPP_OPENED"
+            | "TRACKING_MESSAGE_CONFIRMED"
+            | "DELIVERY_CONFIRMATION_WHATSAPP_OPENED"
+            | "DELIVERY_CONFIRMATION_CONFIRMED"
+            | "GOOGLE_REVIEW_WHATSAPP_OPENED"
+            | "GOOGLE_REVIEW_CONFIRMED";
           actor_id: string | null;
           details: Record<string, unknown>;
           created_at: string;
