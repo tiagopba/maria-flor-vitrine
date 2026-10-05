@@ -8,21 +8,27 @@ import type { SellerFormState } from "./actions";
 type SellerFormAction = (state: SellerFormState, formData: FormData) => Promise<SellerFormState>;
 
 export interface SellerFormDefaults {
-  name: string;
   whatsapp_number: string;
   phone: string | null;
-  active: boolean;
   round_robin: boolean;
 }
 
 const initialState: SellerFormState = {};
 
+/**
+ * mode "create" (NOVA VENDEDORA): nome, contato e se já nasce ativa.
+ * mode "contact" (CONTATO): só WhatsApp/telefone/rodízio — nome e ativa/inativa
+ * têm ações próprias (EDITAR NOME, DESATIVAR/REATIVAR) para ninguém trocar uma
+ * pessoa por outra editando um cadastro antigo.
+ */
 export function SellerForm({
   action,
+  mode,
   defaultValues,
   submitLabel,
 }: {
   action: SellerFormAction;
+  mode: "create" | "contact";
   defaultValues?: SellerFormDefaults;
   submitLabel: string;
 }) {
@@ -30,15 +36,17 @@ export function SellerForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
-      <Input
-        id="name"
-        name="name"
-        label="Nome"
-        placeholder="Ex: Ana"
-        defaultValue={defaultValues?.name}
-        error={state.fieldErrors?.name}
-        required
-      />
+      {mode === "create" && (
+        <Input
+          id="name"
+          name="name"
+          label="Nome"
+          placeholder="Ex: Ana"
+          error={state.fieldErrors?.name}
+          autoComplete="off"
+          required
+        />
+      )}
 
       <Input
         id="whatsapp_number"
@@ -59,15 +67,12 @@ export function SellerForm({
         error={state.fieldErrors?.phone}
       />
 
-      <label className="flex items-center gap-2 text-sm text-text">
-        <input
-          type="checkbox"
-          name="active"
-          defaultChecked={defaultValues?.active ?? true}
-          className="h-4 w-4 rounded border-border"
-        />
-        Ativa
-      </label>
+      {mode === "create" && (
+        <label className="flex items-center gap-2 text-sm text-text">
+          <input type="checkbox" name="active" defaultChecked className="h-4 w-4 rounded border-border" />
+          Ativa (aparece para novas vendas e no WhatsApp)
+        </label>
+      )}
 
       <label className="flex items-center gap-2 text-sm text-text">
         <input

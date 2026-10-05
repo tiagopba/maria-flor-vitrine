@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "node --test \"src/lib/fulfillment/__tests__/*.test.ts\" \"src/lib/catalog/__tests__/*.test.ts\""
+    "test": "node --test \"src/lib/fulfillment/__tests__/*.test.ts\" \"src/lib/catalog/__tests__/*.test.ts\" \"src/lib/sellers/__tests__/*.test.ts\""
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",

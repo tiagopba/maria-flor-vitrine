@@ -232,6 +232,14 @@ export async function getFulfillmentFilterOptions(): Promise<FulfillmentFilterOp
   };
 }
 
+/** A vendedora existe e está ATIVA? (regra de uma NOVA venda; histórico não passa por aqui.) */
+export async function isActiveSeller(sellerId: string): Promise<boolean> {
+  if (!isUuid(sellerId)) return false;
+  const supabase = await createClient();
+  const { data } = await supabase.from("sellers").select("id").eq("id", sellerId).eq("active", true).maybeSingle();
+  return Boolean(data);
+}
+
 export async function getSellerName(sellerId: string | null): Promise<string | null> {
   if (!sellerId) return null;
   const supabase = await createClient();

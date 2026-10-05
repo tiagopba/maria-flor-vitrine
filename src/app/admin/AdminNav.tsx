@@ -46,7 +46,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Cores", href: "/admin/cores", icon: Palette, available: true },
   { label: "Tamanhos", href: "/admin/tamanhos", icon: Ruler, available: true },
   { label: "Clientes/Leads", href: "/admin/leads", icon: Users, available: false },
-  { label: "Vendedoras", href: "/admin/vendedoras", icon: UserRound, available: true },
+  { label: "Vendedoras", href: "/admin/vendedoras", icon: UserRound, available: true, adminOnly: true },
   { label: "Faturamento e Envios", href: "/admin/faturamento-envios", icon: Truck, available: true, adminOnly: true },
   { label: "Relatórios", href: "/admin/relatorios", icon: BarChart3, available: false },
   { label: "Configurações", href: "/admin/configuracoes", icon: Settings, available: true, adminOnly: true },
