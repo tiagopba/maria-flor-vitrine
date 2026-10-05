@@ -73,6 +73,7 @@ export interface DocumentComparison {
 export interface FulfillmentFormValues {
   customerName: string;
   customerDocument: string;
+  customerWhatsapp: string;
   addressLine: string;
   addressNumber: string;
   addressComplement: string;

@@ -100,7 +100,7 @@ describe("WhatsApp: sem número não há link; com número usa api.whatsapp.com"
 
   it("com número → api.whatsapp.com/send com o texto codificado", () => {
     const url = whatsappUrl("(67) 99999-0000", "Olá & tchau")!;
-    assert.equal(url, "https://api.whatsapp.com/send?phone=67999990000&text=Ol%C3%A1%20%26%20tchau");
+    assert.equal(url, "https://api.whatsapp.com/send?phone=5567999990000&text=Ol%C3%A1%20%26%20tchau");
     assert.ok(!url.includes("wa.me"));
   });
 });
@@ -210,5 +210,36 @@ describe("auditoria: constraint ampliada e nomes fixos", () => {
         "TRACKING_WHATSAPP_OPENED",
       ]
     );
+  });
+});
+
+describe("reenvio: novo ciclo, nova confirmação, histórico preservado", () => {
+  const enabled = { enabled: true, reason: null };
+  const ev = (action: string, created_at: string, actor_name = "Mayra"): PostSaleEvent => ({ action, created_at, actor_name });
+
+  it("depois de CONFIRMED, ABRIR de novo é permitido e volta a exigir confirmação", () => {
+    const history = [
+      ev("TRACKING_WHATSAPP_OPENED", "2026-10-05T19:40:00Z"),
+      ev("TRACKING_MESSAGE_CONFIRMED", "2026-10-05T19:43:00Z"),
+    ];
+    assert.equal(derivePostSaleState(history, "tracking").state, "confirmed");
+
+    const reopen = planPostSaleEvent({ kind: "tracking", phase: "opened", availability: enabled, state: "confirmed" });
+    assert.deepEqual(reopen, { ok: true, action: "TRACKING_WHATSAPP_OPENED" });
+
+    const afterReopen = [...history, ev("TRACKING_WHATSAPP_OPENED", "2026-10-06T10:00:00Z")];
+    const state = derivePostSaleState(afterReopen, "tracking");
+    assert.equal(state.state, "opened");
+    assert.equal(planPostSaleEvent({ kind: "tracking", phase: "confirmed", availability: enabled, state: state.state }).ok, true);
+  });
+
+  it("o histórico anterior não é sobrescrito: a última confirmação continua visível", () => {
+    const afterReopen = [
+      ev("TRACKING_MESSAGE_CONFIRMED", "2026-10-05T19:43:00Z", "Mayra"),
+      ev("TRACKING_WHATSAPP_OPENED", "2026-10-06T10:00:00Z", "Lidiane"),
+    ];
+    const state = derivePostSaleState(afterReopen, "tracking");
+    assert.equal(state.confirmed?.actor_name, "Mayra");
+    assert.equal(state.opened?.actor_name, "Lidiane");
   });
 });

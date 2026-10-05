@@ -2,6 +2,7 @@
 // NENHUMA mensagem é enviada aqui: o sistema só prepara o texto, abre o WhatsApp
 // e registra o clique. "Enviado" só existe quando o funcionário confirma.
 import type { DeliveryStatus } from "./delivery.ts";
+import { normalizeCustomerWhatsapp } from "./phone.ts";
 import { normalizeForCompare } from "./text.ts";
 
 export const POST_SALE_KINDS = ["tracking", "delivery", "review"] as const;
@@ -126,9 +127,11 @@ export function buildGoogleReviewMessage(customerName: string): string {
  * Sem número → null: a UI mostra "sem WhatsApp" e oferece só copiar a mensagem.
  */
 export function whatsappUrl(phone: string | null | undefined, text: string): string | null {
-  const digits = (phone ?? "").replace(/\D/g, "");
-  if (digits.length < 10) return null;
-  return `https://api.whatsapp.com/send?phone=${digits}&text=${encodeURIComponent(text)}`;
+  if (!phone) return null;
+  // Sempre com o código do país 55 (normalizado antes de montar o link).
+  const normalized = normalizeCustomerWhatsapp(phone);
+  if (!normalized.ok) return null;
+  return `https://api.whatsapp.com/send?phone=${normalized.value}&text=${encodeURIComponent(text)}`;
 }
 
 export interface PostSaleInput {

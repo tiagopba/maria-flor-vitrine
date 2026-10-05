@@ -14,6 +14,7 @@ import {
   whatsappUrl,
   type PostSaleKind,
 } from "@/lib/fulfillment/post-sale";
+import { formatCustomerWhatsapp } from "@/lib/fulfillment/phone";
 import { RecordDetailView } from "./RecordDetailView";
 
 export const metadata: Metadata = { title: "Detalhes do registro — Faturamento e Envios" };
@@ -26,9 +27,8 @@ export default async function FulfillmentDetailPage({ params }: PageProps<"/admi
   if (!record) notFound();
   const sellerName = await getSellerName(record.seller_id);
 
-  // A tabela ainda NÃO guarda o WhatsApp do cliente (decisão pendente). Até existir,
-  // o link fica vazio e a tela oferece só copiar a mensagem.
-  const customerPhone: string | null = null;
+  // WhatsApp do cliente: NULL nos registros atuais. Sem ele, o link fica vazio e a tela oferece só copiar.
+  const customerPhone: string | null = record.customer_whatsapp ?? null;
 
   const events = await listPostSaleEvents(id);
   const availability = postSaleAvailability({
@@ -60,7 +60,12 @@ export default async function FulfillmentDetailPage({ params }: PageProps<"/admi
   return (
     <>
       <SuccessToast />
-      <RecordDetailView record={record} sellerName={sellerName} postSale={postSale} />
+      <RecordDetailView
+        record={record}
+        sellerName={sellerName}
+        postSale={postSale}
+        customerWhatsapp={formatCustomerWhatsapp(customerPhone)}
+      />
     </>
   );
 }

@@ -7,6 +7,7 @@ import { formatCpfCnpj, formatPostalCode } from "@/lib/fulfillment/text";
 import { DeliveryStatusBadge } from "../RecordsTable";
 import { CopyButton } from "./CopyButton";
 import { updateDeliveryAction } from "./actions";
+import { CustomerWhatsappPanel } from "./CustomerWhatsappPanel";
 import { PostSalePanel, type PostSaleItem } from "./PostSalePanel";
 import { UpdateSituationPanel } from "./UpdateSituationPanel";
 
@@ -35,12 +36,15 @@ export function RecordDetailView({
   record,
   sellerName,
   postSale,
+  customerWhatsapp,
 }: {
   record: FulfillmentRecord;
   /** Nome da vendedora de record.seller_id (public.sellers), quando houver. */
   sellerName: string | null;
   /** Pós-venda: mensagens, links e estados já calculados no servidor. */
   postSale: PostSaleItem[];
+  /** WhatsApp do cliente já formatado para exibir (null = não cadastrado). */
+  customerWhatsapp: string | null;
 }) {
   const documents = documentAvailability(record);
 
@@ -84,6 +88,10 @@ export function RecordDetailView({
           {HISTORICAL_NO_DOCUMENTS_MESSAGE}
         </p>
       )}
+
+      <div className="mb-5">
+        <CustomerWhatsappPanel recordId={record.id} display={customerWhatsapp} />
+      </div>
 
       <div className="mb-5">
         <PostSalePanel recordId={record.id} items={postSale} />

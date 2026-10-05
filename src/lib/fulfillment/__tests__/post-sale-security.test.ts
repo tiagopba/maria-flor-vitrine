@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
@@ -32,11 +32,19 @@ describe("pós-venda: acesso e nada automático", () => {
     assert.match(read(PURE), /api\.whatsapp\.com\/send/);
   });
 
-  it("ABRIR só registra depois de OK e abre a janela só então; nunca confirma sozinho", () => {
+  it("popup: a aba é aberta DENTRO do clique (antes de qualquer await) e só recebe o link após o OPENED", () => {
     const panel = read(PANEL);
-    assert.match(panel, /const ok = await run\("opened"\);\s*if \(ok\) window\.open/);
-    assert.match(panel, /confirmSent[\s\S]*window\.confirm/);
-    assert.doesNotMatch(panel, /run\("confirmed"\)[^;]*\n[^}]*openWhatsapp/);
+    const openAt = panel.indexOf("window.open(\"\", \"_blank\")");
+    const awaitAt = panel.indexOf("await registerPostSaleEvent(recordId, item.kind, \"opened\")");
+    assert.ok(openAt > 0 && awaitAt > openAt, "window.open tem de vir antes do await");
+    assert.match(panel, /if \(!result\.ok\) \{\s*win\.close\(\);/);
+    assert.match(panel, /win\.location\.href = item\.url!/);
+  });
+
+  it("nunca confirma sozinho: CONFIRMADO só sai do botão CONFIRMAR QUE ENVIEI com confirmação", () => {
+    const panel = read(PANEL);
+    assert.match(panel, /const confirmSent = \(\) => \{\s*if \(!window\.confirm/);
+    assert.doesNotMatch(panel, /"confirmed"\)[^\n]*\n[^\n]*openWhatsapp/);
   });
 });
 
@@ -69,5 +77,48 @@ describe("pós-venda: migration proposta", () => {
 
   it("a migration proposta mantém as ações antigas", () => {
     for (const a of ["CREATED", "DOCUMENT_VIEWED", "DELIVERY_UPDATED"]) assert.match(migration, new RegExp(`'${a}'`));
+  });
+});
+
+describe("WhatsApp do cliente: privado, fora da auditoria e de analytics", () => {
+  const WA_ACTION = "src/app/admin/faturamento-envios/[id]/customer-whatsapp-actions.ts";
+  const WA_PANEL = "src/app/admin/faturamento-envios/[id]/CustomerWhatsappPanel.tsx";
+  const WA_DB = "src/lib/db/customer-whatsapp.ts";
+
+  it("a action de edição exige Admin/Master e audita só o nome do campo", () => {
+    const source = read(WA_ACTION);
+    assert.match(source, /requireAdmin\(\["admin", "master"\]\)/);
+    assert.match(source, /details: \{ changed_fields: \["customer_whatsapp"\] \}/);
+    assert.doesNotMatch(source, /details:[^}]*parsed\.value/);
+  });
+
+  it("o número nunca entra em details de auditoria, em nenhum arquivo", () => {
+    for (const file of [WA_ACTION, WA_DB, WA_PANEL, PAGE, PANEL, DB]) {
+      const source = read(file);
+      const audit = source.match(/details:[^\n]*/g) ?? [];
+      for (const line of audit) assert.doesNotMatch(line, /parsed|value|phone|raw|telefone/, file);
+    }
+  });
+
+  it("o WhatsApp não aparece em analytics, Pixel/CAPI nem localStorage", () => {
+    for (const file of [WA_ACTION, WA_DB, WA_PANEL, PAGE, PANEL, PURE]) {
+      assert.doesNotMatch(read(file), /localStorage|sessionStorage/, file);
+    }
+    for (const dir of ["src/lib/analytics", "src/lib/capi", "src/lib/pixel"]) {
+      try {
+        for (const f of readdirSync(join(ROOT, dir))) {
+          assert.doesNotMatch(read(join(dir, f)), /customer_whatsapp/, f);
+        }
+      } catch {
+        // pasta inexistente: nada a verificar
+      }
+    }
+  });
+
+  it("migration proposta: coluna opcional e formato 55+DDD+9 (sem alterar registros)", () => {
+    const migration = read("supabase/migrations/20261005230000_fulfillment_customer_whatsapp.sql");
+    assert.match(migration, /add column if not exists customer_whatsapp text/);
+    assert.match(migration, /customer_whatsapp is null or customer_whatsapp ~ '\^55\[1-9\]\[0-9\]9\[0-9\]\{8\}\$'/);
+    assert.doesNotMatch(migration, /\b(delete|truncate|update|insert)\b/i);
   });
 });

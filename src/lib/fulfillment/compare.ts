@@ -135,6 +135,8 @@ export function mergeToFormValues(
   return {
     customerName: danfe?.customerName ?? label?.recipientName ?? "",
     customerDocument: danfe?.customerDocument ?? "",
+    // WhatsApp não vem dos PDFs: começa vazio e o funcionário preenche.
+    customerWhatsapp: "",
     addressLine: danfe?.addressLine ?? label?.addressStreet ?? label?.addressLine ?? "",
     addressNumber: danfe?.addressNumber ?? label?.addressNumber ?? "",
     addressComplement: danfe?.addressComplement ?? label?.addressComplement ?? "",

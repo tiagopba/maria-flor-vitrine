@@ -419,6 +419,8 @@ export interface Database {
           id: string;
           customer_name: string;
           customer_cpf: string | null;
+          // WhatsApp do cliente: 55 + DDD + celular, só dígitos. NULL = não cadastrado. Dado pessoal privado.
+          customer_whatsapp: string | null;
           customer_name_search: string;
           address_line: string | null;
           address_number: string | null;

@@ -12,7 +12,7 @@ import { registerPostSaleEvent } from "./post-sale-actions";
 export interface PostSaleItem {
   kind: PostSaleKind;
   message: string | null;
-  /** null quando não há WhatsApp cadastrado para o cliente. */
+  /** null quando o cliente não tem WhatsApp cadastrado. */
   url: string | null;
   availability: Availability;
   state: PostSaleState;
@@ -33,7 +33,7 @@ function Status({ item }: { item: PostSaleItem }) {
   if (item.state.state === "opened" && item.state.opened) {
     return (
       <p className="text-sm text-text">
-        <span className="font-medium">WhatsApp aberto, envio ainda não confirmado</span>
+        <span className="font-medium">WhatsApp aberto — envio ainda não confirmado</span>
         <span className="text-text-muted">
           {" "}
           · aberto em {atText(item.state.opened.created_at)}
@@ -48,32 +48,46 @@ function Status({ item }: { item: PostSaleItem }) {
 function ActionBlock({ item, recordId, onDone }: { item: PostSaleItem; recordId: string; onDone: () => void }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const confirmed = item.state.state === "confirmed";
 
-  const run = (phase: "opened" | "confirmed") =>
-    new Promise<boolean>((resolve) => {
-      startTransition(async () => {
-        const result = await registerPostSaleEvent(recordId, item.kind, phase);
-        if (!result.ok) {
-          setError(result.error);
-          resolve(false);
-          return;
-        }
-        setError(null);
-        onDone();
-        resolve(true);
-      });
-    });
-
-  /** Só abre o WhatsApp depois que o registro do clique deu certo. Abrir ≠ enviado. */
-  const openWhatsapp = async () => {
+  /**
+   * ABRIR WHATSAPP — robusto contra popup blocker:
+   * window.open() é chamado DENTRO do clique (com o gesto do usuário), antes de qualquer await.
+   * A aba nasce vazia; só recebe o endereço do WhatsApp depois que o OPENED foi gravado.
+   * Se a gravação falhar, a aba vazia é fechada e nada é aberto.
+   */
+  const openWhatsapp = () => {
     if (!item.url) return;
-    const ok = await run("opened");
-    if (ok) window.open(item.url, "_blank", "noopener");
+    const win = window.open("", "_blank");
+    if (!win) {
+      setError("O navegador bloqueou a nova aba. Permita pop-ups para este site e tente de novo.");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const result = await registerPostSaleEvent(recordId, item.kind, "opened");
+      if (!result.ok) {
+        win.close();
+        setError(result.error);
+        return;
+      }
+      win.opener = null;
+      win.location.href = item.url!;
+      onDone();
+    });
   };
 
   const confirmSent = () => {
     if (!window.confirm("Confirma que você já enviou esta mensagem pelo WhatsApp?")) return;
-    void run("confirmed");
+    startTransition(async () => {
+      const result = await registerPostSaleEvent(recordId, item.kind, "confirmed");
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setError(null);
+      onDone();
+    });
   };
 
   const canOpen = item.availability.enabled && Boolean(item.url);
@@ -95,15 +109,13 @@ function ActionBlock({ item, recordId, onDone }: { item: PostSaleItem; recordId:
       )}
 
       {item.availability.enabled && !item.url && (
-        <p className="text-sm text-text-muted">
-          Este cliente não tem WhatsApp cadastrado, então não é possível abrir a conversa automaticamente. Copie a mensagem e envie pelo WhatsApp.
-        </p>
+        <p className="text-sm text-text-muted">Cadastre o WhatsApp do cliente para abrir a conversa.</p>
       )}
 
       <div className="flex flex-wrap gap-2">
         {item.message && <CopyButton value={item.message} label="COPIAR MENSAGEM" />}
         <Button type="button" size="sm" disabled={!canOpen || pending} onClick={openWhatsapp}>
-          ABRIR WHATSAPP
+          {confirmed ? "REENVIAR PELO WHATSAPP" : "ABRIR WHATSAPP"}
         </Button>
         {canConfirm && (
           <Button type="button" size="sm" variant="secondary" disabled={pending} onClick={confirmSent}>
@@ -112,7 +124,11 @@ function ActionBlock({ item, recordId, onDone }: { item: PostSaleItem; recordId:
         )}
       </div>
 
-      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-red-700">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
@@ -135,4 +151,3 @@ export function PostSalePanel({ recordId, items }: { recordId: string; items: Po
     </section>
   );
 }
-
