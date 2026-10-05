@@ -99,12 +99,21 @@ export function conferir(input: ConfereInput): ConfereOutcome {
   // J&T: a etiqueta real não separa o bairro de forma confiável. Bairro AUSENTE nela não é aviso:
   // fica não comparável naquele documento. Bairro presente segue a regra normal (REVIEW se diferente).
   // A comparação cliente × DANFE continua valendo.
+  // Mesma regra para o complemento: a etiqueta J&T não o separa de forma confiável.
   const isJtLabel = trackingCarrier(label?.carrier) === "jt";
-  if (isJtLabel && !label?.neighborhood) {
+  const NOT_SEPARATED: Record<string, string> = {
+    bairro: "Bairro não separado na etiqueta J&T: não comparável neste documento.",
+    complemento: "Complemento não separado na etiqueta J&T: não comparável neste documento.",
+  };
+  if (isJtLabel) {
+    const separated: Record<string, string | null | undefined> = {
+      bairro: label?.neighborhood,
+      complemento: label?.addressComplement,
+    };
     for (const r of labelResults) {
-      if (r.field === "bairro") {
+      if (r.field in NOT_SEPARATED && !separated[r.field]) {
         r.verdict = "NOT_COMPARABLE";
-        r.reason = "Bairro não separado na etiqueta J&T: não comparável neste documento.";
+        r.reason = NOT_SEPARATED[r.field];
       }
     }
   }

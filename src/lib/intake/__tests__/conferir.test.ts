@@ -144,7 +144,7 @@ describe("CONFERE GERAL: 🟡 revisão", () => {
   });
 
   it("amarelo exige marcar TODOS os avisos antes de aprovar", () => {
-    const r = run({ label: { neighborhood: null, addressComplement: null } });
+    const r = run({ label: { neighborhood: null, addressComplement: null, carrier: "Correios" } });
     assert.equal(r.verdict, "REVIEW");
     assert.equal(canApprove(r, []).ok, false);
     assert.equal(canApprove(r, ["etiqueta_bairro"]).ok, false);
@@ -215,5 +215,44 @@ describe("J&T: bairro não separado na etiqueta", () => {
     const r = run({ label: jt() });
     assert.equal(r.results.find((x) => x.field === "etiqueta_bairro")!.verdict, "NOT_COMPARABLE");
     assert.deepEqual(r.reviewFields, []);
+  });
+});
+
+describe("J&T: complemento não separado na etiqueta", () => {
+  const jt = (over: Partial<ShippingLabelData> = {}) => ({ addressComplement: null, carrier: "J&T Express", ...over });
+
+  it("complemento ausente na etiqueta J&T → NÃO comparável, sem REVIEW", () => {
+    const r = run({ label: jt() });
+    assert.equal(fieldOf(r, "etiqueta_complemento"), "NOT_COMPARABLE");
+    assert.equal(r.reviewFields.includes("etiqueta_complemento"), false);
+    assert.equal(r.verdict, "GREEN");
+  });
+
+  it("complemento ausente na etiqueta dos Correios continua REVIEW", () => {
+    const r = run({ label: { addressComplement: null, carrier: "Correios" } });
+    assert.equal(fieldOf(r, "etiqueta_complemento"), "REVIEW");
+  });
+
+  it("cliente × DANFE com complemento diferente → REVIEW, mesmo com etiqueta J&T", () => {
+    const r = run({ label: jt(), expected: { address: { ...EXPECTED.address, complement: "Casa 2" } } });
+    assert.equal(fieldOf(r, "nf_complemento"), "REVIEW");
+    assert.equal(r.verdict, "REVIEW");
+  });
+
+  it("complemento claramente extraído da etiqueta J&T e incompatível → REVIEW", () => {
+    const r = run({ label: jt({ addressComplement: "Casa 2" }) });
+    assert.equal(fieldOf(r, "etiqueta_complemento"), "REVIEW");
+  });
+
+  it("complemento extraído da etiqueta J&T e igual → OK", () => {
+    const r = run({ label: jt({ addressComplement: "Apto 4" }) });
+    assert.equal(fieldOf(r, "etiqueta_complemento"), "OK");
+  });
+
+  it("J&T sem bairro NEM complemento separados: nenhum dos dois vira aviso", () => {
+    const r = run({ label: jt({ neighborhood: null }) });
+    assert.equal(r.reviewFields.includes("etiqueta_complemento"), false);
+    assert.equal(r.reviewFields.includes("etiqueta_bairro"), false);
+    assert.equal(r.verdict, "GREEN");
   });
 });
