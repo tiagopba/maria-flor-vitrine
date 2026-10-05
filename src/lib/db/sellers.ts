@@ -1,7 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import type { SellerInput } from "@/lib/validation/seller";
+import type { SellerContactInput, SellerInput } from "@/lib/validation/seller";
 import type { Database } from "@/types/database";
 
 export type Seller = Database["public"]["Tables"]["sellers"]["Row"];
@@ -22,6 +22,7 @@ export async function getSellerByIdAdmin(id: string): Promise<Seller | null> {
   return data;
 }
 
+/** NOVA VENDEDORA: sempre um registro novo — o id é gerado pelo banco, nunca informado nem reaproveitado. */
 export async function createSeller(input: SellerInput): Promise<Seller> {
   const supabase = await createClient();
 
@@ -44,17 +45,56 @@ export async function createSeller(input: SellerInput): Promise<Seller> {
   return data;
 }
 
-export async function updateSeller(id: string, input: SellerInput): Promise<Seller> {
+/**
+ * Toda alteração abaixo falha em vez de passar em silêncio quando a RLS ou o
+ * id não afetam nenhuma linha (`.select("id").maybeSingle()`).
+ *
+ * NUNCA existe DELETE de vendedora: pedidos antigos continuam ligados ao
+ * mesmo `seller_id`, então quem sai da loja é só DESATIVADA (active = false).
+ */
+
+/** EDITAR NOME: corrige a grafia da MESMA pessoa (mesmo id, mesmos vínculos históricos). */
+export async function renameSeller(id: string, name: string): Promise<void> {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("sellers").update(input).eq("id", id).select("*").single();
+  const { data, error } = await supabase.from("sellers").update({ name }).eq("id", id).select("id").maybeSingle();
   if (error) throw new Error(error.message);
-  return data;
+  if (!data) throw new Error("Vendedora não encontrada.");
 }
 
+/** Contato e rodízio (WhatsApp, telefone, participa do round-robin) — não mexe em nome nem em ativa/inativa. */
+export async function updateSellerContact(id: string, input: SellerContactInput): Promise<void> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("sellers").update(input).eq("id", id).select("id").maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Vendedora não encontrada.");
+}
+
+/** DESATIVAR (false) / REATIVAR (true) de quem JÁ tem WhatsApp. Só muda `active`; nada é apagado. */
 export async function setSellerActive(id: string, active: boolean): Promise<void> {
   const supabase = await createClient();
-  const { error } = await supabase.from("sellers").update({ active }).eq("id", id);
+  const { data, error } = await supabase.from("sellers").update({ active }).eq("id", id).select("id").maybeSingle();
+  if (error) {
+    // 23514 = check violation: vendedora ativa precisa de WhatsApp (regra também no banco).
+    if (error.code === "23514") throw new Error("Informe um WhatsApp válido para reativar esta vendedora.");
+    throw new Error(error.message);
+  }
+  if (!data) throw new Error("Vendedora não encontrada.");
+}
+
+/**
+ * REATIVAR uma vendedora histórica SEM WhatsApp: grava o número e o `active = true`
+ * no MESMO comando (o banco recusa ativa sem número). Nunca inventa número.
+ */
+export async function reactivateSellerWithWhatsapp(id: string, whatsappNumber: string): Promise<void> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("sellers")
+    .update({ active: true, whatsapp_number: whatsappNumber })
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
   if (error) throw new Error(error.message);
+  if (!data) throw new Error("Vendedora não encontrada.");
 }
 
 export async function moveSeller(id: string, direction: "up" | "down"): Promise<void> {

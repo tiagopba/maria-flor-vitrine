@@ -1,4 +1,4 @@
-import type { DeliveryStatus } from "./delivery.ts";
+import type { DeliveryStatus, RecordSource } from "./delivery.ts";
 import { formatIsoDate } from "./format.ts";
 import type { DeliveryUpdateInput } from "./schema.ts";
 
@@ -43,7 +43,11 @@ export type DeliveryUpdatePlan =
  *   (a data é removida, nunca deixada incoerente);
  * - sem nenhuma alteração, não grava nem audita.
  */
-export function planDeliveryUpdate(current: DeliveryState, input: DeliveryUpdateInput): DeliveryUpdatePlan {
+export function planDeliveryUpdate(
+  current: DeliveryState,
+  input: DeliveryUpdateInput,
+  recordSource: RecordSource = "PDF_UPLOAD"
+): DeliveryUpdatePlan {
   const update: DeliveryState = {
     delivery_status: input.delivery_status,
     expected_delivery_date: input.expected_delivery_date,
@@ -53,6 +57,12 @@ export function planDeliveryUpdate(current: DeliveryState, input: DeliveryUpdate
     shipping_service: input.shipping_service,
     tracking_code: input.tracking_code,
   };
+
+  // UNKNOWN ("Situação não informada") só existe em registro histórico (o banco também recusa).
+  if (update.delivery_status === "UNKNOWN" && recordSource !== "HISTORICAL_IMPORT") {
+    const message = "Situação não informada só vale para registros históricos.";
+    return { ok: false, error: message, fieldErrors: { deliveryStatus: message } };
+  }
 
   const leavingDelivered =
     current.delivery_status === "DELIVERED" && Boolean(current.delivered_at) && update.delivery_status !== "DELIVERED";

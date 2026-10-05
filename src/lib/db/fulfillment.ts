@@ -2,6 +2,7 @@ import "server-only";
 import type { DeliveryState } from "@/lib/fulfillment/delivery-update";
 import { FILTER_NONE, type FulfillmentListFilters } from "@/lib/fulfillment/filters";
 import { buildSearchFilter } from "@/lib/fulfillment/search";
+import { collectFilterOptions, fetchAllPages } from "@/lib/fulfillment/paginate";
 import { listSellersAdmin } from "@/lib/db/sellers";
 import type { FulfillmentRecordFields } from "@/lib/fulfillment/schema";
 import { createClient } from "@/lib/supabase/server";
@@ -34,10 +35,11 @@ export type FulfillmentListItem = Pick<
   | "expected_delivery_date"
   | "delivered_at"
   | "delivery_status"
+  | "record_source"
 >;
 
 const LIST_COLUMNS =
-  "id, customer_name, customer_cpf, nfe_number, invoice_total, carrier, shipping_service, tracking_code, created_at, sale_date, seller_id, sales_origin, expected_delivery_date, delivered_at, delivery_status";
+  "id, customer_name, customer_cpf, nfe_number, invoice_total, carrier, shipping_service, tracking_code, created_at, sale_date, seller_id, sales_origin, expected_delivery_date, delivered_at, delivery_status, record_source";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -66,7 +68,11 @@ export async function listFulfillmentRecords(filters: FulfillmentListFilters): P
   let query = supabase
     .from("fulfillment_records")
     .select(LIST_COLUMNS)
+    // Mais recente VENDA primeiro (importar hoje uma venda antiga não a joga para o topo);
+    // `id` desempata para a paginação nunca repetir nem pular linha.
+    .order("sale_date", { ascending: false })
     .order("created_at", { ascending: false })
+    .order("id", { ascending: true })
     // +1 só para saber se existe próxima página, sem count exato.
     .range(from, from + FULFILLMENT_PAGE_SIZE);
 
@@ -213,23 +219,37 @@ export interface FulfillmentFilterOptions {
 /** Opções dos selects de filtro: vendedoras cadastradas + origens/transportadoras já usadas nos registros. */
 export async function getFulfillmentFilterOptions(): Promise<FulfillmentFilterOptions> {
   const supabase = await createClient();
-  const [sellers, used] = await Promise.all([
+  // Só as colunas origem/transportadora (nenhum dado pessoal), lidas em páginas de 1000 por
+  // PK: com mais de 1000 registros nenhuma opção de filtro some.
+  const [sellers, usedRows] = await Promise.all([
     listSellersAdmin(),
-    supabase.from("fulfillment_records").select("sales_origin, carrier").limit(1000),
+    fetchAllPages(async (from, to) => {
+      const { data, error } = await supabase
+        .from("fulfillment_records")
+        .select("sales_origin, carrier")
+        .or("sales_origin.not.is.null,carrier.not.is.null")
+        .order("id")
+        .range(from, to);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    }),
   ]);
 
-  const origins = new Set<string>();
-  const carriers = new Set<string>();
-  for (const row of used.data ?? []) {
-    if (row.sales_origin) origins.add(row.sales_origin);
-    if (row.carrier) carriers.add(row.carrier);
-  }
+  const { origins, carriers } = collectFilterOptions(usedRows);
 
   return {
     sellers: sellers.map((s) => ({ id: s.id, name: s.name, active: s.active })),
-    origins: [...origins].sort(),
-    carriers: [...carriers].sort(),
+    origins,
+    carriers,
   };
+}
+
+/** A vendedora existe e está ATIVA? (regra de uma NOVA venda; histórico não passa por aqui.) */
+export async function isActiveSeller(sellerId: string): Promise<boolean> {
+  if (!isUuid(sellerId)) return false;
+  const supabase = await createClient();
+  const { data } = await supabase.from("sellers").select("id").eq("id", sellerId).eq("active", true).maybeSingle();
+  return Boolean(data);
 }
 
 export async function getSellerName(sellerId: string | null): Promise<string | null> {

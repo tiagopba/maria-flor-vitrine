@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  ALL_DELIVERY_STATUSES,
   DELIVERY_STATUSES,
   DELIVERY_STATUS_LABELS,
   UNKNOWN_SELLER_LABEL,
   describeSellerOrigin,
   formatOriginLabel,
   isDeliveryStatus,
+  isFormDeliveryStatus,
+  statusesForSource,
 } from "../delivery.ts";
 import { FILTER_NONE, filtersToSearchParams, parseListFilters } from "../filters.ts";
 
@@ -20,8 +23,19 @@ describe("delivery status", () => {
       "Reenviado",
       "Estornado",
       "Problema na entrega",
+      "Situação não informada",
     ]);
     assert.equal(isDeliveryStatus("CONFIRMED"), false);
+  });
+
+  it("UNKNOWN ('Situação não informada') existe, mas NÃO é oferecido no fluxo normal", () => {
+    assert.equal(ALL_DELIVERY_STATUSES.length, 7);
+    assert.equal(DELIVERY_STATUS_LABELS.UNKNOWN, "Situação não informada");
+    assert.equal(isDeliveryStatus("UNKNOWN"), true);
+    assert.equal(isFormDeliveryStatus("UNKNOWN"), false);
+    assert.equal(statusesForSource("PDF_UPLOAD").includes("UNKNOWN"), false);
+    assert.equal(statusesForSource("HISTORICAL_IMPORT").includes("UNKNOWN"), true);
+    assert.deepEqual([...statusesForSource("PDF_UPLOAD")], [...DELIVERY_STATUSES]);
   });
 });
 

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { SuccessToast } from "@/components/admin/SuccessToast";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { listFreeShippingRulesAdmin } from "@/lib/db/shipping";
@@ -30,6 +31,19 @@ export default async function ConfiguracoesPage() {
         Dados que aparecem nas páginas públicas — Quem Somos, Grupo de Ofertas, Como Chegar e o
         rodapé. Nenhum código precisa mudar quando você atualiza algo aqui.
       </p>
+
+      <Link
+        href="/admin/vendedoras"
+        className="mb-6 flex items-center justify-between rounded-2xl border border-border bg-surface p-4 hover:bg-muted"
+      >
+        <span>
+          <span className="block text-sm font-semibold text-text">Vendedoras</span>
+          <span className="block text-xs text-text-muted">
+            Cadastrar, corrigir nome, desativar e reativar (o histórico é preservado).
+          </span>
+        </span>
+        <span className="text-sm font-medium text-primary">Gerenciar →</span>
+      </Link>
 
       <div className="mb-6">
         <PaymentSettingsForm action={updatePaymentSettingsAction} defaultValues={paymentSettings} />

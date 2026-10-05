@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { listSellersAdmin } from "@/lib/db/sellers";
+import { selectableSellers } from "@/lib/sellers/management";
 import { readDocumentsAction, saveFulfillmentRecordAction } from "./actions";
 import { NewRecordFlow } from "./NewRecordFlow";
 
@@ -9,7 +10,9 @@ export const metadata: Metadata = { title: "Novo registro — Faturamento e Envi
 
 export default async function NewFulfillmentRecordPage() {
   await requireAdmin(["admin", "master"]);
-  const sellers = (await listSellersAdmin()).map((s) => ({ id: s.id, name: s.name, active: s.active }));
+  // Só vendedoras ATIVAS podem ser escolhidas para uma nova venda; inativas continuam
+  // aparecendo normalmente nos registros antigos (listagem, filtros e detalhe).
+  const sellers = selectableSellers(await listSellersAdmin()).map((s) => ({ id: s.id, name: s.name, active: s.active }));
 
   return (
     <div>

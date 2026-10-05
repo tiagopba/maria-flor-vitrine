@@ -12,6 +12,8 @@ const STATUS_BADGE: Record<DeliveryStatus, { tone: "neutral" | "primary" | "warn
   RESENT: { tone: "warning" },
   REFUNDED: { tone: "neutral" },
   DELIVERY_ISSUE: { tone: "warning", className: "bg-red-50 text-red-700" },
+  // Sem fundo de destaque: "Situação não informada" é ausência de dado, não um alerta.
+  UNKNOWN: { tone: "neutral", className: "bg-transparent text-text-muted ring-1 ring-border" },
 };
 
 export function DeliveryStatusBadge({ status }: { status: DeliveryStatus }) {
@@ -54,7 +56,14 @@ export function RecordsTable({
               <tr key={record.id} className="border-b border-border/60 align-top last:border-0">
                 <td className="whitespace-nowrap px-4 py-3 text-text">{formatIsoDate(record.sale_date)}</td>
                 <td className="px-4 py-3">
-                  <div className="font-medium text-text">{record.customer_name}</div>
+                  <div className="font-medium text-text">
+                    {record.customer_name}
+                    {record.record_source === "HISTORICAL_IMPORT" && (
+                      <span className="ml-2 rounded border border-border px-1.5 py-0.5 align-middle text-[10px] font-medium uppercase tracking-wide text-text-muted">
+                        Histórico
+                      </span>
+                    )}
+                  </div>
                   <div className="mt-0.5 text-xs text-text-muted">
                     <span className="font-mono">{maskCpfCnpj(record.customer_cpf)}</span>
                     {record.nfe_number && <> · NF-e {record.nfe_number}</>}

@@ -43,7 +43,7 @@ export async function updateDeliveryAction(id: string, formData: FormData): Prom
   const current = await getFulfillmentRecord(id);
   if (!current) return { ok: false, error: "Registro não encontrado." };
 
-  const plan = planDeliveryUpdate(current, parsed.data);
+  const plan = planDeliveryUpdate(current, parsed.data, current.record_source);
   if (!plan.ok) return plan;
 
   try {

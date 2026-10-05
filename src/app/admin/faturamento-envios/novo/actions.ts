@@ -4,7 +4,12 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/permissions";
-import { createFulfillmentRecord, findDuplicateRecords, logFulfillmentAudit } from "@/lib/db/fulfillment";
+import {
+  createFulfillmentRecord,
+  findDuplicateRecords,
+  isActiveSeller,
+  logFulfillmentAudit,
+} from "@/lib/db/fulfillment";
 import { analyzeDocuments } from "@/lib/fulfillment/analyze";
 import { looksLikePdf } from "@/lib/fulfillment/pdf-text";
 import { FORM_FIELD_NAMES, fulfillmentRecordSchema } from "@/lib/fulfillment/schema";
@@ -108,6 +113,15 @@ export async function saveFulfillmentRecordAction(formData: FormData): Promise<S
       ok: false,
       error: "Corrija os campos destacados antes de salvar.",
       fieldErrors: Object.fromEntries(Object.entries(flat).map(([key, messages]) => [key, messages?.[0] ?? ""])),
+    };
+  }
+
+  // Nova venda só aceita vendedora ATIVA (a tela já esconde as inativas; aqui é a trava no servidor).
+  if (parsed.data.seller_id && !(await isActiveSeller(parsed.data.seller_id))) {
+    return {
+      ok: false,
+      error: "Corrija os campos destacados antes de salvar.",
+      fieldErrors: { sellerId: "Vendedora inativa ou inexistente. Escolha uma vendedora ativa." },
     };
   }
 
