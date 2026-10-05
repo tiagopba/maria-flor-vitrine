@@ -1,0 +1,18 @@
+﻿Data da venda;Rastreio;Cliente;Vendedora;Cidade;UF;Valor;Previsão;Entrega
+05/03/2025;AB123456789BR;Maria Exemplo;Camila;Campo Grande;MS;R$ 139,99;12/03/2025;15/03/2025
+06/03/2025;888100000000001;João Teste;bruniani;São Paulo;SP;250,00;14/03/2025;REENVIADO
+07/03/2025;;Ana Fictícia;ONLINE;Curitiba;PR;89,90;;ESTORNADO
+08/03/2025;AB000000001BR;Carlos Modelo;X;Recife;PE;"1.139,99";20/03/2025;
+09/03/2025;CD111111111BR;Paula Exemplo;Fulana Desconhecida;Salvador;BA;120,00;;18/03/2025
+;EF222222222BR;Sem Data;Camila;Natal;RN;50,00;;
+10/03/2025;GH333333333BR;;Camila;Natal;RN;50,00;;
+11/03/2025;IJ444444444BR;Duplicada Teste;Lidiane;Manaus;AM;75,50;;
+11/03/2025;IJ444444444BR;Duplicada Teste;Lidiane;Manaus;AM;75,50;;
+12/03/2025;KL555555555BR;UF Errada;Camila;Cuiabá;Mato Grosso;60,00;;20/03/2025
+13/03/2025;MN666666666BR;Texto Estranho;Camila;Goiânia;GO;60,00;;talvez entregue
+14/03/25;OP777777777BR;Ano Curto;Camila;Goiânia;GO;60,00;;
+15/03/2025;QR 888 888 888 BR;"Cliente ""Aspas""; Teste";ONLINE;Vitória;ES;R$ 10,00;;22/03/2025
+16/03/2025;;Maria Abadia Cliente;Maria Abadia;Belém;PA;;;
+;;;;;;;;
+17/03/2025;ST999999999BR;Valor Ruim;Camila;Lima;MS;abc;;
+18/03/2025;UV000000000BR;Entrega Rápida;Camila;Dourados;MS;80,00;;19/03/2025

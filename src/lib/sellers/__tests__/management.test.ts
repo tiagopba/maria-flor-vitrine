@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { sellerContactSchema, sellerNameSchema, sellerSchema } from "../../validation/seller.ts";
+import {
+  sellerContactSchemaFor,
+  sellerNameSchema,
+  sellerReactivationSchema,
+  sellerSchema,
+} from "../../validation/seller.ts";
 import {
   cleanSellerName,
   describeNameConflict,
@@ -67,7 +72,7 @@ describe("schemas", () => {
   });
 
   it("CONTATO nunca carrega nome nem ativa/inativa", () => {
-    const parsed = sellerContactSchema.parse({
+    const parsed = sellerContactSchemaFor(true).parse({
       whatsapp_number: "5567999999999",
       phone: "",
       round_robin: true,
@@ -75,6 +80,46 @@ describe("schemas", () => {
       active: false,
     } as Record<string, unknown>);
     assert.deepEqual(Object.keys(parsed).sort(), ["phone", "round_robin", "whatsapp_number"]);
+  });
+});
+
+describe("WhatsApp: obrigatório só para ATIVA (regra espelhada no banco)", () => {
+  const base = { name: "Ex-Funcionária", phone: "", round_robin: true };
+
+  it("INATIVA sem WhatsApp é válida (ex-vendedora só para o histórico) e NÃO inventa número", () => {
+    const parsed = sellerSchema.parse({ ...base, whatsapp_number: "", active: false });
+    assert.equal(parsed.whatsapp_number, null);
+    assert.equal(parsed.active, false);
+  });
+
+  it("ATIVA sem WhatsApp é rejeitada", () => {
+    const result = sellerSchema.safeParse({ ...base, whatsapp_number: "  ", active: true });
+    assert.equal(result.success, false);
+    assert.match(JSON.stringify(result.error?.issues), /WhatsApp/);
+  });
+
+  it("WhatsApp informado precisa ser válido, mesmo em vendedora inativa", () => {
+    assert.equal(sellerSchema.safeParse({ ...base, whatsapp_number: "123", active: false }).success, false);
+    assert.equal(sellerSchema.parse({ ...base, whatsapp_number: "+55 (67) 99999-0001", active: false }).whatsapp_number, "5567999990001");
+  });
+
+  it("CONTATO: ativa exige o número; inativa pode ficar sem", () => {
+    const form = { whatsapp_number: "", phone: "", round_robin: true };
+    assert.equal(sellerContactSchemaFor(true).safeParse(form).success, false);
+    assert.equal(sellerContactSchemaFor(false).parse(form).whatsapp_number, null);
+  });
+
+  it("REATIVAR uma vendedora sem WhatsApp EXIGE um número válido", () => {
+    assert.equal(sellerReactivationSchema.safeParse({ whatsapp_number: "" }).success, false);
+    assert.equal(sellerReactivationSchema.safeParse({ whatsapp_number: "12345" }).success, false);
+    assert.equal(sellerReactivationSchema.parse({ whatsapp_number: "(67) 99999-0002 " }).whatsapp_number, "67999990002");
+  });
+
+  it("reativar sem número é impedido também no servidor e a reativação grava número + active no mesmo comando", () => {
+    const actions = read("src/app/admin/vendedoras/actions.ts");
+    assert.match(actions, /if \(!seller\?\.whatsapp_number\)/);
+    const db = read("src/lib/db/sellers.ts");
+    assert.match(db, /\.update\(\{ active: true, whatsapp_number: whatsappNumber \}\)/);
   });
 });
 

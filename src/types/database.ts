@@ -277,7 +277,8 @@ export interface Database {
           id: string;
           name: string;
           phone: string | null;
-          whatsapp_number: string;
+          // NULL só para vendedora INATIVA (ex-funcionária cadastrada para o histórico).
+          whatsapp_number: string | null;
           active: boolean;
           avatar_url: string | null;
           order_priority: number;
@@ -285,7 +286,7 @@ export interface Database {
           created_at: string;
           updated_at: string;
         },
-        "name" | "whatsapp_number"
+        "name"
       >;
 
       leads: Table<
@@ -442,16 +443,27 @@ export interface Database {
           sales_origin: string | null;
           expected_delivery_date: string | null;
           delivered_at: string | null;
-          delivery_status: "PENDING" | "IN_TRANSIT" | "DELIVERED" | "RESENT" | "REFUNDED" | "DELIVERY_ISSUE";
+          delivery_status:
+            | "PENDING"
+            | "IN_TRANSIT"
+            | "DELIVERED"
+            | "RESENT"
+            | "REFUNDED"
+            | "DELIVERY_ISSUE"
+            | "UNKNOWN";
           notes: string | null;
-          danfe_file_path: string;
-          label_file_path: string;
+          // NULL só em registro HISTORICAL_IMPORT (planilha antiga, sem PDFs).
+          danfe_file_path: string | null;
+          label_file_path: string | null;
+          record_source: "PDF_UPLOAD" | "HISTORICAL_IMPORT";
+          import_batch: string | null;
+          import_ref: string | null;
           status: "CONFIRMED";
           created_by: string | null;
           created_at: string;
           updated_at: string;
         },
-        "customer_name" | "danfe_file_path" | "label_file_path"
+        "customer_name" | "sale_date"
       >;
 
       fulfillment_audit_logs: Table<

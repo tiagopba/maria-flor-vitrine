@@ -69,10 +69,30 @@ export async function updateSellerContact(id: string, input: SellerContactInput)
   if (!data) throw new Error("Vendedora não encontrada.");
 }
 
-/** DESATIVAR (false) / REATIVAR (true). Só muda `active`; nada é apagado. */
+/** DESATIVAR (false) / REATIVAR (true) de quem JÁ tem WhatsApp. Só muda `active`; nada é apagado. */
 export async function setSellerActive(id: string, active: boolean): Promise<void> {
   const supabase = await createClient();
   const { data, error } = await supabase.from("sellers").update({ active }).eq("id", id).select("id").maybeSingle();
+  if (error) {
+    // 23514 = check violation: vendedora ativa precisa de WhatsApp (regra também no banco).
+    if (error.code === "23514") throw new Error("Informe um WhatsApp válido para reativar esta vendedora.");
+    throw new Error(error.message);
+  }
+  if (!data) throw new Error("Vendedora não encontrada.");
+}
+
+/**
+ * REATIVAR uma vendedora histórica SEM WhatsApp: grava o número e o `active = true`
+ * no MESMO comando (o banco recusa ativa sem número). Nunca inventa número.
+ */
+export async function reactivateSellerWithWhatsapp(id: string, whatsappNumber: string): Promise<void> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("sellers")
+    .update({ active: true, whatsapp_number: whatsappNumber })
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Vendedora não encontrada.");
 }

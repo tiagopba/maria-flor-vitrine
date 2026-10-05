@@ -3,7 +3,7 @@
 import { useState, useTransition, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { DELIVERY_STATUSES, DELIVERY_STATUS_LABELS, type DeliveryStatus } from "@/lib/fulfillment/delivery";
+import { DELIVERY_STATUS_LABELS, type DeliveryStatus } from "@/lib/fulfillment/delivery";
 import { formatIsoDate } from "@/lib/fulfillment/format";
 import type { UpdateDeliveryResult } from "./actions";
 
@@ -23,9 +23,12 @@ const SELECT_CLASS =
 
 export function UpdateSituationPanel({
   record,
+  statuses,
   action: updateDeliveryAction,
 }: {
   record: SituationRecord;
+  /** Status que ESTE registro pode escolher (UNKNOWN só em registro histórico). */
+  statuses: readonly DeliveryStatus[];
   action: (id: string, formData: FormData) => Promise<UpdateDeliveryResult>;
 }) {
   const [open, setOpen] = useState(false);
@@ -89,7 +92,7 @@ export function UpdateSituationPanel({
             onChange={(event) => setStatus(event.target.value)}
             className={SELECT_CLASS}
           >
-            {DELIVERY_STATUSES.map((value) => (
+            {statuses.map((value) => (
               <option key={value} value={value}>
                 {DELIVERY_STATUS_LABELS[value]}
               </option>

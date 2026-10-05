@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { FulfillmentRecord } from "@/lib/db/fulfillment";
-import { UNKNOWN_SELLER_LABEL, formatOriginLabel } from "@/lib/fulfillment/delivery";
+import { UNKNOWN_SELLER_LABEL, formatOriginLabel, statusesForSource } from "@/lib/fulfillment/delivery";
+import { HISTORICAL_NO_DOCUMENTS_MESSAGE, documentAvailability } from "@/lib/fulfillment/documents";
 import { formatBRL, formatCarrier, formatIsoDate, formatStoreDateTime } from "@/lib/fulfillment/format";
 import { formatCpfCnpj, formatPostalCode } from "@/lib/fulfillment/text";
 import { DeliveryStatusBadge } from "../RecordsTable";
@@ -37,37 +38,53 @@ export function RecordDetailView({
   /** Nome da vendedora de record.seller_id (public.sellers), quando houver. */
   sellerName: string | null;
 }) {
+  const documents = documentAvailability(record);
+
   return (
     <div className="max-w-3xl">
       <Link href="/admin/faturamento-envios" className="text-sm text-text-muted hover:text-text">
         ← Faturamento e Envios
       </Link>
       <h1 className="mb-1 mt-2 font-display text-2xl text-text">{record.customer_name}</h1>
-      <p className="mb-6 text-sm text-text-muted">Registrado em {formatStoreDateTime(record.created_at)}</p>
+      <p className="mb-6 text-sm text-text-muted">
+        Registrado em {formatStoreDateTime(record.created_at)}
+        {record.record_source === "HISTORICAL_IMPORT" && " · Histórico (importado da planilha antiga)"}
+      </p>
 
-      <div className="mb-5 flex flex-wrap gap-3">
-        {/* Abre o PDF servido pelo servidor (sessão Admin + RLS) — nunca uma URL pública. */}
-        <a
-          href={`/admin/faturamento-envios/${record.id}/arquivo/danfe`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={documentButton}
-        >
-          VER DANFE
-        </a>
-        <a
-          href={`/admin/faturamento-envios/${record.id}/arquivo/etiqueta`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={documentButton}
-        >
-          VER ETIQUETA
-        </a>
-      </div>
+      {documents.any ? (
+        <div className="mb-5 flex flex-wrap gap-3">
+          {/* Abre o PDF servido pelo servidor (sessão Admin + RLS) — nunca uma URL pública. */}
+          {documents.danfe && (
+            <a
+              href={`/admin/faturamento-envios/${record.id}/arquivo/danfe`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={documentButton}
+            >
+              VER DANFE
+            </a>
+          )}
+          {documents.label && (
+            <a
+              href={`/admin/faturamento-envios/${record.id}/arquivo/etiqueta`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={documentButton}
+            >
+              VER ETIQUETA
+            </a>
+          )}
+        </div>
+      ) : (
+        <p className="mb-5 rounded-xl border border-dashed border-border bg-muted p-3 text-sm text-text-muted">
+          {HISTORICAL_NO_DOCUMENTS_MESSAGE}
+        </p>
+      )}
 
       <div className="mb-5">
         <UpdateSituationPanel
           action={updateDeliveryAction}
+          statuses={statusesForSource(record.record_source)}
           key={`${record.delivery_status}-${record.updated_at}`}
           record={{
             id: record.id,

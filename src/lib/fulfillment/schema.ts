@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DEFAULT_DELIVERY_STATUS, isDeliveryStatus, type DeliveryStatus } from "./delivery.ts";
+import { DEFAULT_DELIVERY_STATUS, isDeliveryStatus, isFormDeliveryStatus, type DeliveryStatus } from "./delivery.ts";
 import { CORREIOS_TRACKING_PATTERN } from "./parse-label.ts";
 import { normalizeForCompare, onlyDigits, stripLeadingZeros } from "./text.ts";
 
@@ -54,16 +54,21 @@ const shippingFields = {
     .transform((v) => (v === "" ? null : v)),
 };
 
-const deliveryFields = {
+// `allowUnknown`: UNKNOWN ("Situação não informada") só vale para registro HISTÓRICO — o cadastro
+// por PDF nunca o aceita; na atualização, quem decide é a origem do registro (planDeliveryUpdate).
+const deliveryFields = (allowUnknown: boolean) => ({
   expectedDeliveryDate: isoDateField("Previsão de entrega inválida."),
   deliveryStatus: z
     .string()
     .trim()
-    .refine((v) => v === "" || isDeliveryStatus(v), "Status de entrega inválido.")
+    .refine(
+      (v) => v === "" || (allowUnknown ? isDeliveryStatus(v) : isFormDeliveryStatus(v)),
+      "Status de entrega inválido."
+    )
     .transform((v): DeliveryStatus => (v === "" ? DEFAULT_DELIVERY_STATUS : (v as DeliveryStatus))),
   deliveredAt: isoDateField("Data de entrega inválida."),
   notes: optionalText(2000, "Observações muito longas (máx. 2000 caracteres)."),
-};
+});
 
 type ShippingAndDelivery = {
   carrier: string | null;
@@ -176,7 +181,7 @@ export const fulfillmentRecordSchema = z
       .toUpperCase()
       .refine((v) => v.length <= 60, "Origem muito longa.")
       .transform((v) => (v === "" || v === "X" ? null : v)),
-    ...deliveryFields,
+    ...deliveryFields(false),
   })
   .superRefine(checkShippingAndDelivery)
   .transform((v) => ({
@@ -208,6 +213,8 @@ export const fulfillmentRecordSchema = z
     delivered_at: v.deliveredAt,
     delivery_status: v.deliveryStatus,
     notes: v.notes,
+    // Cadastro por PDF: sempre PDF_UPLOAD (os dois PDFs são obrigatórios no banco).
+    record_source: "PDF_UPLOAD" as const,
   }));
 
 export type FulfillmentRecordFields = z.output<typeof fulfillmentRecordSchema>;
@@ -246,7 +253,7 @@ export const FORM_FIELD_NAMES = [
 export const deliveryUpdateSchema = z
   .object({
     ...shippingFields,
-    ...deliveryFields,
+    ...deliveryFields(true),
     confirmClearDelivery: z.string().transform((v) => v === "on" || v === "true"),
   })
   .superRefine(checkShippingAndDelivery)

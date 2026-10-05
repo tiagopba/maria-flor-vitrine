@@ -5,14 +5,21 @@ import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/permissions";
 import {
   createSeller,
+  getSellerByIdAdmin,
   listSellersAdmin,
   moveSeller,
+  reactivateSellerWithWhatsapp,
   renameSeller,
   setSellerActive,
   updateSellerContact,
 } from "@/lib/db/sellers";
 import { describeNameConflict, findNameConflict } from "@/lib/sellers/management";
-import { sellerContactSchema, sellerNameSchema, sellerSchema } from "@/lib/validation/seller";
+import {
+  sellerContactSchemaFor,
+  sellerNameSchema,
+  sellerReactivationSchema,
+  sellerSchema,
+} from "@/lib/validation/seller";
 
 // Gestão de vendedoras: SÓ Admin/Master (catalog_editor não entra). Não existe
 // nenhuma action de excluir vendedora — o histórico depende do seller_id.
@@ -90,8 +97,12 @@ export async function updateSellerContactAction(
 ): Promise<SellerFormState> {
   await requireAdmin([...ALLOWED_ROLES]);
 
-  const parsed = sellerContactSchema.safeParse({
-    whatsapp_number: formData.get("whatsapp_number"),
+  const seller = await getSellerByIdAdmin(id);
+  if (!seller) return { error: "Vendedora não encontrada." };
+
+  // Ativa: WhatsApp obrigatório. Inativa (ex-funcionária): pode ficar sem número.
+  const parsed = sellerContactSchemaFor(seller.active).safeParse({
+    whatsapp_number: formData.get("whatsapp_number") ?? "",
     phone: formData.get("phone"),
     round_robin: formData.get("round_robin") === "on",
   });
@@ -107,9 +118,40 @@ export async function updateSellerContactAction(
   redirect(`/admin/vendedoras?sucesso=${encodeURIComponent("Contato atualizado.")}`);
 }
 
-/** DESATIVAR (active = false) / REATIVAR (active = true). Nunca apaga. */
+/** REATIVAR uma vendedora SEM WhatsApp: exige informar um número válido (nunca inventado). */
+export async function reactivateSellerAction(
+  id: string,
+  _prevState: SellerFormState,
+  formData: FormData
+): Promise<SellerFormState> {
+  await requireAdmin([...ALLOWED_ROLES]);
+
+  const parsed = sellerReactivationSchema.safeParse({ whatsapp_number: formData.get("whatsapp_number") ?? "" });
+  if (!parsed.success) return { fieldErrors: fieldErrorsFrom(parsed) };
+
+  try {
+    await reactivateSellerWithWhatsapp(id, parsed.data.whatsapp_number);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Não foi possível reativar." };
+  }
+
+  revalidatePath("/admin/vendedoras");
+  revalidatePath("/admin/faturamento-envios");
+  redirect(`/admin/vendedoras?sucesso=${encodeURIComponent("Vendedora reativada.")}`);
+}
+
+/** DESATIVAR (active = false) / REATIVAR (active = true) de quem já tem WhatsApp. Nunca apaga. */
 export async function toggleSellerActiveAction(id: string, active: boolean) {
   await requireAdmin([...ALLOWED_ROLES]);
+
+  if (active) {
+    // Reativar exige WhatsApp. A tela já mostra o formulário certo; esta é a trava no servidor.
+    const seller = await getSellerByIdAdmin(id);
+    if (!seller?.whatsapp_number) {
+      redirect(`/admin/vendedoras?erro=${encodeURIComponent("Informe um WhatsApp válido para reativar esta vendedora.")}`);
+    }
+  }
+
   await setSellerActive(id, active);
   revalidatePath("/admin/vendedoras");
   revalidatePath("/admin/faturamento-envios");

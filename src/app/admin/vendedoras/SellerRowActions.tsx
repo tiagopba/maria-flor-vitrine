@@ -12,7 +12,10 @@ export interface SellerRowProps {
   seller: { id: string; name: string; active: boolean; round_robin: boolean };
   isFirst: boolean;
   isLast: boolean;
+  /** O número em si nunca vai ao navegador: só se existe. */
+  hasWhatsapp: boolean;
   renameAction: (state: SellerFormState, formData: FormData) => Promise<SellerFormState>;
+  reactivateAction: (state: SellerFormState, formData: FormData) => Promise<SellerFormState>;
   activeAction: () => Promise<void>;
   moveUpAction: () => Promise<void>;
   moveDownAction: () => Promise<void>;
@@ -25,10 +28,24 @@ export interface SellerRowProps {
  * Bruniani); o id e todos os pedidos antigos continuam ligados a ela.
  * Substituir uma ex-funcionária por outra pessoa é NOVA VENDEDORA.
  */
-export function SellerRow({ seller, isFirst, isLast, renameAction, activeAction, moveUpAction, moveDownAction }: SellerRowProps) {
+export function SellerRow({
+  seller,
+  isFirst,
+  isLast,
+  hasWhatsapp,
+  renameAction,
+  reactivateAction,
+  activeAction,
+  moveUpAction,
+  moveDownAction,
+}: SellerRowProps) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(seller.name);
   const [state, formAction, pending] = useActionState(renameAction, initialState);
+  const [reactivating, setReactivating] = useState(false);
+  const [reactState, reactFormAction, reactPending] = useActionState(reactivateAction, initialState);
+  // Reativar vendedora histórica sem WhatsApp exige informar um número válido antes.
+  const needsWhatsappToReactivate = !seller.active && !hasWhatsapp;
 
   return (
     <li className="rounded-xl border border-border bg-surface p-4">
@@ -37,6 +54,7 @@ export function SellerRow({ seller, isFirst, isLast, renameAction, activeAction,
           <span className={seller.active ? "font-medium text-text" : "font-medium text-text-muted"}>{seller.name}</span>
           <Badge tone={seller.active ? "success" : "neutral"}>{seller.active ? "Ativa" : "Inativa"}</Badge>
           {seller.active && seller.round_robin && <Badge tone="neutral">Rodízio WhatsApp</Badge>}
+          {!seller.active && !hasWhatsapp && <Badge tone="neutral">Sem WhatsApp (histórico)</Badge>}
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
@@ -78,7 +96,18 @@ export function SellerRow({ seller, isFirst, isLast, renameAction, activeAction,
             CONTATO
           </Link>
 
-          {/* DESATIVAR pede confirmação (some das novas vendas e do WhatsApp); REATIVAR é direto. */}
+          {needsWhatsappToReactivate ? (
+            !reactivating && (
+              <button
+                type="button"
+                onClick={() => setReactivating(true)}
+                className="rounded-full border border-border px-3 py-1.5 text-sm font-medium text-text-muted hover:bg-muted"
+              >
+                REATIVAR
+              </button>
+            )
+          ) : (
+          /* DESATIVAR pede confirmação (some das novas vendas e do WhatsApp); REATIVAR é direto. */
           <form action={activeAction}>
             <button
               type="submit"
@@ -97,8 +126,41 @@ export function SellerRow({ seller, isFirst, isLast, renameAction, activeAction,
               {seller.active ? "DESATIVAR" : "REATIVAR"}
             </button>
           </form>
+          )}
         </div>
       </div>
+
+      {needsWhatsappToReactivate && reactivating && (
+        <form action={reactFormAction} className="mt-3 flex flex-col gap-2 rounded-xl bg-muted p-3 sm:max-w-md">
+          <label htmlFor={`wa-${seller.id}`} className="text-xs font-medium text-text">
+            WhatsApp (com DDI e DDD) — obrigatório para reativar
+          </label>
+          <input
+            id={`wa-${seller.id}`}
+            name="whatsapp_number"
+            placeholder="+55 (67) 99999-9999"
+            required
+            autoComplete="off"
+            className="h-10 rounded-lg border border-border bg-surface px-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40"
+          />
+          <p className="text-xs text-text-muted">
+            {seller.name} está inativa e sem WhatsApp. Ao reativar, ela volta a aparecer para novas vendas e no WhatsApp
+            da loja.
+          </p>
+          {reactState.fieldErrors?.whatsapp_number && (
+            <p className="text-xs text-red-600">{reactState.fieldErrors.whatsapp_number}</p>
+          )}
+          {reactState.error && <p className="text-xs text-red-600">{reactState.error}</p>}
+          <div className="flex gap-2">
+            <Button type="submit" size="sm" disabled={reactPending}>
+              {reactPending ? "Reativando..." : "REATIVAR VENDEDORA"}
+            </Button>
+            <Button type="button" size="sm" variant="ghost" disabled={reactPending} onClick={() => setReactivating(false)}>
+              Cancelar
+            </Button>
+          </div>
+        </form>
+      )}
 
       {editing && (
         <form action={formAction} className="mt-3 flex flex-col gap-2 rounded-xl bg-muted p-3 sm:max-w-md">

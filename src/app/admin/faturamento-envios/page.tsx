@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { FULFILLMENT_PAGE_SIZE, getFulfillmentFilterOptions, listFulfillmentRecords } from "@/lib/db/fulfillment";
 import {
-  DELIVERY_STATUSES,
+  ALL_DELIVERY_STATUSES,
   DELIVERY_STATUS_LABELS,
   UNKNOWN_SELLER_LABEL,
   formatOriginLabel,
@@ -119,7 +119,7 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
           <FilterField label="Status">
             <select name="status" defaultValue={filters.status} className={FIELD_CLASS}>
               <option value="">Todos</option>
-              {DELIVERY_STATUSES.map((status) => (
+              {ALL_DELIVERY_STATUSES.map((status) => (
                 <option key={status} value={status}>
                   {DELIVERY_STATUS_LABELS[status]}
                 </option>

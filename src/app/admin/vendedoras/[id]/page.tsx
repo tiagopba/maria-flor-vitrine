@@ -29,10 +29,11 @@ export default async function EditSellerContactPage({ params }: PageProps<"/admi
       </p>
       <SellerForm
         mode="contact"
+        active={seller.active}
         action={boundAction}
         submitLabel="Salvar contato"
         defaultValues={{
-          whatsapp_number: seller.whatsapp_number,
+          whatsapp_number: seller.whatsapp_number ?? "",
           phone: seller.phone,
           round_robin: seller.round_robin,
         }}

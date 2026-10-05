@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import type { SellerFormState } from "./actions";
@@ -26,13 +26,19 @@ export function SellerForm({
   mode,
   defaultValues,
   submitLabel,
+  active = true,
 }: {
   action: SellerFormAction;
   mode: "create" | "contact";
+  /** mode "contact": situação ATUAL da vendedora (ativa exige WhatsApp; inativa não). */
+  active?: boolean;
   defaultValues?: SellerFormDefaults;
   submitLabel: string;
 }) {
   const [state, formAction, pending] = useActionState(action, initialState);
+  const [createActive, setCreateActive] = useState(true);
+  // WhatsApp obrigatório só para vendedora ATIVA (a regra também existe no banco).
+  const whatsappRequired = mode === "create" ? createActive : active;
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
@@ -51,11 +57,11 @@ export function SellerForm({
       <Input
         id="whatsapp_number"
         name="whatsapp_number"
-        label="WhatsApp (com DDI e DDD)"
+        label={whatsappRequired ? "WhatsApp (com DDI e DDD)" : "WhatsApp (opcional para vendedora inativa)"}
         placeholder="+55 (67) 99999-9999"
         defaultValue={defaultValues?.whatsapp_number}
         error={state.fieldErrors?.whatsapp_number}
-        required
+        required={whatsappRequired}
       />
 
       <Input
@@ -69,8 +75,15 @@ export function SellerForm({
 
       {mode === "create" && (
         <label className="flex items-center gap-2 text-sm text-text">
-          <input type="checkbox" name="active" defaultChecked className="h-4 w-4 rounded border-border" />
-          Ativa (aparece para novas vendas e no WhatsApp)
+          <input
+            type="checkbox"
+            name="active"
+            checked={createActive}
+            onChange={(event) => setCreateActive(event.target.checked)}
+            className="h-4 w-4 rounded border-border"
+          />
+          Ativa (aparece para novas vendas e no WhatsApp). Desmarque para cadastrar uma ex-vendedora só para o
+          histórico.
         </label>
       )}
 

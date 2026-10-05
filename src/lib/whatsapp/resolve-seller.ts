@@ -34,7 +34,7 @@ export async function resolveSeller(
       .eq("active", true)
       .maybeSingle();
 
-    seller = data ?? null;
+    seller = data?.whatsapp_number ? { id: data.id, whatsapp_number: data.whatsapp_number } : null;
   } else {
     const { data: candidates } = await supabase
       .from("sellers")
@@ -43,11 +43,14 @@ export async function resolveSeller(
       .eq("round_robin", true)
       .order("order_priority", { ascending: true });
 
-    if (candidates && candidates.length > 0) {
+    const withNumber = (candidates ?? []).flatMap((c) =>
+      c.whatsapp_number ? [{ id: c.id, whatsapp_number: c.whatsapp_number }] : []
+    );
+    if (withNumber.length > 0) {
       // Distribuição simples por tempo — suficiente para o volume do MVP;
       // uma rotação mais precisa (contagem real de cliques) fica para depois.
-      const index = Math.floor(Date.now() / 1000) % candidates.length;
-      seller = candidates[index];
+      const index = Math.floor(Date.now() / 1000) % withNumber.length;
+      seller = withNumber[index];
     }
   }
 
