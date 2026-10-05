@@ -61,9 +61,14 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl text-text">Faturamento e Envios</h1>
-        <Link href="/admin/faturamento-envios/novo">
-          <Button size="md">NOVO REGISTRO</Button>
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/admin/faturamento-envios/pre" className="text-sm text-text-muted hover:text-text">
+            Pré-faturamento
+          </Link>
+          <Link href="/admin/faturamento-envios/novo">
+            <Button size="md">NOVO REGISTRO</Button>
+          </Link>
+        </div>
       </div>
 
       <form method="get" autoComplete="off" className="mb-6 flex flex-col gap-3">

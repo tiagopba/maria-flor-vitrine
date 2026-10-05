@@ -421,6 +421,9 @@ export interface Database {
           customer_cpf: string | null;
           // WhatsApp do cliente: 55 + DDD + celular, só dígitos. NULL = não cadastrado. Dado pessoal privado.
           customer_whatsapp: string | null;
+          sale_total: number | null;
+          payment_method: "PIX" | "CASH" | "DEBIT_CARD" | "CREDIT_CARD" | "CDC" | "OTHER" | null;
+          installments: number | null;
           customer_name_search: string;
           address_line: string | null;
           address_number: string | null;
@@ -488,9 +491,93 @@ export interface Database {
         },
         "record_id" | "action"
       >;
+      fulfillment_intakes: Table<
+        {
+          id: string;
+          seller_id: string | null;
+          sale_date: string;
+          customer_name: string;
+          customer_whatsapp: string | null;
+          sale_total: number;
+          payment_method: "PIX" | "CASH" | "DEBIT_CARD" | "CREDIT_CARD" | "CDC" | "OTHER";
+          installments: number | null;
+          internal_notes: string | null;
+          status:
+            | "AWAITING_CUSTOMER_DATA"
+            | "DATA_RECEIVED"
+            | "DOCUMENTS_PENDING"
+            | "CHECKING"
+            | "REVIEW_REQUIRED"
+            | "BLOCKED"
+            | "APPROVED";
+          token_hash: string;
+          token_expires_at: string;
+          submitted_at: string | null;
+          submitted_name: string | null;
+          submitted_cpf: string | null;
+          submitted_email: string | null;
+          submitted_whatsapp: string | null;
+          submitted_delivery_to_customer: boolean | null;
+          submitted_recipient_name: string | null;
+          submitted_postal_code: string | null;
+          submitted_address_line: string | null;
+          submitted_address_number: string | null;
+          submitted_address_complement: string | null;
+          submitted_neighborhood: string | null;
+          submitted_city: string | null;
+          submitted_state: string | null;
+          approved_record_id: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        },
+        "sale_date" | "customer_name" | "sale_total" | "payment_method" | "token_hash" | "token_expires_at"
+      >;
+      fulfillment_intake_audit_logs: Table<
+        {
+          id: string;
+          intake_id: string;
+          action:
+            | "INTAKE_CREATED"
+            | "INTAKE_LINK_OPENED"
+            | "INTAKE_DATA_RECEIVED"
+            | "INTAKE_LINK_REOPENED"
+            | "INTAKE_CHECK_STARTED"
+            | "INTAKE_BLOCKED"
+            | "INTAKE_CHECK_RESTARTED"
+            | "INTAKE_REVIEW_COMPLETED"
+            | "INTAKE_APPROVED"
+            | "FULFILLMENT_CREATED";
+          actor_id: string | null;
+          details: Record<string, unknown>;
+          created_at: string;
+        },
+        "intake_id" | "action"
+      >;
+      fulfillment_verification_attempts: Table<
+        {
+          id: string;
+          intake_id: string;
+          attempt_no: number;
+          verdict: "GREEN" | "REVIEW" | "BLOCKED";
+          blocking_fields: string[];
+          review_fields: string[];
+          reviewed_fields: string[];
+          comparison: Record<string, unknown>;
+          danfe_file_path: string;
+          label_file_path: string;
+          actor_id: string | null;
+          created_at: string;
+        },
+        "intake_id" | "attempt_no" | "verdict" | "danfe_file_path" | "label_file_path"
+      >;
     };
     Views: Record<string, never>;
     Functions: {
+      approve_fulfillment_intake: {
+        Args: { p_intake: string; p_attempt: number; p_record: Record<string, unknown> };
+        Returns: string;
+      };
       try_claim_email_otp_send: {
         Args: {
           p_lead_id: string;
