@@ -330,6 +330,20 @@ export function NewRecordFlow({
           )}
         </div>
 
+        <div className="sm:col-span-2">
+          <Input
+            id="customerWhatsapp"
+            name="customerWhatsapp"
+            label="WhatsApp do cliente (opcional)"
+            defaultValue={values.customerWhatsapp}
+            error={errorFor("customerWhatsapp")}
+            inputMode="tel"
+            autoComplete="off"
+            placeholder="(67) 99999-9999"
+          />
+          <p className="mt-1 text-xs text-text-muted">Fica só no registro privado. Sem ele, não é possível abrir a conversa pelo WhatsApp.</p>
+        </div>
+
         <Input
           id="addressLine"
           name="addressLine"

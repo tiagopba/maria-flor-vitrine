@@ -1,3 +1,4 @@
+import { normalizeCustomerWhatsapp } from "./phone.ts";
 import { z } from "zod";
 import { DEFAULT_DELIVERY_STATUS, isDeliveryStatus, isFormDeliveryStatus, type DeliveryStatus } from "./delivery.ts";
 import { CORREIOS_TRACKING_PATTERN } from "./parse-label.ts";
@@ -111,6 +112,16 @@ export const fulfillmentRecordSchema = z
   .object({
     customerName: z.string().trim().min(1, "Informe o nome do cliente.").max(200, "Nome muito longo."),
     customerDocument: digitsField([11, 14], "CPF deve ter 11 dígitos (ou CNPJ com 14)."),
+    // Opcional. Vazio = não cadastrado (nunca se inventa número).
+    customerWhatsapp: z.string().optional().transform((raw, ctx) => {
+      if (!raw || raw.trim() === "") return null;
+      const result = normalizeCustomerWhatsapp(raw);
+      if (!result.ok) {
+        ctx.addIssue({ code: "custom", message: result.error });
+        return null;
+      }
+      return result.value;
+    }),
     addressLine: optionalText(200, "Endereço muito longo."),
     addressNumber: optionalText(30, "Número muito longo."),
     addressComplement: optionalText(200, "Complemento muito longo."),
@@ -187,6 +198,7 @@ export const fulfillmentRecordSchema = z
   .transform((v) => ({
     customer_name: v.customerName,
     customer_cpf: v.customerDocument,
+    customer_whatsapp: v.customerWhatsapp,
     customer_name_search: normalizeForCompare(v.customerName),
     address_line: v.addressLine,
     address_number: v.addressNumber,
@@ -222,6 +234,7 @@ export type FulfillmentRecordFields = z.output<typeof fulfillmentRecordSchema>;
 export const FORM_FIELD_NAMES = [
   "customerName",
   "customerDocument",
+  "customerWhatsapp",
   "addressLine",
   "addressNumber",
   "addressComplement",
