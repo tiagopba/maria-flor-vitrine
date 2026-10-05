@@ -3,6 +3,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import { listProductsAdmin } from "@/lib/db/products";
+import {
+  SIZE_FIT_PAGE_SIZE,
+  fetchAllPages,
+  findPendingProductIds,
+  groupSizeFits,
+  isSizeFitPending,
+  loadSizeFitRows,
+  type FitRow,
+  type SizeRow,
+} from "@/lib/catalog/size-fit-pending";
 import { sortProductSizes } from "@/lib/catalog/size-order";
 import type { SaveProductSizeFitPayload } from "@/lib/validation/product-size-fit";
 import type { Database } from "@/types/database";
@@ -33,6 +43,43 @@ export async function getSizeFitCompatibilityByProductId(productId: string): Pro
   return map.get(productId) ?? [];
 }
 
+/**
+ * Lê product_sizes e product_size_fit_compatibilities SÓ dos produtos
+ * pedidos, sem nunca truncar: o servidor devolve no máximo 1000 linhas por
+ * request (sem erro nenhum), então cada leitura é paginada com `.range()`
+ * até vir uma página incompleta, ordenada pela PK (`id`, uuid único e
+ * estável em ambas as tabelas), e os ids vão em lotes pequenos no `.in()`.
+ * Só lê — nunca escreve em nenhuma das duas tabelas.
+ */
+async function readSizeFitRows(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  productIds: readonly string[]
+): Promise<{ sizes: SizeRow[]; fits: FitRow[] }> {
+  return loadSizeFitRows(
+    productIds,
+    async (ids, from, to) => {
+      const { data, error } = await supabase
+        .from("product_sizes")
+        .select("product_id, size")
+        .in("product_id", ids)
+        .order("id")
+        .range(from, to);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    async (ids, from, to) => {
+      const { data, error } = await supabase
+        .from("product_size_fit_compatibilities")
+        .select("product_id, label_size, fit_size")
+        .in("product_id", ids)
+        .order("id")
+        .range(from, to);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    }
+  );
+}
+
 /** Mesma ideia, em lote — nunca N+1 (usada pela tela de revisão e por
  * qualquer tela que precise de vários produtos de uma vez). */
 export async function getSizeFitCompatibilityByProductIds(
@@ -41,35 +88,8 @@ export async function getSizeFitCompatibilityByProductIds(
   if (productIds.length === 0) return new Map();
 
   const supabase = await createClient();
-
-  const [{ data: sizes, error: sizesError }, { data: fits, error: fitsError }] = await Promise.all([
-    supabase.from("product_sizes").select("product_id, size").in("product_id", productIds),
-    supabase
-      .from("product_size_fit_compatibilities")
-      .select("product_id, label_size, fit_size")
-      .in("product_id", productIds),
-  ]);
-
-  if (sizesError) throw new Error(sizesError.message);
-  if (fitsError) throw new Error(fitsError.message);
-
-  const fitsByKey = new Map<string, number[]>();
-  for (const row of fits ?? []) {
-    const key = `${row.product_id}::${row.label_size}`;
-    const list = fitsByKey.get(key) ?? [];
-    list.push(row.fit_size);
-    fitsByKey.set(key, list);
-  }
-
-  const result = new Map<string, LabelSizeFit[]>();
-  for (const row of sizes ?? []) {
-    const key = `${row.product_id}::${row.size}`;
-    const list = result.get(row.product_id) ?? [];
-    list.push({ labelSize: row.size, fitSizes: (fitsByKey.get(key) ?? []).sort((a, b) => a - b) });
-    result.set(row.product_id, list);
-  }
-
-  return result;
+  const { sizes, fits } = await readSizeFitRows(supabase, productIds);
+  return groupSizeFits(sizes, fits);
 }
 
 /** Erro controlado vindo da RPC — mesmo padrão de SaveProductWithVariantsError. */
@@ -155,7 +175,7 @@ export async function listSizeFitReviewProducts(
     const labels: SizeFitReviewLabel[] = labelFits
       .map((l) => ({ ...l, pending: l.fitSizes.length === 0 }))
       .sort((a, b) => (orderIndex.get(a.labelSize) ?? 0) - (orderIndex.get(b.labelSize) ?? 0));
-    const isPending = labels.some((l) => l.pending);
+    const isPending = isSizeFitPending(labels);
 
     items.push({
       productId: p.id,
@@ -177,48 +197,36 @@ export async function listSizeFitReviewProducts(
 /**
  * Contagem leve pro badge do menu ("Revisar numerações (6)") — roda em
  * TODA página do Admin (layout.tsx), então busca só o estritamente
- * necessário pra contar: nunca nome, foto, preço, categoria, cor ou
- * descrição (isso é responsabilidade só da própria tela Revisar
- * numerações, que continua usando listSizeFitReviewProducts pra montar
- * os cards completos — layout e página nunca compartilham esse objeto
- * grande, cada um busca só o que precisa).
+ * necessário: ids dos produtos NÃO arquivados e, só desses, tamanhos e
+ * compatibilidades (nunca nome, foto, preço, categoria, cor ou descrição —
+ * isso é responsabilidade só da tela Revisar numerações, que continua
+ * usando listSizeFitReviewProducts pra montar os cards completos).
  *
- * 3 consultas pequenas, em paralelo — nenhuma depende do resultado das
- * outras. `product_sizes` e `product_size_fit_compatibilities` vêm
- * inteiras (sem filtrar por produto): as duas tabelas são pequenas no
- * catálogo real, e buscar tudo de uma vez evita depender do resultado da
- * consulta de `products` antes de disparar as outras duas. Produto
- * arquivado é descartado depois, em memória, cruzando com o Set de ids
- * ativos. Mesma regra de sempre: produto pendente = pelo menos um
- * label_size atual sem nenhuma linha de compatibilidade correspondente.
+ * Todas as leituras são paginadas (ver readSizeFitRows): a tabela de
+ * compatibilidades passa de 1000 linhas, e uma leitura única truncada
+ * fazia produtos completos aparecerem como pendentes. Mesma regra de
+ * sempre — produto pendente = pelo menos um label_size atual sem nenhuma
+ * linha de compatibilidade — agora compartilhada com a tela
+ * (isSizeFitPending), sobre a mesma população: não arquivados.
  */
 export async function countPendingSizeFitProductsLight(): Promise<number> {
   const supabase = await createClient();
 
-  const [
-    { data: products, error: productsError },
-    { data: sizes, error: sizesError },
-    { data: fits, error: fitsError },
-  ] = await Promise.all([
-    supabase.from("products").select("id").neq("status", "ARCHIVED"),
-    supabase.from("product_sizes").select("product_id, size"),
-    supabase.from("product_size_fit_compatibilities").select("product_id, label_size"),
-  ]);
+  const products = await fetchAllPages(async (from, to) => {
+    const { data, error } = await supabase
+      .from("products")
+      .select("id")
+      .neq("status", "ARCHIVED")
+      .order("id")
+      .range(from, to);
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  }, SIZE_FIT_PAGE_SIZE);
 
-  if (productsError) throw new Error(productsError.message);
-  if (sizesError) throw new Error(sizesError.message);
-  if (fitsError) throw new Error(fitsError.message);
+  const activeProductIds = products.map((p) => p.id);
+  const { sizes, fits } = await readSizeFitRows(supabase, activeProductIds);
 
-  const activeProductIds = new Set((products ?? []).map((p) => p.id));
-  const compatKeys = new Set((fits ?? []).map((f) => `${f.product_id}::${f.label_size}`));
-
-  const pendingIds = new Set<string>();
-  for (const row of sizes ?? []) {
-    if (!activeProductIds.has(row.product_id) || pendingIds.has(row.product_id)) continue;
-    if (!compatKeys.has(`${row.product_id}::${row.size}`)) pendingIds.add(row.product_id);
-  }
-
-  return pendingIds.size;
+  return findPendingProductIds(activeProductIds, sizes, fits).size;
 }
 
 /**
