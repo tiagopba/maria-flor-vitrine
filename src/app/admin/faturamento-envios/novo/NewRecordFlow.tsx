@@ -5,10 +5,13 @@ import { useRef, useState, useTransition, type ChangeEvent, type FormEvent } fro
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { maskCpfCnpj, formatCpfCnpj } from "@/lib/fulfillment/text";
+import { DELIVERY_STATUSES, DELIVERY_STATUS_LABELS, UNKNOWN_SELLER_LABEL } from "@/lib/fulfillment/delivery";
 import type { DocumentReadStatus } from "@/lib/fulfillment/types";
 import type { ReadDocumentsResult, SaveRecordResult } from "./actions";
 
 const MAX_PDF_BYTES = 2 * 1024 * 1024;
+const SELECT_CLASS =
+  "h-11 rounded-lg border border-border bg-surface px-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary";
 const UNREADABLE_MESSAGE =
   "Não conseguimos ler este PDF automaticamente. Preencha os dados manualmente ou envie outro arquivo.";
 
@@ -153,7 +156,10 @@ function ComparisonBlock({ result }: { result: ReadOk }) {
 export function NewRecordFlow({
   readDocuments: readDocumentsAction,
   saveRecord: saveFulfillmentRecordAction,
+  sellers,
 }: {
+  /** Vendedoras já cadastradas (public.sellers) — nunca se cria vendedora por aqui. */
+  sellers: { id: string; name: string; active: boolean }[];
   readDocuments: (formData: FormData) => Promise<ReadDocumentsResult>;
   saveRecord: (formData: FormData) => Promise<SaveRecordResult>;
 }) {
@@ -166,6 +172,7 @@ export function NewRecordFlow({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [revealDocument, setRevealDocument] = useState(false);
+  const [deliveryStatus, setDeliveryStatus] = useState("PENDING");
   const [reading, startReading] = useTransition();
   const [saving, startSaving] = useTransition();
 
@@ -195,6 +202,7 @@ export function NewRecordFlow({
       setSaveError(null);
       setFieldErrors({});
       setRevealDocument(false);
+      setDeliveryStatus(response.values.deliveryStatus);
       setResult(response);
     });
   }
@@ -499,6 +507,98 @@ export function NewRecordFlow({
           defaultValue={values.shippingLabelDate}
           error={errorFor("shippingLabelDate")}
         />
+      </Section>
+
+      <Section title="Venda e entrega">
+        <Input
+          id="saleDate"
+          name="saleDate"
+          type="date"
+          label="Data da venda"
+          defaultValue={values.saleDate}
+          error={errorFor("saleDate")}
+        />
+        <Input
+          id="expectedDeliveryDate"
+          name="expectedDeliveryDate"
+          type="date"
+          label="Previsão de entrega"
+          defaultValue={values.expectedDeliveryDate}
+          error={errorFor("expectedDeliveryDate")}
+        />
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="sellerId" className="text-sm font-medium text-text">
+            Vendedora
+          </label>
+          <select id="sellerId" name="sellerId" defaultValue={values.sellerId} className={SELECT_CLASS}>
+            <option value="">{UNKNOWN_SELLER_LABEL}</option>
+            {sellers.map((seller) => (
+              <option key={seller.id} value={seller.id}>
+                {seller.name}
+                {seller.active ? "" : " (inativa)"}
+              </option>
+            ))}
+          </select>
+          {errorFor("sellerId") && <p className="text-xs text-red-600">{errorFor("sellerId")}</p>}
+        </div>
+        <div>
+          <Input
+            id="salesOrigin"
+            name="salesOrigin"
+            label="Origem da venda (se não for uma vendedora)"
+            placeholder="Ex: ONLINE"
+            defaultValue={values.salesOrigin}
+            error={errorFor("salesOrigin")}
+            list="origin-suggestions"
+            autoComplete="off"
+          />
+          <datalist id="origin-suggestions">
+            <option value="ONLINE" />
+          </datalist>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="deliveryStatus" className="text-sm font-medium text-text">
+            Status da entrega
+          </label>
+          <select
+            id="deliveryStatus"
+            name="deliveryStatus"
+            value={deliveryStatus}
+            onChange={(event) => setDeliveryStatus(event.target.value)}
+            className={SELECT_CLASS}
+          >
+            {DELIVERY_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {DELIVERY_STATUS_LABELS[status]}
+              </option>
+            ))}
+          </select>
+          {errorFor("deliveryStatus") && <p className="text-xs text-red-600">{errorFor("deliveryStatus")}</p>}
+        </div>
+        {deliveryStatus === "DELIVERED" && (
+          <Input
+            id="deliveredAt"
+            name="deliveredAt"
+            type="date"
+            label="Entregue em"
+            defaultValue={values.deliveredAt}
+            error={errorFor("deliveredAt")}
+          />
+        )}
+        <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <label htmlFor="notes" className="text-sm font-medium text-text">
+            Observações
+          </label>
+          <textarea
+            id="notes"
+            name="notes"
+            rows={3}
+            maxLength={2000}
+            defaultValue={values.notes}
+            className="rounded-lg border border-border bg-surface px-3.5 py-2.5 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+          />
+          {errorFor("notes") && <p className="text-xs text-red-600">{errorFor("notes")}</p>}
+        </div>
       </Section>
 
       {saveError && <p className="text-sm text-red-600">{saveError}</p>}

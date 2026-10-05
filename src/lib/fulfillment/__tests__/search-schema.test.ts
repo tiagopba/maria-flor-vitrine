@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { formatCarrier } from "../format.ts";
 import { fulfillmentRecordSchema } from "../schema.ts";
-import { buildDateFilter, buildSearchFilter } from "../search.ts";
+import { buildSearchFilter } from "../search.ts";
 
 describe("buildSearchFilter", () => {
   it("vazio não filtra", () => {
@@ -39,22 +39,6 @@ describe("buildSearchFilter", () => {
   });
 });
 
-describe("buildDateFilter", () => {
-  it("monta intervalo do dia no fuso da loja (UTC-4)", () => {
-    const filter = buildDateFilter("2026-10-05");
-    assert.ok(filter?.includes("nfe_issued_at.eq.2026-10-05"));
-    assert.ok(filter?.includes("shipping_label_date.gte.2026-10-05T04:00:00.000Z"));
-    assert.ok(filter?.includes("shipping_label_date.lt.2026-10-06T04:00:00.000Z"));
-    assert.ok(filter?.includes("created_at.gte.2026-10-05T04:00:00.000Z"));
-  });
-
-  it("rejeita data inválida", () => {
-    assert.equal(buildDateFilter("2026-02-31"), null);
-    assert.equal(buildDateFilter("05/10/2026"), null);
-    assert.equal(buildDateFilter("nope"), null);
-  });
-});
-
 const baseInput = {
   customerName: "  Maria Souza ",
   customerDocument: "111.444.777-35",
@@ -76,6 +60,13 @@ const baseInput = {
   shippingService: "",
   trackingCode: " 8881 0000 9999 999 ",
   shippingLabelDate: "2026-10-05T11:05",
+  saleDate: "2026-10-01",
+  sellerId: "",
+  salesOrigin: "",
+  expectedDeliveryDate: "2026-10-12",
+  deliveryStatus: "",
+  deliveredAt: "",
+  notes: "  Cliente pediu entrega à tarde  ",
 };
 
 describe("fulfillmentRecordSchema", () => {
@@ -130,6 +121,62 @@ describe("fulfillmentRecordSchema", () => {
       fulfillmentRecordSchema.safeParse({ ...baseInput, carrier: "J&T Express", trackingCode: "888100009999999" }).success,
       true
     );
+  });
+
+  it("campos de venda e entrega: datas, status padrão PENDING e observações", () => {
+  const parsed = fulfillmentRecordSchema.parse(baseInput);
+  assert.equal(parsed.sale_date, "2026-10-01");
+  assert.equal(parsed.expected_delivery_date, "2026-10-12");
+  assert.equal(parsed.delivered_at, null);
+  assert.equal(parsed.delivery_status, "PENDING");
+  assert.equal(parsed.notes, "Cliente pediu entrega à tarde");
+  assert.equal(parsed.seller_id, null);
+  assert.equal(parsed.sales_origin, null);
+  });
+
+  it("vendedora conhecida → seller_id; ONLINE → só sales_origin; desconhecida → os dois nulos", () => {
+    const sellerId = "123e4567-e89b-42d3-a456-426614174000";
+    const known = fulfillmentRecordSchema.parse({ ...baseInput, sellerId });
+    assert.equal(known.seller_id, sellerId);
+    assert.equal(known.sales_origin, null);
+
+    const online = fulfillmentRecordSchema.parse({ ...baseInput, salesOrigin: " online " });
+    assert.equal(online.seller_id, null);
+    assert.equal(online.sales_origin, "ONLINE");
+
+    const unknown = fulfillmentRecordSchema.parse(baseInput);
+    assert.equal(unknown.seller_id, null);
+    assert.equal(unknown.sales_origin, null);
+  });
+
+  it('"X" da planilha antiga nunca vira origem', () => {
+    for (const salesOrigin of ["X", "x", " x "]) {
+      assert.equal(fulfillmentRecordSchema.parse({ ...baseInput, salesOrigin }).sales_origin, null);
+    }
+    // "X" dentro de um texto maior continua sendo um texto qualquer.
+    assert.equal(fulfillmentRecordSchema.parse({ ...baseInput, salesOrigin: "LOJA X" }).sales_origin, "LOJA X");
+  });
+
+  it("vendedora e origem são exclusivas", () => {
+    const both = fulfillmentRecordSchema.safeParse({
+      ...baseInput,
+      sellerId: "123e4567-e89b-42d3-a456-426614174000",
+      salesOrigin: "ONLINE",
+    });
+    assert.equal(both.success, false);
+    assert.equal(fulfillmentRecordSchema.safeParse({ ...baseInput, sellerId: "nao-e-uuid" }).success, false);
+  });
+
+  it("status da entrega: só valores permitidos; entrega só com DELIVERED", () => {
+    for (const deliveryStatus of ["PENDING", "IN_TRANSIT", "DELIVERED", "RESENT", "REFUNDED", "DELIVERY_ISSUE"]) {
+      assert.equal(fulfillmentRecordSchema.parse({ ...baseInput, deliveryStatus }).delivery_status, deliveryStatus);
+    }
+    assert.equal(fulfillmentRecordSchema.safeParse({ ...baseInput, deliveryStatus: "CONFIRMED" }).success, false);
+    assert.equal(fulfillmentRecordSchema.safeParse({ ...baseInput, deliveredAt: "2026-10-10" }).success, false);
+
+    const delivered = fulfillmentRecordSchema.parse({ ...baseInput, deliveryStatus: "DELIVERED", deliveredAt: "2026-10-10" });
+    assert.equal(delivered.delivered_at, "2026-10-10");
+    assert.equal(fulfillmentRecordSchema.safeParse({ ...baseInput, saleDate: "2026-02-31" }).success, false);
   });
 
   it("formatCarrier combina transportadora e serviço", () => {

@@ -3,31 +3,48 @@ import Link from "next/link";
 import { SuccessToast } from "@/components/admin/SuccessToast";
 import { Button } from "@/components/ui/Button";
 import { requireAdmin } from "@/lib/auth/permissions";
-import { FULFILLMENT_PAGE_SIZE, listFulfillmentRecords } from "@/lib/db/fulfillment";
+import { FULFILLMENT_PAGE_SIZE, getFulfillmentFilterOptions, listFulfillmentRecords } from "@/lib/db/fulfillment";
+import { DELIVERY_STATUSES, DELIVERY_STATUS_LABELS, UNKNOWN_SELLER_LABEL } from "@/lib/fulfillment/delivery";
+import { BR_STATES, filtersToSearchParams, parseListFilters } from "@/lib/fulfillment/filters";
 import { RecordsTable } from "./RecordsTable";
 
 export const metadata: Metadata = { title: "Faturamento e Envios" };
 
-function pageHref(query: string, date: string, page: number): string {
-  const params = new URLSearchParams();
-  if (query) params.set("q", query);
-  if (date) params.set("data", date);
-  if (page > 1) params.set("pagina", String(page));
-  const qs = params.toString();
-  return qs ? `/admin/faturamento-envios?${qs}` : "/admin/faturamento-envios";
+const FIELD_CLASS =
+  "h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary";
+
+function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-text-muted">
+      {label}
+      {children}
+    </label>
+  );
 }
 
 export default async function FulfillmentPage({ searchParams }: PageProps<"/admin/faturamento-envios">) {
   await requireAdmin(["admin", "master"]);
 
-  const params = await searchParams;
-  const query = typeof params.q === "string" ? params.q.trim().slice(0, 100) : "";
-  const date = typeof params.data === "string" && /^\d{4}-\d{2}-\d{2}$/.test(params.data) ? params.data : "";
-  const pageParam = typeof params.pagina === "string" ? Number.parseInt(params.pagina, 10) : 1;
-  const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
+  const filters = parseListFilters(await searchParams);
+  const [result, options] = await Promise.all([listFulfillmentRecords(filters), getFulfillmentFilterOptions()]);
 
-  const result = await listFulfillmentRecords({ query, date, page });
-  const hasFilters = Boolean(query || date);
+  const hasFilters = Boolean(
+    filters.query ||
+      filters.saleFrom ||
+      filters.saleTo ||
+      filters.sellerOrigin ||
+      filters.carrier ||
+      filters.status ||
+      filters.state
+  );
+  const sellerNames = Object.fromEntries(options.sellers.map((s) => [s.id, s.name]));
+  // Mantém no select uma transportadora/origem filtrada mesmo que nenhum registro a use mais.
+  const carriers = [...new Set([...options.carriers, ...(filters.carrier ? [filters.carrier] : [])])].sort();
+
+  const pageHref = (page: number) => {
+    const qs = filtersToSearchParams(filters, page).toString();
+    return qs ? `/admin/faturamento-envios?${qs}` : "/admin/faturamento-envios";
+  };
 
   return (
     <div>
@@ -40,33 +57,91 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
         </Link>
       </div>
 
-      <form method="get" autoComplete="off" className="mb-6 flex flex-col gap-2 sm:flex-row">
+      <form method="get" autoComplete="off" className="mb-6 flex flex-col gap-3">
         <input
           type="search"
           name="q"
-          defaultValue={query}
+          defaultValue={filters.query}
           placeholder="Buscar por nome, CPF, número da NF-e ou rastreio..."
           aria-label="Buscar registros"
-          className="h-10 flex-1 rounded-lg border border-border bg-surface px-3 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+          className={FIELD_CLASS}
         />
-        <input
-          type="date"
-          name="data"
-          defaultValue={date}
-          aria-label="Filtrar por data"
-          className="h-10 rounded-lg border border-border bg-surface px-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40"
-        />
-        <Button type="submit" size="sm" className="h-10">
-          Buscar
-        </Button>
-        {hasFilters && (
-          <Link
-            href="/admin/faturamento-envios"
-            className="flex h-10 items-center justify-center rounded-full px-4 text-sm text-text-muted hover:bg-muted"
-          >
-            Limpar
-          </Link>
-        )}
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          <FilterField label="Venda de">
+            <input type="date" name="de" defaultValue={filters.saleFrom} className={FIELD_CLASS} />
+          </FilterField>
+          <FilterField label="Venda até">
+            <input type="date" name="ate" defaultValue={filters.saleTo} className={FIELD_CLASS} />
+          </FilterField>
+          <FilterField label="Vendedora/Origem">
+            <select name="vendedora" defaultValue={filters.sellerOrigin} className={FIELD_CLASS}>
+              <option value="">Todas</option>
+              <optgroup label="Vendedoras">
+                {options.sellers.map((seller) => (
+                  <option key={seller.id} value={`seller:${seller.id}`}>
+                    {seller.name}
+                    {seller.active ? "" : " (inativa)"}
+                  </option>
+                ))}
+              </optgroup>
+              {options.origins.length > 0 && (
+                <optgroup label="Origens">
+                  {options.origins.map((origin) => (
+                    <option key={origin} value={`origin:${origin}`}>
+                      {origin}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              <option value="none">{UNKNOWN_SELLER_LABEL}</option>
+            </select>
+          </FilterField>
+          <FilterField label="Transportadora">
+            <select name="transportadora" defaultValue={filters.carrier} className={FIELD_CLASS}>
+              <option value="">Todas</option>
+              {carriers.map((carrier) => (
+                <option key={carrier} value={carrier}>
+                  {carrier}
+                </option>
+              ))}
+            </select>
+          </FilterField>
+          <FilterField label="Status">
+            <select name="status" defaultValue={filters.status} className={FIELD_CLASS}>
+              <option value="">Todos</option>
+              {DELIVERY_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {DELIVERY_STATUS_LABELS[status]}
+                </option>
+              ))}
+            </select>
+          </FilterField>
+          <FilterField label="UF">
+            <select name="uf" defaultValue={filters.state} className={FIELD_CLASS}>
+              <option value="">Todas</option>
+              {BR_STATES.map((uf) => (
+                <option key={uf} value={uf}>
+                  {uf}
+                </option>
+              ))}
+            </select>
+          </FilterField>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Button type="submit" size="sm" className="h-10">
+            Buscar
+          </Button>
+          {hasFilters && (
+            <Link
+              href="/admin/faturamento-envios"
+              className="flex h-10 items-center justify-center rounded-full px-4 text-sm text-text-muted hover:bg-muted"
+            >
+              Limpar filtros
+            </Link>
+          )}
+        </div>
       </form>
 
       {result.status === "unavailable" ? (
@@ -80,22 +155,22 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
         </div>
       ) : (
         <>
-          <RecordsTable records={result.records} />
+          <RecordsTable records={result.records} sellerNames={sellerNames} />
 
-          {(page > 1 || result.hasMore) && (
+          {(filters.page > 1 || result.hasMore) && (
             <div className="mt-4 flex items-center justify-between text-sm">
-              {page > 1 ? (
-                <Link href={pageHref(query, date, page - 1)} className="text-text-muted hover:text-text">
+              {filters.page > 1 ? (
+                <Link href={pageHref(filters.page - 1)} className="text-text-muted hover:text-text">
                   ← Mais recentes
                 </Link>
               ) : (
                 <span />
               )}
               <span className="text-text-muted">
-                Página {page} · {FULFILLMENT_PAGE_SIZE} por página
+                Página {filters.page} · {FULFILLMENT_PAGE_SIZE} por página
               </span>
               {result.hasMore ? (
-                <Link href={pageHref(query, date, page + 1)} className="text-text-muted hover:text-text">
+                <Link href={pageHref(filters.page + 1)} className="text-text-muted hover:text-text">
                   Mais antigos →
                 </Link>
               ) : (

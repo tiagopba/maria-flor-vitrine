@@ -1,5 +1,7 @@
 import "server-only";
-import { buildDateFilter, buildSearchFilter } from "@/lib/fulfillment/search";
+import { parseSellerOriginFilter, type FulfillmentListFilters } from "@/lib/fulfillment/filters";
+import { buildSearchFilter } from "@/lib/fulfillment/search";
+import { listSellersAdmin } from "@/lib/db/sellers";
 import type { FulfillmentRecordFields } from "@/lib/fulfillment/schema";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database";
@@ -25,10 +27,16 @@ export type FulfillmentListItem = Pick<
   | "shipping_service"
   | "tracking_code"
   | "created_at"
+  | "sale_date"
+  | "seller_id"
+  | "sales_origin"
+  | "expected_delivery_date"
+  | "delivered_at"
+  | "delivery_status"
 >;
 
 const LIST_COLUMNS =
-  "id, customer_name, customer_cpf, nfe_number, invoice_total, carrier, shipping_service, tracking_code, created_at";
+  "id, customer_name, customer_cpf, nfe_number, invoice_total, carrier, shipping_service, tracking_code, created_at, sale_date, seller_id, sales_origin, expected_delivery_date, delivered_at, delivery_status";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -45,21 +53,13 @@ export function isMissingTableError(error: { code?: string } | null | undefined)
   return error?.code === "PGRST205" || error?.code === "42P01";
 }
 
-export interface ListFulfillmentFilters {
-  query?: string;
-  /** aaaa-mm-dd */
-  date?: string;
-  /** Começa em 1. */
-  page?: number;
-}
-
 export type ListFulfillmentResult =
   | { status: "ok"; records: FulfillmentListItem[]; hasMore: boolean }
   | { status: "unavailable" };
 
-export async function listFulfillmentRecords(filters: ListFulfillmentFilters): Promise<ListFulfillmentResult> {
+export async function listFulfillmentRecords(filters: FulfillmentListFilters): Promise<ListFulfillmentResult> {
   const supabase = await createClient();
-  const page = Math.max(1, filters.page ?? 1);
+  const page = Math.max(1, filters.page);
   const from = (page - 1) * FULFILLMENT_PAGE_SIZE;
 
   let query = supabase
@@ -72,8 +72,18 @@ export async function listFulfillmentRecords(filters: ListFulfillmentFilters): P
   const searchFilter = filters.query ? buildSearchFilter(filters.query) : null;
   if (searchFilter) query = query.or(searchFilter);
 
-  const dateFilter = filters.date ? buildDateFilter(filters.date) : null;
-  if (dateFilter) query = query.or(dateFilter);
+  // Os valores abaixo já vêm sanitizados por parseListFilters; o builder do
+  // supabase-js codifica cada um na URL, então não há injeção de filtro.
+  if (filters.saleFrom) query = query.gte("sale_date", filters.saleFrom);
+  if (filters.saleTo) query = query.lte("sale_date", filters.saleTo);
+  if (filters.carrier) query = query.eq("carrier", filters.carrier);
+  if (filters.status) query = query.eq("delivery_status", filters.status);
+  if (filters.state) query = query.eq("state", filters.state);
+
+  const sellerOrigin = parseSellerOriginFilter(filters.sellerOrigin);
+  if (sellerOrigin?.kind === "seller") query = query.eq("seller_id", sellerOrigin.sellerId);
+  if (sellerOrigin?.kind === "origin") query = query.eq("sales_origin", sellerOrigin.origin);
+  if (sellerOrigin?.kind === "none") query = query.is("seller_id", null).is("sales_origin", null);
 
   const { data, error } = await query;
   if (isMissingTableError(error)) return { status: "unavailable" };
@@ -189,4 +199,39 @@ export async function logFulfillmentAudit(input: {
   });
   // Auditoria não pode derrubar a operação principal já concluída; só sinaliza.
   if (error) console.error("[fulfillment] falha ao registrar auditoria:", error.code);
+}
+
+export interface FulfillmentFilterOptions {
+  sellers: { id: string; name: string; active: boolean }[];
+  origins: string[];
+  carriers: string[];
+}
+
+/** Opções dos selects de filtro: vendedoras cadastradas + origens/transportadoras já usadas nos registros. */
+export async function getFulfillmentFilterOptions(): Promise<FulfillmentFilterOptions> {
+  const supabase = await createClient();
+  const [sellers, used] = await Promise.all([
+    listSellersAdmin(),
+    supabase.from("fulfillment_records").select("sales_origin, carrier").limit(1000),
+  ]);
+
+  const origins = new Set<string>();
+  const carriers = new Set<string>();
+  for (const row of used.data ?? []) {
+    if (row.sales_origin) origins.add(row.sales_origin);
+    if (row.carrier) carriers.add(row.carrier);
+  }
+
+  return {
+    sellers: sellers.map((s) => ({ id: s.id, name: s.name, active: s.active })),
+    origins: [...origins].sort(),
+    carriers: [...carriers].sort(),
+  };
+}
+
+export async function getSellerName(sellerId: string | null): Promise<string | null> {
+  if (!sellerId) return null;
+  const supabase = await createClient();
+  const { data } = await supabase.from("sellers").select("name").eq("id", sellerId).maybeSingle();
+  return data?.name ?? null;
 }

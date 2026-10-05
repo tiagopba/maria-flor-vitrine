@@ -437,6 +437,13 @@ export interface Database {
           shipping_service: string | null;
           tracking_code: string | null;
           shipping_label_date: string | null;
+          sale_date: string | null;
+          seller_id: string | null;
+          sales_origin: string | null;
+          expected_delivery_date: string | null;
+          delivered_at: string | null;
+          delivery_status: "PENDING" | "IN_TRANSIT" | "DELIVERED" | "RESENT" | "REFUNDED" | "DELIVERY_ISSUE";
+          notes: string | null;
           danfe_file_path: string;
           label_file_path: string;
           status: "CONFIRMED";

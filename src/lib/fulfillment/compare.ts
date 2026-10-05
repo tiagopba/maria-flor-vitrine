@@ -6,6 +6,7 @@ import type {
   FulfillmentFormValues,
   ShippingLabelData,
 } from "./types.ts";
+import { DEFAULT_DELIVERY_STATUS } from "./delivery.ts";
 import { normalizeForCompare, onlyDigits } from "./text.ts";
 
 // Abreviações de logradouro que não devem pesar na comparação ("Av." vs "Avenida").
@@ -152,5 +153,12 @@ export function mergeToFormValues(
     shippingService: label?.shippingService ?? "",
     trackingCode: label?.trackingCode ?? "",
     shippingLabelDate: toDateTimeLocal(label?.labelDateTime ?? null),
+    saleDate: "",
+    sellerId: "",
+    salesOrigin: "",
+    expectedDeliveryDate: "",
+    deliveryStatus: DEFAULT_DELIVERY_STATUS,
+    deliveredAt: "",
+    notes: "",
   };
 }

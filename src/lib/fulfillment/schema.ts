@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { normalizeForCompare, onlyDigits, stripLeadingZeros } from "./text.ts";
+import { DEFAULT_DELIVERY_STATUS, isDeliveryStatus, type DeliveryStatus } from "./delivery.ts";
 import { CORREIOS_TRACKING_PATTERN } from "./parse-label.ts";
 
 /** America/Campo_Grande não tem horário de verão — mesmo fuso fixo usado no Dashboard. */
@@ -25,6 +26,15 @@ function parseMoneyInput(value: string): number | null {
   const normalized = v.includes(",") ? v.replace(/\./g, "").replace(",", ".") : v;
   return /^\d+(\.\d{1,2})?$/.test(normalized) ? Number(normalized) : Number.NaN;
 }
+
+const isoDateField = (message: string) =>
+  z
+    .string()
+    .trim()
+    .refine((v) => v === "" || isValidIsoDate(v), message)
+    .transform((v) => (v === "" ? null : v));
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const digitsField = (lengths: number[], message: string) =>
   z
@@ -102,6 +112,43 @@ export const fulfillmentRecordSchema = z
         "Data da etiqueta inválida."
       )
       .transform((v) => (v === "" ? null : `${v}${v.length === 16 ? ":00" : ""}${STORE_UTC_OFFSET}`)),
+    saleDate: isoDateField("Data da venda inválida."),
+    sellerId: z
+      .string()
+      .trim()
+      .refine((v) => v === "" || UUID_PATTERN.test(v), "Vendedora inválida.")
+      .transform((v) => (v === "" ? null : v)),
+    // "X" era só a marca de "vendedora desconhecida" na planilha antiga: nunca vira origem.
+    salesOrigin: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .refine((v) => v.length <= 60, "Origem muito longa.")
+      .transform((v) => (v === "" || v === "X" ? null : v)),
+    expectedDeliveryDate: isoDateField("Previsão de entrega inválida."),
+    deliveryStatus: z
+      .string()
+      .trim()
+      .refine((v) => v === "" || isDeliveryStatus(v), "Status de entrega inválido.")
+      .transform((v): DeliveryStatus => (v === "" ? DEFAULT_DELIVERY_STATUS : (v as DeliveryStatus))),
+    deliveredAt: isoDateField("Data de entrega inválida."),
+    notes: optionalText(2000, "Observações muito longas (máx. 2000 caracteres)."),
+  })
+  .superRefine((v, ctx) => {
+    if (v.sellerId && v.salesOrigin) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["salesOrigin"],
+        message: "Informe a vendedora OU a origem da venda, não os dois.",
+      });
+    }
+    if (v.deliveredAt && v.deliveryStatus !== "DELIVERED") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["deliveredAt"],
+        message: "A data de entrega só vale quando o status é Entregue.",
+      });
+    }
   })
   .superRefine((v, ctx) => {
     // Rastreio dos Correios tem formato fixo: 2 letras + 9 dígitos + BR.
@@ -135,6 +182,13 @@ export const fulfillmentRecordSchema = z
     shipping_service: v.shippingService,
     tracking_code: v.trackingCode,
     shipping_label_date: v.shippingLabelDate,
+    sale_date: v.saleDate,
+    seller_id: v.sellerId,
+    sales_origin: v.salesOrigin,
+    expected_delivery_date: v.expectedDeliveryDate,
+    delivered_at: v.deliveredAt,
+    delivery_status: v.deliveryStatus,
+    notes: v.notes,
   }));
 
 export type FulfillmentRecordFields = z.output<typeof fulfillmentRecordSchema>;
@@ -160,4 +214,11 @@ export const FORM_FIELD_NAMES = [
   "shippingService",
   "trackingCode",
   "shippingLabelDate",
+  "saleDate",
+  "sellerId",
+  "salesOrigin",
+  "expectedDeliveryDate",
+  "deliveryStatus",
+  "deliveredAt",
+  "notes",
 ] as const;

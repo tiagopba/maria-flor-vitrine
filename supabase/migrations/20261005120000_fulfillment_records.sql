@@ -5,6 +5,7 @@
 -- Módulo "Faturamento e Envios": registro de DANFE simplificado + etiqueta de
 -- envio por pedido, com os PDFs guardados em bucket PRIVADO.
 --
+-- Reaproveita a tabela de vendedoras já existente (public.sellers) por FK — não cria outra.
 -- Totalmente isolado: cria só objetos NOVOS (2 tabelas + 1 bucket + policies).
 -- Não altera, não referencia e não remove nada de produtos, carrinho,
 -- analytics, leads ou qualquer outro módulo. Nenhum DROP/TRUNCATE/DELETE de
@@ -59,6 +60,22 @@ create table if not exists public.fulfillment_records (
   tracking_code text,
   shipping_label_date timestamptz,
 
+  -- Venda e entrega (controle operacional — substitui a planilha de envios)
+  -- Data da venda: independente da emissão da NF-e.
+  sale_date date,
+  -- Vendedora conhecida → seller_id (reaproveita public.sellers; nunca uma nova
+  -- tabela). ONLINE (ou outra origem que não seja uma vendedora) → seller_id
+  -- nulo + sales_origin. Vendedora desconhecida → os dois nulos (a interface
+  -- mostra "Vendedora não informada"; NÃO existe vendedora/origem fictícia).
+  seller_id uuid references public.sellers(id) on delete set null,
+  sales_origin text,
+  expected_delivery_date date,
+  delivered_at date,
+  -- Situação LOGÍSTICA — separada de `status` (que é só "registro confirmado").
+  delivery_status text not null default 'PENDING'
+    check (delivery_status in ('PENDING', 'IN_TRANSIT', 'DELIVERED', 'RESENT', 'REFUNDED', 'DELIVERY_ISSUE')),
+  notes text,
+
   -- Arquivos (caminhos dentro do bucket privado 'fulfillment-documents')
   danfe_file_path text not null,
   label_file_path text not null,
@@ -68,7 +85,13 @@ create table if not exists public.fulfillment_records (
 
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+
+  -- Vendedora OU origem, nunca os dois.
+  constraint fulfillment_records_seller_or_origin_check
+    check (seller_id is null or sales_origin is null),
+  constraint fulfillment_records_sales_origin_not_blank_check
+    check (sales_origin is null or length(btrim(sales_origin)) > 0)
 );
 
 create index if not exists fulfillment_records_created_at_idx
@@ -81,6 +104,12 @@ create index if not exists fulfillment_records_nfe_key_idx
   on public.fulfillment_records (nfe_key);
 create index if not exists fulfillment_records_tracking_code_idx
   on public.fulfillment_records (tracking_code);
+create index if not exists fulfillment_records_sale_date_idx
+  on public.fulfillment_records (sale_date desc);
+create index if not exists fulfillment_records_seller_id_idx
+  on public.fulfillment_records (seller_id);
+create index if not exists fulfillment_records_delivery_status_idx
+  on public.fulfillment_records (delivery_status);
 
 -- updated_at automático — reaproveita public.set_updated_at() (já existe).
 drop trigger if exists fulfillment_records_set_updated_at on public.fulfillment_records;

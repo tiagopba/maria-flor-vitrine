@@ -1,7 +1,9 @@
 import Link from "next/link";
 import type { FulfillmentRecord } from "@/lib/db/fulfillment";
+import { formatSellerOrigin } from "@/lib/fulfillment/delivery";
 import { formatBRL, formatCarrier, formatIsoDate, formatStoreDateTime } from "@/lib/fulfillment/format";
 import { formatCpfCnpj, formatPostalCode } from "@/lib/fulfillment/text";
+import { DeliveryStatusBadge } from "../RecordsTable";
 import { CopyButton } from "./CopyButton";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -25,7 +27,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 const documentButton =
   "inline-flex h-11 items-center justify-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground hover:opacity-90";
 
-export function RecordDetailView({ record }: { record: FulfillmentRecord }) {
+export function RecordDetailView({
+  record,
+  sellerName,
+}: {
+  record: FulfillmentRecord;
+  /** Nome da vendedora de record.seller_id (public.sellers), quando houver. */
+  sellerName: string | null;
+}) {
   return (
     <div className="max-w-3xl">
       <Link href="/admin/faturamento-envios" className="text-sm text-text-muted hover:text-text">
@@ -55,6 +64,27 @@ export function RecordDetailView({ record }: { record: FulfillmentRecord }) {
       </div>
 
       <div className="flex flex-col gap-5">
+        <Section title="Venda e entrega">
+          <Field label="Data da venda">{record.sale_date ? formatIsoDate(record.sale_date) : ""}</Field>
+          <Field label="Vendedora/Origem">{formatSellerOrigin(sellerName, record.sales_origin)}</Field>
+          <Field label="Previsão de entrega">
+            {record.expected_delivery_date ? formatIsoDate(record.expected_delivery_date) : ""}
+          </Field>
+          <Field label="Status">
+            <span className="flex flex-wrap items-center gap-2">
+              <DeliveryStatusBadge status={record.delivery_status} />
+              {record.delivery_status === "DELIVERED" && record.delivered_at && (
+                <span className="text-text-muted">Entregue em {formatIsoDate(record.delivered_at)}</span>
+              )}
+            </span>
+          </Field>
+          <div className="sm:col-span-2">
+            <Field label="Observações">
+              {record.notes ? <span className="whitespace-pre-wrap">{record.notes}</span> : ""}
+            </Field>
+          </div>
+        </Section>
+
         <Section title="Cliente">
           <Field label="Nome">{record.customer_name}</Field>
           <Field label="CPF">

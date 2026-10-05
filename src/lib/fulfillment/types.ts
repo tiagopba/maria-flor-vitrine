@@ -92,4 +92,12 @@ export interface FulfillmentFormValues {
   trackingCode: string;
   /** aaaa-mm-ddThh:mm (input datetime-local) */
   shippingLabelDate: string;
+  // Venda e entrega — não vêm dos PDFs; o funcionário preenche.
+  saleDate: string;
+  sellerId: string;
+  salesOrigin: string;
+  expectedDeliveryDate: string;
+  deliveryStatus: string;
+  deliveredAt: string;
+  notes: string;
 }
