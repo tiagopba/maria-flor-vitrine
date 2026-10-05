@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import type { FulfillmentListItem } from "@/lib/db/fulfillment";
-import { DELIVERY_STATUS_LABELS, formatSellerOrigin, type DeliveryStatus } from "@/lib/fulfillment/delivery";
+import { DELIVERY_STATUS_LABELS, describeSellerOrigin, type DeliveryStatus } from "@/lib/fulfillment/delivery";
 import { formatCarrier, formatIsoDate } from "@/lib/fulfillment/format";
 import { maskCpfCnpj } from "@/lib/fulfillment/text";
 
@@ -49,6 +49,7 @@ export function RecordsTable({
         <tbody>
           {records.map((record) => {
             const sellerName = record.seller_id ? (sellerNames[record.seller_id] ?? null) : null;
+            const sellerOrigin = describeSellerOrigin(sellerName, record.sales_origin);
             return (
               <tr key={record.id} className="border-b border-border/60 align-top last:border-0">
                 <td className="whitespace-nowrap px-4 py-3 text-text">{formatIsoDate(record.sale_date)}</td>
@@ -59,7 +60,10 @@ export function RecordsTable({
                     {record.nfe_number && <> · NF-e {record.nfe_number}</>}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-text">{formatSellerOrigin(sellerName, record.sales_origin)}</td>
+                <td className="px-4 py-3 text-text">
+                  <div>{sellerOrigin.primary}</div>
+                  {sellerOrigin.secondary && <div className="mt-0.5 text-xs text-text-muted">{sellerOrigin.secondary}</div>}
+                </td>
                 <td className="px-4 py-3 text-text">{formatCarrier(record.carrier, record.shipping_service)}</td>
                 <td className="px-4 py-3 font-mono text-text">{record.tracking_code ?? "—"}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-text-muted">

@@ -28,12 +28,23 @@ export function isDeliveryStatus(value: unknown): value is DeliveryStatus {
 
 export const UNKNOWN_SELLER_LABEL = "Vendedora não informada";
 
+/** "ONLINE" → "Online" · "TRAY" → "Tray" (no banco a origem fica sempre em caixa alta). */
+export function formatOriginLabel(origin: string): string {
+  const lower = origin.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
 /**
- * Vendedora conhecida → o nome dela. Sem vendedora mas com origem (ex: ONLINE)
- * → a origem. Nenhum dos dois → "Vendedora não informada" (nunca um cadastro fictício).
+ * Vendedora e origem são informações independentes: uma nunca substitui a outra.
+ * Sem vendedora → "Vendedora não informada" (nunca um cadastro fictício); a origem,
+ * quando existe, aparece sempre numa segunda linha ("Origem: Online").
  */
-export function formatSellerOrigin(sellerName: string | null | undefined, origin: string | null | undefined): string {
-  if (sellerName) return sellerName;
-  if (origin) return origin;
-  return UNKNOWN_SELLER_LABEL;
+export function describeSellerOrigin(
+  sellerName: string | null | undefined,
+  origin: string | null | undefined
+): { primary: string; secondary: string | null } {
+  return {
+    primary: sellerName || UNKNOWN_SELLER_LABEL,
+    secondary: origin ? `Origem: ${formatOriginLabel(origin)}` : null,
+  };
 }

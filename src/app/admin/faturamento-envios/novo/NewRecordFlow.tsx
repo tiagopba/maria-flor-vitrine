@@ -158,7 +158,7 @@ export function NewRecordFlow({
   saveRecord: saveFulfillmentRecordAction,
   sellers,
 }: {
-  /** Vendedoras já cadastradas (public.sellers) — nunca se cria vendedora por aqui. */
+  /** Vendedoras já cadastradas (public.sellers) — nunca se cria vendedora por aqui. Vendedora e origem são independentes. */
   sellers: { id: string; name: string; active: boolean }[];
   readDocuments: (formData: FormData) => Promise<ReadDocumentsResult>;
   saveRecord: (formData: FormData) => Promise<SaveRecordResult>;
@@ -514,9 +514,10 @@ export function NewRecordFlow({
           id="saleDate"
           name="saleDate"
           type="date"
-          label="Data da venda"
+          label="Data da venda (obrigatória)"
           defaultValue={values.saleDate}
           error={errorFor("saleDate")}
+          required
         />
         <Input
           id="expectedDeliveryDate"
@@ -545,7 +546,7 @@ export function NewRecordFlow({
           <Input
             id="salesOrigin"
             name="salesOrigin"
-            label="Origem da venda (se não for uma vendedora)"
+            label="Origem da venda"
             placeholder="Ex: ONLINE"
             defaultValue={values.salesOrigin}
             error={errorFor("salesOrigin")}

@@ -88,10 +88,15 @@ describe("fulfillmentRecordSchema", () => {
     assert.equal(parsed.shipping_label_date, "2026-10-05T11:05:00-04:00");
   });
 
-  it("só o nome é obrigatório", () => {
+  it("só nome e data da venda são obrigatórios", () => {
     const empty = Object.fromEntries(Object.keys(baseInput).map((key) => [key, ""]));
     assert.equal(fulfillmentRecordSchema.safeParse(empty).success, false);
-    assert.equal(fulfillmentRecordSchema.safeParse({ ...empty, customerName: "Ana" }).success, true);
+    assert.equal(fulfillmentRecordSchema.safeParse({ ...empty, customerName: "Ana" }).success, false);
+    assert.equal(fulfillmentRecordSchema.safeParse({ ...empty, saleDate: "2026-10-01" }).success, false);
+    assert.equal(
+      fulfillmentRecordSchema.safeParse({ ...empty, customerName: "Ana", saleDate: "2026-10-01" }).success,
+      true
+    );
   });
 
   it("recusa valores malformados em vez de gravar lixo", () => {
@@ -124,32 +129,51 @@ describe("fulfillmentRecordSchema", () => {
   });
 
   it("campos de venda e entrega: datas, status padrão PENDING e observações", () => {
-  const parsed = fulfillmentRecordSchema.parse(baseInput);
-  assert.equal(parsed.sale_date, "2026-10-01");
-  assert.equal(parsed.expected_delivery_date, "2026-10-12");
-  assert.equal(parsed.delivered_at, null);
-  assert.equal(parsed.delivery_status, "PENDING");
-  assert.equal(parsed.notes, "Cliente pediu entrega à tarde");
-  assert.equal(parsed.seller_id, null);
-  assert.equal(parsed.sales_origin, null);
+    const parsed = fulfillmentRecordSchema.parse(baseInput);
+    assert.equal(parsed.sale_date, "2026-10-01");
+    assert.equal(parsed.expected_delivery_date, "2026-10-12");
+    assert.equal(parsed.delivered_at, null);
+    assert.equal(parsed.delivery_status, "PENDING");
+    assert.equal(parsed.notes, "Cliente pediu entrega à tarde");
+    assert.equal(parsed.seller_id, null);
+    assert.equal(parsed.sales_origin, null);
   });
 
-  it("vendedora conhecida → seller_id; ONLINE → só sales_origin; desconhecida → os dois nulos", () => {
-    const sellerId = "123e4567-e89b-42d3-a456-426614174000";
-    const known = fulfillmentRecordSchema.parse({ ...baseInput, sellerId });
-    assert.equal(known.seller_id, sellerId);
-    assert.equal(known.sales_origin, null);
+  it("data da venda é obrigatória e nunca é derivada da NF-e", () => {
+    for (const saleDate of ["", "  ", "2026-02-31", "ontem"]) {
+      assert.equal(fulfillmentRecordSchema.safeParse({ ...baseInput, saleDate }).success, false, saleDate);
+    }
+    // Mesmo com data de emissão da NF-e preenchida, sem data da venda não salva.
+    assert.equal(fulfillmentRecordSchema.safeParse({ ...baseInput, saleDate: "", nfeIssuedAt: "2026-10-02" }).success, false);
+    // E a data da venda pode ser diferente da emissão.
+    const parsed = fulfillmentRecordSchema.parse({ ...baseInput, saleDate: "2026-09-28", nfeIssuedAt: "2026-10-02" });
+    assert.equal(parsed.sale_date, "2026-09-28");
+    assert.equal(parsed.nfe_issued_at, "2026-10-02");
+  });
 
-    const online = fulfillmentRecordSchema.parse({ ...baseInput, salesOrigin: " online " });
-    assert.equal(online.seller_id, null);
-    assert.equal(online.sales_origin, "ONLINE");
+  it("vendedora e origem são independentes: os 4 casos", () => {
+    const sellerId = "123e4567-e89b-42d3-a456-426614174000";
+
+    const both = fulfillmentRecordSchema.parse({ ...baseInput, sellerId, salesOrigin: " online " });
+    assert.equal(both.seller_id, sellerId);
+    assert.equal(both.sales_origin, "ONLINE");
+
+    const onlyOrigin = fulfillmentRecordSchema.parse({ ...baseInput, salesOrigin: "tray" });
+    assert.equal(onlyOrigin.seller_id, null);
+    assert.equal(onlyOrigin.sales_origin, "TRAY");
+
+    const onlySeller = fulfillmentRecordSchema.parse({ ...baseInput, sellerId });
+    assert.equal(onlySeller.seller_id, sellerId);
+    assert.equal(onlySeller.sales_origin, null);
 
     const unknown = fulfillmentRecordSchema.parse(baseInput);
     assert.equal(unknown.seller_id, null);
     assert.equal(unknown.sales_origin, null);
+
+    assert.equal(fulfillmentRecordSchema.safeParse({ ...baseInput, sellerId: "nao-e-uuid" }).success, false);
   });
 
-  it('"X" da planilha antiga nunca vira origem', () => {
+  it('"X" da planilha antiga nunca é persistido', () => {
     for (const salesOrigin of ["X", "x", " x "]) {
       assert.equal(fulfillmentRecordSchema.parse({ ...baseInput, salesOrigin }).sales_origin, null);
     }
@@ -157,26 +181,17 @@ describe("fulfillmentRecordSchema", () => {
     assert.equal(fulfillmentRecordSchema.parse({ ...baseInput, salesOrigin: "LOJA X" }).sales_origin, "LOJA X");
   });
 
-  it("vendedora e origem são exclusivas", () => {
-    const both = fulfillmentRecordSchema.safeParse({
-      ...baseInput,
-      sellerId: "123e4567-e89b-42d3-a456-426614174000",
-      salesOrigin: "ONLINE",
-    });
-    assert.equal(both.success, false);
-    assert.equal(fulfillmentRecordSchema.safeParse({ ...baseInput, sellerId: "nao-e-uuid" }).success, false);
-  });
-
-  it("status da entrega: só valores permitidos; entrega só com DELIVERED", () => {
-    for (const deliveryStatus of ["PENDING", "IN_TRANSIT", "DELIVERED", "RESENT", "REFUNDED", "DELIVERY_ISSUE"]) {
+  it("status da entrega: só valores permitidos; DELIVERED exige data de entrega", () => {
+    for (const deliveryStatus of ["PENDING", "IN_TRANSIT", "RESENT", "REFUNDED", "DELIVERY_ISSUE"]) {
       assert.equal(fulfillmentRecordSchema.parse({ ...baseInput, deliveryStatus }).delivery_status, deliveryStatus);
     }
     assert.equal(fulfillmentRecordSchema.safeParse({ ...baseInput, deliveryStatus: "CONFIRMED" }).success, false);
     assert.equal(fulfillmentRecordSchema.safeParse({ ...baseInput, deliveredAt: "2026-10-10" }).success, false);
+    assert.equal(fulfillmentRecordSchema.safeParse({ ...baseInput, deliveryStatus: "DELIVERED" }).success, false);
 
     const delivered = fulfillmentRecordSchema.parse({ ...baseInput, deliveryStatus: "DELIVERED", deliveredAt: "2026-10-10" });
+    assert.equal(delivered.delivery_status, "DELIVERED");
     assert.equal(delivered.delivered_at, "2026-10-10");
-    assert.equal(fulfillmentRecordSchema.safeParse({ ...baseInput, saleDate: "2026-02-31" }).success, false);
   });
 
   it("formatCarrier combina transportadora e serviço", () => {

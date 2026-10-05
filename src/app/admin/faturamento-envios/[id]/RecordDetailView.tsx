@@ -1,10 +1,12 @@
 import Link from "next/link";
 import type { FulfillmentRecord } from "@/lib/db/fulfillment";
-import { formatSellerOrigin } from "@/lib/fulfillment/delivery";
+import { UNKNOWN_SELLER_LABEL, formatOriginLabel } from "@/lib/fulfillment/delivery";
 import { formatBRL, formatCarrier, formatIsoDate, formatStoreDateTime } from "@/lib/fulfillment/format";
 import { formatCpfCnpj, formatPostalCode } from "@/lib/fulfillment/text";
 import { DeliveryStatusBadge } from "../RecordsTable";
 import { CopyButton } from "./CopyButton";
+import { updateDeliveryAction } from "./actions";
+import { UpdateSituationPanel } from "./UpdateSituationPanel";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -63,10 +65,28 @@ export function RecordDetailView({
         </a>
       </div>
 
+      <div className="mb-5">
+        <UpdateSituationPanel
+          action={updateDeliveryAction}
+          key={`${record.delivery_status}-${record.updated_at}`}
+          record={{
+            id: record.id,
+            delivery_status: record.delivery_status,
+            expected_delivery_date: record.expected_delivery_date,
+            delivered_at: record.delivered_at,
+            notes: record.notes,
+            carrier: record.carrier,
+            shipping_service: record.shipping_service,
+            tracking_code: record.tracking_code,
+          }}
+        />
+      </div>
+
       <div className="flex flex-col gap-5">
         <Section title="Venda e entrega">
           <Field label="Data da venda">{record.sale_date ? formatIsoDate(record.sale_date) : ""}</Field>
-          <Field label="Vendedora/Origem">{formatSellerOrigin(sellerName, record.sales_origin)}</Field>
+          <Field label="Vendedora">{sellerName ?? UNKNOWN_SELLER_LABEL}</Field>
+          <Field label="Origem da venda">{record.sales_origin ? formatOriginLabel(record.sales_origin) : ""}</Field>
           <Field label="Previsão de entrega">
             {record.expected_delivery_date ? formatIsoDate(record.expected_delivery_date) : ""}
           </Field>

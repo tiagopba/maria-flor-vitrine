@@ -1,5 +1,6 @@
 import "server-only";
-import { parseSellerOriginFilter, type FulfillmentListFilters } from "@/lib/fulfillment/filters";
+import type { DeliveryState } from "@/lib/fulfillment/delivery-update";
+import { FILTER_NONE, type FulfillmentListFilters } from "@/lib/fulfillment/filters";
 import { buildSearchFilter } from "@/lib/fulfillment/search";
 import { listSellersAdmin } from "@/lib/db/sellers";
 import type { FulfillmentRecordFields } from "@/lib/fulfillment/schema";
@@ -80,10 +81,12 @@ export async function listFulfillmentRecords(filters: FulfillmentListFilters): P
   if (filters.status) query = query.eq("delivery_status", filters.status);
   if (filters.state) query = query.eq("state", filters.state);
 
-  const sellerOrigin = parseSellerOriginFilter(filters.sellerOrigin);
-  if (sellerOrigin?.kind === "seller") query = query.eq("seller_id", sellerOrigin.sellerId);
-  if (sellerOrigin?.kind === "origin") query = query.eq("sales_origin", sellerOrigin.origin);
-  if (sellerOrigin?.kind === "none") query = query.is("seller_id", null).is("sales_origin", null);
+  // Vendedora e origem são filtros independentes.
+  if (filters.seller === FILTER_NONE) query = query.is("seller_id", null);
+  else if (filters.seller) query = query.eq("seller_id", filters.seller);
+
+  if (filters.origin === FILTER_NONE) query = query.is("sales_origin", null);
+  else if (filters.origin) query = query.eq("sales_origin", filters.origin);
 
   const { data, error } = await query;
   if (isMissingTableError(error)) return { status: "unavailable" };
@@ -188,7 +191,7 @@ export async function logFulfillmentAudit(input: {
   recordId: string;
   action: FulfillmentAuditAction;
   actorId: string;
-  details?: Record<string, string | number | boolean>;
+  details?: Record<string, string | number | boolean | string[]>;
 }): Promise<void> {
   const supabase = await createClient();
   const { error } = await supabase.from("fulfillment_audit_logs").insert({
@@ -234,4 +237,17 @@ export async function getSellerName(sellerId: string | null): Promise<string | n
   const supabase = await createClient();
   const { data } = await supabase.from("sellers").select("name").eq("id", sellerId).maybeSingle();
   return data?.name ?? null;
+}
+
+/** Aplica a atualização operacional. Falha (em vez de passar em silêncio) se a RLS/ID não afetar nenhuma linha. */
+export async function updateFulfillmentDelivery(id: string, update: DeliveryState): Promise<void> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("fulfillment_records")
+    .update(update)
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Não foi possível atualizar o registro.");
 }

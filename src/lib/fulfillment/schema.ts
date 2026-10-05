@@ -1,10 +1,12 @@
 import { z } from "zod";
-import { normalizeForCompare, onlyDigits, stripLeadingZeros } from "./text.ts";
 import { DEFAULT_DELIVERY_STATUS, isDeliveryStatus, type DeliveryStatus } from "./delivery.ts";
 import { CORREIOS_TRACKING_PATTERN } from "./parse-label.ts";
+import { normalizeForCompare, onlyDigits, stripLeadingZeros } from "./text.ts";
 
 /** America/Campo_Grande não tem horário de verão — mesmo fuso fixo usado no Dashboard. */
 export const STORE_UTC_OFFSET = "-04:00";
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const optionalText = (max: number, message: string) =>
   z
@@ -34,14 +36,67 @@ const isoDateField = (message: string) =>
     .refine((v) => v === "" || isValidIsoDate(v), message)
     .transform((v) => (v === "" ? null : v));
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 const digitsField = (lengths: number[], message: string) =>
   z
     .string()
     .transform(onlyDigits)
     .refine((v) => v === "" || lengths.includes(v.length), message)
     .transform((v) => (v === "" ? null : v));
+
+// Campos de envio e de situação logística: usados tanto no cadastro quanto em "Atualizar situação".
+const shippingFields = {
+  carrier: optionalText(80, "Transportadora muito longa."),
+  shippingService: optionalText(40, "Serviço muito longo."),
+  trackingCode: z
+    .string()
+    .transform((v) => v.replace(/\s+/g, "").toUpperCase())
+    .refine((v) => /^[A-Z0-9-]{0,40}$/.test(v), "Código de rastreio inválido.")
+    .transform((v) => (v === "" ? null : v)),
+};
+
+const deliveryFields = {
+  expectedDeliveryDate: isoDateField("Previsão de entrega inválida."),
+  deliveryStatus: z
+    .string()
+    .trim()
+    .refine((v) => v === "" || isDeliveryStatus(v), "Status de entrega inválido.")
+    .transform((v): DeliveryStatus => (v === "" ? DEFAULT_DELIVERY_STATUS : (v as DeliveryStatus))),
+  deliveredAt: isoDateField("Data de entrega inválida."),
+  notes: optionalText(2000, "Observações muito longas (máx. 2000 caracteres)."),
+};
+
+type ShippingAndDelivery = {
+  carrier: string | null;
+  trackingCode: string | null;
+  deliveryStatus: DeliveryStatus;
+  deliveredAt: string | null;
+};
+
+function checkShippingAndDelivery(v: ShippingAndDelivery, ctx: z.RefinementCtx): void {
+  // Rastreio dos Correios tem formato fixo: 2 letras + 9 dígitos + BR.
+  if (
+    v.carrier &&
+    normalizeForCompare(v.carrier) === "correios" &&
+    v.trackingCode &&
+    !CORREIOS_TRACKING_PATTERN.test(v.trackingCode)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["trackingCode"],
+      message: "Rastreio dos Correios deve ter 2 letras + 9 dígitos + BR (ex: AB123456789BR).",
+    });
+  }
+  if (v.deliveryStatus === "DELIVERED" && !v.deliveredAt) {
+    ctx.addIssue({ code: "custom", path: ["deliveredAt"], message: "Informe a data de entrega." });
+  }
+  if (v.deliveredAt && v.deliveryStatus !== "DELIVERED") {
+    ctx.addIssue({
+      code: "custom",
+      path: ["deliveredAt"],
+      message: "A data de entrega só vale quando o status é Entregue.",
+    });
+  }
+}
 
 /**
  * Valida o formulário de revisão (tudo string, vem de FormData) e devolve já
@@ -79,11 +134,7 @@ export const fulfillmentRecordSchema = z
       .transform(onlyDigits)
       .refine((v) => v.length <= 20, "Protocolo inválido.")
       .transform((v) => (v === "" ? null : v)),
-    nfeIssuedAt: z
-      .string()
-      .trim()
-      .refine((v) => v === "" || isValidIsoDate(v), "Data de emissão inválida.")
-      .transform((v) => (v === "" ? null : v)),
+    nfeIssuedAt: isoDateField("Data de emissão inválida."),
     itemsCount: z
       .string()
       .trim()
@@ -93,13 +144,7 @@ export const fulfillmentRecordSchema = z
       .string()
       .transform(parseMoneyInput)
       .refine((v) => v === null || (Number.isFinite(v) && v < 10_000_000), "Valor total inválido."),
-    carrier: optionalText(80, "Transportadora muito longa."),
-    shippingService: optionalText(40, "Serviço muito longo."),
-    trackingCode: z
-      .string()
-      .transform((v) => v.replace(/\s+/g, "").toUpperCase())
-      .refine((v) => /^[A-Z0-9-]{0,40}$/.test(v), "Código de rastreio inválido.")
-      .transform((v) => (v === "" ? null : v)),
+    ...shippingFields,
     shippingLabelDate: z
       .string()
       .trim()
@@ -112,54 +157,28 @@ export const fulfillmentRecordSchema = z
         "Data da etiqueta inválida."
       )
       .transform((v) => (v === "" ? null : `${v}${v.length === 16 ? ":00" : ""}${STORE_UTC_OFFSET}`)),
-    saleDate: isoDateField("Data da venda inválida."),
+    // Data da venda: obrigatória, escolhida/confirmada pelo funcionário — nunca derivada da NF-e.
+    saleDate: z
+      .string()
+      .trim()
+      .refine((v) => v !== "", "Informe a data da venda.")
+      .refine((v) => v === "" || isValidIsoDate(v), "Data da venda inválida."),
+    // Vendedora responsável e origem da venda são conceitos independentes (podem vir os dois, um ou nenhum).
     sellerId: z
       .string()
       .trim()
       .refine((v) => v === "" || UUID_PATTERN.test(v), "Vendedora inválida.")
       .transform((v) => (v === "" ? null : v)),
-    // "X" era só a marca de "vendedora desconhecida" na planilha antiga: nunca vira origem.
+    // "X" era só a marca de "vendedora desconhecida" na planilha antiga: nunca é gravado.
     salesOrigin: z
       .string()
       .trim()
       .toUpperCase()
       .refine((v) => v.length <= 60, "Origem muito longa.")
       .transform((v) => (v === "" || v === "X" ? null : v)),
-    expectedDeliveryDate: isoDateField("Previsão de entrega inválida."),
-    deliveryStatus: z
-      .string()
-      .trim()
-      .refine((v) => v === "" || isDeliveryStatus(v), "Status de entrega inválido.")
-      .transform((v): DeliveryStatus => (v === "" ? DEFAULT_DELIVERY_STATUS : (v as DeliveryStatus))),
-    deliveredAt: isoDateField("Data de entrega inválida."),
-    notes: optionalText(2000, "Observações muito longas (máx. 2000 caracteres)."),
+    ...deliveryFields,
   })
-  .superRefine((v, ctx) => {
-    if (v.sellerId && v.salesOrigin) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["salesOrigin"],
-        message: "Informe a vendedora OU a origem da venda, não os dois.",
-      });
-    }
-    if (v.deliveredAt && v.deliveryStatus !== "DELIVERED") {
-      ctx.addIssue({
-        code: "custom",
-        path: ["deliveredAt"],
-        message: "A data de entrega só vale quando o status é Entregue.",
-      });
-    }
-  })
-  .superRefine((v, ctx) => {
-    // Rastreio dos Correios tem formato fixo: 2 letras + 9 dígitos + BR.
-    if (v.carrier && normalizeForCompare(v.carrier) === "correios" && v.trackingCode && !CORREIOS_TRACKING_PATTERN.test(v.trackingCode)) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["trackingCode"],
-        message: "Rastreio dos Correios deve ter 2 letras + 9 dígitos + BR (ex: AB123456789BR).",
-      });
-    }
-  })
+  .superRefine(checkShippingAndDelivery)
   .transform((v) => ({
     customer_name: v.customerName,
     customer_cpf: v.customerDocument,
@@ -221,4 +240,36 @@ export const FORM_FIELD_NAMES = [
   "deliveryStatus",
   "deliveredAt",
   "notes",
+] as const;
+
+/** "Atualizar situação" (depois da criação): só campos operacionais — nunca dados do cliente. */
+export const deliveryUpdateSchema = z
+  .object({
+    ...shippingFields,
+    ...deliveryFields,
+    confirmClearDelivery: z.string().transform((v) => v === "on" || v === "true"),
+  })
+  .superRefine(checkShippingAndDelivery)
+  .transform((v) => ({
+    carrier: v.carrier,
+    shipping_service: v.shippingService,
+    tracking_code: v.trackingCode,
+    expected_delivery_date: v.expectedDeliveryDate,
+    delivery_status: v.deliveryStatus,
+    delivered_at: v.deliveredAt,
+    notes: v.notes,
+    confirmClearDelivery: v.confirmClearDelivery,
+  }));
+
+export type DeliveryUpdateInput = z.output<typeof deliveryUpdateSchema>;
+
+export const DELIVERY_UPDATE_FIELD_NAMES = [
+  "carrier",
+  "shippingService",
+  "trackingCode",
+  "expectedDeliveryDate",
+  "deliveryStatus",
+  "deliveredAt",
+  "notes",
+  "confirmClearDelivery",
 ] as const;

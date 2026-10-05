@@ -437,7 +437,7 @@ export interface Database {
           shipping_service: string | null;
           tracking_code: string | null;
           shipping_label_date: string | null;
-          sale_date: string | null;
+          sale_date: string;
           seller_id: string | null;
           sales_origin: string | null;
           expected_delivery_date: string | null;
@@ -458,7 +458,7 @@ export interface Database {
         {
           id: string;
           record_id: string;
-          action: "CREATED" | "DOCUMENT_VIEWED";
+          action: "CREATED" | "DOCUMENT_VIEWED" | "DELIVERY_UPDATED";
           actor_id: string | null;
           details: Record<string, unknown>;
           created_at: string;

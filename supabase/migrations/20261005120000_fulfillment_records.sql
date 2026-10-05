@@ -22,7 +22,8 @@
 -- Auditoria: não existia `audit_logs` no projeto, então este módulo traz a
 -- sua própria `fulfillment_audit_logs` (append-only: só policy de select e
 -- insert, nenhuma de update/delete). `details` guarda só metadados — nunca
--- valores de CPF/nome/endereço.
+-- valores de CPF/nome/endereço/observações. DELIVERY_UPDATED registra apenas
+-- status anterior, status novo e os NOMES dos campos operacionais alterados.
 -- ============================================================================
 
 create table if not exists public.fulfillment_records (
@@ -61,12 +62,13 @@ create table if not exists public.fulfillment_records (
   shipping_label_date timestamptz,
 
   -- Venda e entrega (controle operacional — substitui a planilha de envios)
-  -- Data da venda: independente da emissão da NF-e.
-  sale_date date,
-  -- Vendedora conhecida → seller_id (reaproveita public.sellers; nunca uma nova
-  -- tabela). ONLINE (ou outra origem que não seja uma vendedora) → seller_id
-  -- nulo + sales_origin. Vendedora desconhecida → os dois nulos (a interface
-  -- mostra "Vendedora não informada"; NÃO existe vendedora/origem fictícia).
+  -- Data da venda: obrigatória e independente da emissão da NF-e (nunca derivada dela).
+  sale_date date not null,
+  -- seller_id = vendedora responsável (reaproveita public.sellers; nunca uma nova
+  -- tabela). sales_origin = origem da venda (ONLINE, TRAY, META...). São
+  -- conceitos INDEPENDENTES: podem vir os dois, só um ou nenhum. Os dois nulos =
+  -- a interface mostra "Vendedora não informada" (NÃO existe vendedora/origem
+  -- fictícia; o "X" da planilha antiga nunca é gravado).
   seller_id uuid references public.sellers(id) on delete set null,
   sales_origin text,
   expected_delivery_date date,
@@ -87,9 +89,6 @@ create table if not exists public.fulfillment_records (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
-  -- Vendedora OU origem, nunca os dois.
-  constraint fulfillment_records_seller_or_origin_check
-    check (seller_id is null or sales_origin is null),
   constraint fulfillment_records_sales_origin_not_blank_check
     check (sales_origin is null or length(btrim(sales_origin)) > 0)
 );
@@ -134,7 +133,7 @@ create table if not exists public.fulfillment_audit_logs (
   id uuid primary key default gen_random_uuid(),
   -- Sem FK de propósito: o log deve sobreviver mesmo se o registro um dia sair.
   record_id uuid not null,
-  action text not null check (action in ('CREATED', 'DOCUMENT_VIEWED')),
+  action text not null check (action in ('CREATED', 'DOCUMENT_VIEWED', 'DELIVERY_UPDATED')),
   actor_id uuid,
   details jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()

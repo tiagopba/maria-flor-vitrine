@@ -4,8 +4,13 @@ import { SuccessToast } from "@/components/admin/SuccessToast";
 import { Button } from "@/components/ui/Button";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { FULFILLMENT_PAGE_SIZE, getFulfillmentFilterOptions, listFulfillmentRecords } from "@/lib/db/fulfillment";
-import { DELIVERY_STATUSES, DELIVERY_STATUS_LABELS, UNKNOWN_SELLER_LABEL } from "@/lib/fulfillment/delivery";
-import { BR_STATES, filtersToSearchParams, parseListFilters } from "@/lib/fulfillment/filters";
+import {
+  DELIVERY_STATUSES,
+  DELIVERY_STATUS_LABELS,
+  UNKNOWN_SELLER_LABEL,
+  formatOriginLabel,
+} from "@/lib/fulfillment/delivery";
+import { BR_STATES, FILTER_NONE, filtersToSearchParams, parseListFilters } from "@/lib/fulfillment/filters";
 import { RecordsTable } from "./RecordsTable";
 
 export const metadata: Metadata = { title: "Faturamento e Envios" };
@@ -32,7 +37,8 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
     filters.query ||
       filters.saleFrom ||
       filters.saleTo ||
-      filters.sellerOrigin ||
+      filters.seller ||
+      filters.origin ||
       filters.carrier ||
       filters.status ||
       filters.state
@@ -40,6 +46,9 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
   const sellerNames = Object.fromEntries(options.sellers.map((s) => [s.id, s.name]));
   // Mantém no select uma transportadora/origem filtrada mesmo que nenhum registro a use mais.
   const carriers = [...new Set([...options.carriers, ...(filters.carrier ? [filters.carrier] : [])])].sort();
+  const origins = [
+    ...new Set([...options.origins, ...(filters.origin && filters.origin !== FILTER_NONE ? [filters.origin] : [])]),
+  ].sort();
 
   const pageHref = (page: number) => {
     const qs = filtersToSearchParams(filters, page).toString();
@@ -67,34 +76,34 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
           className={FIELD_CLASS}
         />
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <FilterField label="Venda de">
             <input type="date" name="de" defaultValue={filters.saleFrom} className={FIELD_CLASS} />
           </FilterField>
           <FilterField label="Venda até">
             <input type="date" name="ate" defaultValue={filters.saleTo} className={FIELD_CLASS} />
           </FilterField>
-          <FilterField label="Vendedora/Origem">
-            <select name="vendedora" defaultValue={filters.sellerOrigin} className={FIELD_CLASS}>
+          <FilterField label="Vendedora">
+            <select name="vendedora" defaultValue={filters.seller} className={FIELD_CLASS}>
               <option value="">Todas</option>
-              <optgroup label="Vendedoras">
-                {options.sellers.map((seller) => (
-                  <option key={seller.id} value={`seller:${seller.id}`}>
-                    {seller.name}
-                    {seller.active ? "" : " (inativa)"}
-                  </option>
-                ))}
-              </optgroup>
-              {options.origins.length > 0 && (
-                <optgroup label="Origens">
-                  {options.origins.map((origin) => (
-                    <option key={origin} value={`origin:${origin}`}>
-                      {origin}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              <option value="none">{UNKNOWN_SELLER_LABEL}</option>
+              {options.sellers.map((seller) => (
+                <option key={seller.id} value={seller.id}>
+                  {seller.name}
+                  {seller.active ? "" : " (inativa)"}
+                </option>
+              ))}
+              <option value={FILTER_NONE}>{UNKNOWN_SELLER_LABEL}</option>
+            </select>
+          </FilterField>
+          <FilterField label="Origem">
+            <select name="origem" defaultValue={filters.origin} className={FIELD_CLASS}>
+              <option value="">Todas</option>
+              {origins.map((origin) => (
+                <option key={origin} value={origin}>
+                  {formatOriginLabel(origin)}
+                </option>
+              ))}
+              <option value={FILTER_NONE}>Origem não informada</option>
             </select>
           </FilterField>
           <FilterField label="Transportadora">
