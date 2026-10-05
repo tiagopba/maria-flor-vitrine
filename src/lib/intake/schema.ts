@@ -1,7 +1,7 @@
 // Validação das solicitações (Admin) e dos dados enviados pela cliente — PURO.
 import { z } from "zod";
 import { isValidCpf } from "./cpf.ts";
-import { PAYMENT_METHODS, isPaymentMethod, validateInstallments, type PaymentMethod } from "./payment.ts";
+import { PAYMENT_METHODS, isPaymentMethod } from "./payment.ts";
 import { normalizeCustomerWhatsapp } from "../fulfillment/phone.ts";
 import { BR_STATE_CODES } from "../fulfillment/historical-import/plan.ts";
 
@@ -66,18 +66,15 @@ export const adminIntakeSchema = z
       .refine((v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v), "Vendedora inválida."),
     saleDate: z.string().trim().refine(isRealIsoDate, "Data da venda inválida."),
     saleTotal: moneyField,
+    // Só as 4 formas novas. Código genérico antigo é recusado (não é aceito em nova solicitação).
     paymentMethod: z.string().refine(isPaymentMethod, "Escolha a forma de pagamento."),
-    installments: z.string().trim().transform((v) => (v === "" ? null : Number(v))),
+    // Número da venda no sistema STI3: identificador textual, obrigatório, sem espaços nas pontas.
+    sti3SaleId: z
+      .string()
+      .trim()
+      .min(1, "Informe o número da venda STI3.")
+      .max(40, "Número da venda STI3 muito longo."),
     internalNotes: optionalText(1000, "Observação muito longa."),
-  })
-  .superRefine((v, ctx) => {
-    const method = v.paymentMethod as PaymentMethod;
-    const result = validateInstallments(method, v.installments);
-    if (!result.ok) ctx.addIssue({ code: "custom", path: ["installments"], message: result.error });
-    // Parcelas só existem para cartão de crédito: preencher em outro método é erro, não é ignorado.
-    if (method !== "CREDIT_CARD" && v.installments !== null) {
-      ctx.addIssue({ code: "custom", path: ["installments"], message: "Parcelas só para cartão de crédito." });
-    }
   });
 
 export type AdminIntakeInput = z.output<typeof adminIntakeSchema>;

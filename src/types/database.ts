@@ -422,7 +422,8 @@ export interface Database {
           // WhatsApp do cliente: 55 + DDD + celular, só dígitos. NULL = não cadastrado. Dado pessoal privado.
           customer_whatsapp: string | null;
           sale_total: number | null;
-          payment_method: "PIX" | "CASH" | "DEBIT_CARD" | "CREDIT_CARD" | "CDC" | "OTHER" | null;
+          sti3_sale_id: string | null;
+          payment_method: "ITAU_CREDIT_ELO_AMEX" | "ITAU_CREDIT_MASTER" | "ITAU_CREDIT_VISA" | "ITAU_PIX" | "PIX" | "CASH" | "DEBIT_CARD" | "CREDIT_CARD" | "CDC" | "OTHER" | null;
           installments: number | null;
           customer_name_search: string;
           address_line: string | null;
@@ -499,7 +500,8 @@ export interface Database {
           customer_name: string;
           customer_whatsapp: string | null;
           sale_total: number;
-          payment_method: "PIX" | "CASH" | "DEBIT_CARD" | "CREDIT_CARD" | "CDC" | "OTHER";
+          sti3_sale_id: string | null;
+          payment_method: "ITAU_CREDIT_ELO_AMEX" | "ITAU_CREDIT_MASTER" | "ITAU_CREDIT_VISA" | "ITAU_PIX" | "PIX" | "CASH" | "DEBIT_CARD" | "CREDIT_CARD" | "CDC" | "OTHER";
           installments: number | null;
           internal_notes: string | null;
           status:
@@ -531,7 +533,7 @@ export interface Database {
           created_at: string;
           updated_at: string;
         },
-        "sale_date" | "customer_name" | "sale_total" | "payment_method" | "token_hash" | "token_expires_at"
+        "sale_date" | "customer_name" | "sale_total" | "payment_method" | "token_hash" | "token_expires_at" | "sti3_sale_id"
       >;
       fulfillment_intake_audit_logs: Table<
         {

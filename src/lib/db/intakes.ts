@@ -7,7 +7,7 @@ export type IntakeRow = Database["public"]["Tables"]["fulfillment_intakes"]["Row
 export type IntakeAuditAction = Database["public"]["Tables"]["fulfillment_intake_audit_logs"]["Row"]["action"];
 
 const INTAKE_COLUMNS =
-  "id, seller_id, sale_date, customer_name, customer_whatsapp, sale_total, payment_method, installments, internal_notes, status, token_expires_at, submitted_at, submitted_name, submitted_cpf, submitted_email, submitted_whatsapp, submitted_delivery_to_customer, submitted_recipient_name, submitted_postal_code, submitted_address_line, submitted_address_number, submitted_address_complement, submitted_neighborhood, submitted_city, submitted_state, approved_record_id, created_at, updated_at";
+  "id, seller_id, sale_date, customer_name, customer_whatsapp, sale_total, payment_method, installments, sti3_sale_id, internal_notes, status, token_expires_at, submitted_at, submitted_name, submitted_cpf, submitted_email, submitted_whatsapp, submitted_delivery_to_customer, submitted_recipient_name, submitted_postal_code, submitted_address_line, submitted_address_number, submitted_address_complement, submitted_neighborhood, submitted_city, submitted_state, approved_record_id, created_at, updated_at";
 
 // ── Admin/Master (sessão + RLS is_admin()) ─────────────────────────────────────
 
@@ -18,7 +18,7 @@ export async function createIntakeRow(input: {
   customerWhatsapp: string;
   saleTotal: number;
   paymentMethod: IntakeRow["payment_method"];
-  installments: number | null;
+  sti3SaleId: string;
   internalNotes: string | null;
   tokenHash: string;
   expiresAt: string;
@@ -34,7 +34,9 @@ export async function createIntakeRow(input: {
       customer_whatsapp: input.customerWhatsapp,
       sale_total: input.saleTotal,
       payment_method: input.paymentMethod,
-      installments: input.installments,
+      // Parcelamento não existe mais no fluxo novo: a coluna fica NULL.
+      installments: null,
+      sti3_sale_id: input.sti3SaleId,
       internal_notes: input.internalNotes,
       token_hash: input.tokenHash,
       token_expires_at: input.expiresAt,
@@ -231,4 +233,12 @@ export async function approveIntakeRpc(intakeId: string, attemptNo: number, reco
   });
   if (error || !data) throw new Error(error?.message ?? "Não foi possível aprovar a conferência.");
   return data;
+}
+
+/** Busca por número STI3 (identificador textual, já normalizado). Usada para evitar duplicidade. */
+export async function findIntakeBySti3(sti3SaleId: string): Promise<{ id: string } | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("fulfillment_intakes").select("id").eq("sti3_sale_id", sti3SaleId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ?? null;
 }

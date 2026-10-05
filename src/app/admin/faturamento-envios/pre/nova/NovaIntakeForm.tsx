@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { CopyButton } from "@/app/admin/faturamento-envios/[id]/CopyButton";
-import { PAYMENT_LABELS, PAYMENT_METHODS, type PaymentMethod } from "@/lib/intake/payment";
+import { PAYMENT_LABELS, PAYMENT_METHODS } from "@/lib/intake/payment";
 import { buildIntakeLinkMessage } from "@/lib/intake/messages";
 import { createIntakeAction } from "../actions";
 
@@ -15,7 +15,6 @@ export function NovaIntakeForm({ sellers }: { sellers: { id: string; name: strin
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [created, setCreated] = useState<Created | null>(null);
-  const [method, setMethod] = useState<PaymentMethod>("PIX");
   const [pending, startTransition] = useTransition();
 
   const submit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -71,9 +70,11 @@ export function NovaIntakeForm({ sellers }: { sellers: { id: string; name: strin
       <Input id="customerWhatsapp" name="customerWhatsapp" label="WhatsApp do cliente *" error={errors.customerWhatsapp} placeholder="(67) 99999-9999" inputMode="tel" autoComplete="off" />
 
       <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium text-text">Vendedora</span>
+        <span className="text-sm font-medium text-text">Vendedora *</span>
         <select name="sellerId" defaultValue="" required className="h-11 rounded-xl border border-border bg-surface px-3 text-sm">
-          <option value="" disabled>Escolha a vendedora</option>
+          <option value="" disabled>
+            Escolha a vendedora
+          </option>
           {sellers.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}
@@ -83,17 +84,17 @@ export function NovaIntakeForm({ sellers }: { sellers: { id: string; name: strin
         {errors.sellerId && <p className="text-xs text-red-600">{errors.sellerId}</p>}
       </label>
 
+      <Input id="sti3SaleId" name="sti3SaleId" label="Número da venda STI3 *" error={errors.sti3SaleId} autoComplete="off" />
+
       <Input id="saleDate" name="saleDate" label="Data da venda *" type="date" error={errors.saleDate} />
       <Input id="saleTotal" name="saleTotal" label="Valor da venda (R$) *" error={errors.saleTotal} inputMode="decimal" placeholder="139,99" />
 
       <label className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-text">Forma de pagamento *</span>
-        <select
-          name="paymentMethod"
-          value={method}
-          onChange={(e) => setMethod(e.target.value as PaymentMethod)}
-          className="h-11 rounded-xl border border-border bg-surface px-3 text-sm"
-        >
+        <select name="paymentMethod" defaultValue="" required className="h-11 rounded-xl border border-border bg-surface px-3 text-sm">
+          <option value="" disabled>
+            Escolha a forma de pagamento
+          </option>
           {PAYMENT_METHODS.map((m) => (
             <option key={m} value={m}>
               {PAYMENT_LABELS[m]}
@@ -102,10 +103,6 @@ export function NovaIntakeForm({ sellers }: { sellers: { id: string; name: strin
         </select>
         {errors.paymentMethod && <p className="text-xs text-red-600">{errors.paymentMethod}</p>}
       </label>
-
-      {method === "CREDIT_CARD" && (
-        <Input id="installments" name="installments" label="Parcelas (1 a 12) *" error={errors.installments} inputMode="numeric" />
-      )}
 
       <label className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-text">Observação interna</span>

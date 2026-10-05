@@ -4,7 +4,7 @@ import { UNKNOWN_SELLER_LABEL, formatOriginLabel, statusesForSource } from "@/li
 import { HISTORICAL_NO_DOCUMENTS_MESSAGE, documentAvailability } from "@/lib/fulfillment/documents";
 import { formatBRL, formatCarrier, formatIsoDate, formatStoreDateTime } from "@/lib/fulfillment/format";
 import { formatCpfCnpj, formatPostalCode } from "@/lib/fulfillment/text";
-import { formatPayment, type PaymentMethod } from "@/lib/intake/payment";
+import { formatPayment } from "@/lib/intake/payment";
 import { DeliveryStatusBadge } from "../RecordsTable";
 import { CopyButton } from "./CopyButton";
 import { updateDeliveryAction } from "./actions";
@@ -121,9 +121,9 @@ export function RecordDetailView({
           <Field label="Data da venda">{record.sale_date ? formatIsoDate(record.sale_date) : ""}</Field>
           <Field label="Vendedora">{sellerName ?? UNKNOWN_SELLER_LABEL}</Field>
           <Field label="Origem da venda">{record.sales_origin ? formatOriginLabel(record.sales_origin) : ""}</Field>
-          {record.payment_method && (
-            <Field label="Pagamento">{formatPayment(record.payment_method as PaymentMethod, record.installments)}</Field>
-          )}
+          {record.sti3_sale_id && <Field label="Venda STI3">{record.sti3_sale_id}</Field>}
+          {record.payment_method && <Field label="Pagamento">{formatPayment(record.payment_method)}</Field>}
+          {record.sale_total !== null && <Field label="Valor da venda">{formatBRL(Number(record.sale_total))}</Field>}
           <Field label="Previsão de entrega">
             {record.expected_delivery_date ? formatIsoDate(record.expected_delivery_date) : ""}
           </Field>

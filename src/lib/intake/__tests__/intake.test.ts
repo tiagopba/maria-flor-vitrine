@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { compareAddress, compareMoneyCents, normalizeStreet, toCents, type AddressInput } from "../address.ts";
 import { isValidCpf } from "../cpf.ts";
 import { decideVerdict, canApprove } from "../confere.ts";
-import { formatPayment, validateInstallments, isPaymentMethod, PAYMENT_METHODS } from "../payment.ts";
+import { formatPayment, isPaymentMethod, PAYMENT_METHODS } from "../payment.ts";
 import { generateIntakeToken, hashIntakeToken, intakeExpiresAt, isIntakeTokenExpired, INTAKE_TOKEN_TTL_DAYS } from "../token.ts";
 import { canCustomerSubmit, canReopenCollection, canUploadDocuments, INTAKE_STATUSES } from "../status.ts";
 
@@ -59,25 +59,30 @@ describe("CPF", () => {
   });
 });
 
-describe("pagamento", () => {
-  it("aceita as 6 formas e nenhuma outra", () => {
-    assert.equal(PAYMENT_METHODS.length, 6);
-    for (const m of ["PIX", "CASH", "DEBIT_CARD", "CREDIT_CARD", "CDC", "OTHER"]) assert.equal(isPaymentMethod(m), true);
-    assert.equal(isPaymentMethod("BOLETO"), false);
+describe("pagamento: 4 formas Itaú, sem parcelas", () => {
+  it("aceita exatamente as 4 formas novas", () => {
+    assert.deepEqual([...PAYMENT_METHODS], ["ITAU_CREDIT_ELO_AMEX", "ITAU_CREDIT_MASTER", "ITAU_CREDIT_VISA", "ITAU_PIX"]);
+    for (const m of PAYMENT_METHODS) assert.equal(isPaymentMethod(m), true);
   });
 
-  it("parcelas só para CREDIT_CARD, de 1 a 12", () => {
-    assert.deepEqual(validateInstallments("CREDIT_CARD", 3), { ok: true, value: 3 });
-    assert.equal(validateInstallments("CREDIT_CARD", 0).ok, false);
-    assert.equal(validateInstallments("CREDIT_CARD", 13).ok, false);
-    assert.equal(validateInstallments("CREDIT_CARD", null).ok, false);
-    assert.deepEqual(validateInstallments("PIX", 5), { ok: true, value: null });
+  it("código genérico antigo (CREDIT_CARD, PIX etc.) não é aceito em nova solicitação", () => {
+    for (const m of ["PIX", "CASH", "DEBIT_CARD", "CREDIT_CARD", "CDC", "OTHER", "BOLETO"]) assert.equal(isPaymentMethod(m), false, m);
   });
 
-  it("exibição: 'Pix' e 'Cartão de crédito · 3x'", () => {
-    assert.equal(formatPayment("PIX", null), "Pix");
-    assert.equal(formatPayment("CREDIT_CARD", 3), "Cartão de crédito · 3x");
-    assert.equal(formatPayment(null, null), "—");
+  it("nome exibido é o nome Itaú em caixa alta, como pedido", () => {
+    assert.equal(formatPayment("ITAU_CREDIT_VISA"), "ITAÚ CRÉDITO VISA");
+    assert.equal(formatPayment("ITAU_PIX"), "ITAÚ PIX");
+    assert.equal(formatPayment("ITAU_CREDIT_ELO_AMEX"), "ITAÚ CRÉDITO ELO/AMEX");
+    assert.equal(formatPayment("ITAU_CREDIT_MASTER"), "ITAÚ CRÉDITO MASTER");
+  });
+
+  it("registros antigos continuam exibindo o nome do código legado", () => {
+    assert.equal(formatPayment("CREDIT_CARD"), "Cartão de crédito");
+    assert.equal(formatPayment("PIX"), "Pix");
+  });
+
+  it("sem pagamento → traço", () => {
+    assert.equal(formatPayment(null), "—");
   });
 });
 

@@ -6,7 +6,7 @@ import { isUuid } from "@/lib/db/fulfillment";
 import { getIntakeRow, listAttempts } from "@/lib/db/intakes";
 import { formatBRL, formatIsoDate, formatStoreDateTime } from "@/lib/fulfillment/format";
 import { formatCustomerWhatsapp } from "@/lib/fulfillment/phone";
-import { formatPayment, type PaymentMethod } from "@/lib/intake/payment";
+import { formatPayment } from "@/lib/intake/payment";
 import { INTAKE_STATUS_LABELS, canReopenCollection, canUploadDocuments, type IntakeStatus } from "@/lib/intake/status";
 import { isIntakeTokenExpired } from "@/lib/intake/token";
 import { formatCpfCnpj, formatPostalCode } from "@/lib/fulfillment/text";
@@ -69,7 +69,8 @@ export default async function PreFaturamentoDetailPage({ params }: { params: Pro
         <dl className="grid gap-4 sm:grid-cols-2">
           <Field label="Data da venda" value={formatIsoDate(row.sale_date)} />
           <Field label="Valor da venda" value={formatBRL(Number(row.sale_total))} />
-          <Field label="Pagamento" value={formatPayment(row.payment_method as PaymentMethod, row.installments)} />
+          <Field label="Venda STI3" value={row.sti3_sale_id} />
+          <Field label="Pagamento" value={formatPayment(row.payment_method)} />
           <Field label="WhatsApp" value={formatCustomerWhatsapp(row.customer_whatsapp) ?? "Não cadastrado"} />
         </dl>
         {row.internal_notes && <p className="mt-4 rounded-xl bg-muted p-3 text-sm text-text">{row.internal_notes}</p>}

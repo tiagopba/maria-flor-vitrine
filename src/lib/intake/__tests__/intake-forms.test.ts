@@ -14,10 +14,27 @@ const ADMIN = {
   sellerId: "11111111-1111-4111-8111-111111111111",
   saleDate: "2026-10-05",
   saleTotal: "139,99",
-  paymentMethod: "PIX",
-  installments: "",
+  paymentMethod: "ITAU_PIX",
+  sti3SaleId: "123456",
   internalNotes: "",
 };
+
+describe("número da venda STI3", () => {
+  it("obrigatório: vazio e só espaços são recusados", () => {
+    assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, sti3SaleId: "" }).success, false);
+    assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, sti3SaleId: "   " }).success, false);
+  });
+
+  it("tratado como texto: aceita não-inteiro e normaliza espaços nas pontas", () => {
+    const r = adminIntakeSchema.safeParse({ ...ADMIN, sti3SaleId: "  STI3-2026/0042  " });
+    assert.ok(r.success);
+    assert.equal(r.data.sti3SaleId, "STI3-2026/0042");
+  });
+
+  it("limite de tamanho razoável", () => {
+    assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, sti3SaleId: "9".repeat(41) }).success, false);
+  });
+});
 
 describe("formulário interno SOLICITAR DADOS", () => {
   it("aceita dados válidos e normaliza valor e WhatsApp", () => {
@@ -28,16 +45,14 @@ describe("formulário interno SOLICITAR DADOS", () => {
     assert.equal(r.data.sellerId, "11111111-1111-4111-8111-111111111111");
   });
 
-  it("CREDIT_CARD exige parcelas de 1 a 12", () => {
-    assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, paymentMethod: "CREDIT_CARD", installments: "" }).success, false);
-    assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, paymentMethod: "CREDIT_CARD", installments: "13" }).success, false);
-    const ok = adminIntakeSchema.safeParse({ ...ADMIN, paymentMethod: "CREDIT_CARD", installments: "3" });
-    assert.ok(ok.success);
-    assert.equal(ok.data.installments, 3);
+  it("cartão genérico antigo (CREDIT_CARD) não é aceito em nova solicitação", () => {
+    assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, paymentMethod: "CREDIT_CARD" }).success, false);
   });
 
-  it("parcelas são proibidas fora de cartão de crédito", () => {
-    assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, paymentMethod: "PIX", installments: "2" }).success, false);
+  it("parcelas não existem no fluxo novo: o campo não é lido e installments é null", () => {
+    const r = adminIntakeSchema.safeParse({ ...ADMIN, paymentMethod: "ITAU_CREDIT_VISA", installments: "3" });
+    assert.ok(r.success);
+    assert.equal("installments" in r.data, false);
   });
 
   it("recusa forma de pagamento desconhecida, valor zero e data inválida", () => {

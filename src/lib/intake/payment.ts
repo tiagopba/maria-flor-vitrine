@@ -1,9 +1,19 @@
 // Forma de pagamento da venda — PURO. Nunca guarda dado de cartão, CVV ou conta.
+// Nova solicitação: só as 4 formas abaixo (código estável interno + nome exibido).
+// Códigos genéricos antigos ficam apenas para exibir registros já existentes.
 
-export const PAYMENT_METHODS = ["PIX", "CASH", "DEBIT_CARD", "CREDIT_CARD", "CDC", "OTHER"] as const;
+export const PAYMENT_METHODS = ["ITAU_CREDIT_ELO_AMEX", "ITAU_CREDIT_MASTER", "ITAU_CREDIT_VISA", "ITAU_PIX"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export const PAYMENT_LABELS: Record<PaymentMethod, string> = {
+  ITAU_CREDIT_ELO_AMEX: "ITAÚ CRÉDITO ELO/AMEX",
+  ITAU_CREDIT_MASTER: "ITAÚ CRÉDITO MASTER",
+  ITAU_CREDIT_VISA: "ITAÚ CRÉDITO VISA",
+  ITAU_PIX: "ITAÚ PIX",
+};
+
+/** Códigos antigos (registros existentes). Não aceitos em nova solicitação. */
+export const LEGACY_PAYMENT_LABELS: Record<string, string> = {
   PIX: "Pix",
   CASH: "Dinheiro",
   DEBIT_CARD: "Cartão de débito",
@@ -12,30 +22,12 @@ export const PAYMENT_LABELS: Record<PaymentMethod, string> = {
   OTHER: "Outro",
 };
 
-export const MAX_INSTALLMENTS = 12;
-
 export function isPaymentMethod(value: unknown): value is PaymentMethod {
   return typeof value === "string" && (PAYMENT_METHODS as readonly string[]).includes(value);
 }
 
-/** Parcelas só para cartão de crédito (1 a 12). Qualquer outro método não tem parcelas. */
-export function validateInstallments(
-  method: PaymentMethod,
-  installments: number | null
-): { ok: true; value: number | null } | { ok: false; error: string } {
-  if (method !== "CREDIT_CARD") return { ok: true, value: null };
-  if (installments === null || !Number.isInteger(installments)) {
-    return { ok: false, error: "Informe a quantidade de parcelas." };
-  }
-  if (installments < 1 || installments > MAX_INSTALLMENTS) {
-    return { ok: false, error: `Parcelas entre 1 e ${MAX_INSTALLMENTS}.` };
-  }
-  return { ok: true, value: installments };
-}
-
-/** "Pix" · "Cartão de crédito · 3x". Para exibição interna apenas. */
-export function formatPayment(method: PaymentMethod | null, installments: number | null): string {
+/** Nome exibido para qualquer código (novo ou legado). */
+export function formatPayment(method: string | null | undefined): string {
   if (!method) return "—";
-  if (method === "CREDIT_CARD" && installments) return `${PAYMENT_LABELS[method]} · ${installments}x`;
-  return PAYMENT_LABELS[method];
+  return PAYMENT_LABELS[method as PaymentMethod] ?? LEGACY_PAYMENT_LABELS[method] ?? method;
 }

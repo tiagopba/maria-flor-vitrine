@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { getSiteUrl } from "@/lib/site";
-import { insertIntakeAudit, getIntakeRow, reopenIntake, createIntakeRow } from "@/lib/db/intakes";
+import { insertIntakeAudit, getIntakeRow, reopenIntake, createIntakeRow, findIntakeBySti3 } from "@/lib/db/intakes";
 import { isActiveSeller, isUuid } from "@/lib/db/fulfillment";
 import { adminIntakeSchema } from "@/lib/intake/schema";
 import { canReopenCollection } from "@/lib/intake/status";
@@ -28,7 +28,7 @@ export async function createIntakeAction(raw: Record<string, string>): Promise<I
     saleDate: raw.saleDate ?? "",
     saleTotal: raw.saleTotal ?? "",
     paymentMethod: raw.paymentMethod ?? "",
-    installments: raw.installments ?? "",
+    sti3SaleId: raw.sti3SaleId ?? "",
     internalNotes: raw.internalNotes ?? "",
   });
   if (!parsed.success) {
@@ -38,6 +38,11 @@ export async function createIntakeAction(raw: Record<string, string>): Promise<I
   }
   if (!isUuid(parsed.data.sellerId) || !(await isActiveSeller(parsed.data.sellerId))) {
     return { ok: false, error: "Escolha uma vendedora ativa." };
+  }
+
+  // Mesmo número STI3 não pode virar duas solicitações (a UNIQUE do banco também garante).
+  if (await findIntakeBySti3(parsed.data.sti3SaleId)) {
+    return { ok: false, error: "Já existe uma solicitação para esta venda STI3.", fieldErrors: { sti3SaleId: "Venda STI3 já cadastrada." } };
   }
 
   const token = generateIntakeToken();
@@ -50,7 +55,7 @@ export async function createIntakeAction(raw: Record<string, string>): Promise<I
       customerWhatsapp: parsed.data.customerWhatsapp,
       saleTotal: parsed.data.saleTotal,
       paymentMethod: parsed.data.paymentMethod,
-      installments: parsed.data.installments,
+      sti3SaleId: parsed.data.sti3SaleId,
       internalNotes: parsed.data.internalNotes,
       tokenHash: hashIntakeToken(token),
       expiresAt: expiresAt.toISOString(),

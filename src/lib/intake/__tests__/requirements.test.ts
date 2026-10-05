@@ -18,8 +18,8 @@ const ADMIN = {
   sellerId: SELLER,
   saleDate: "2026-10-05",
   saleTotal: "139,99",
-  paymentMethod: "PIX",
-  installments: "",
+  paymentMethod: "ITAU_PIX",
+  sti3SaleId: "123456",
   internalNotes: "",
 };
 
@@ -43,14 +43,39 @@ describe("solicitação do Admin: campos obrigatórios", () => {
     assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, paymentMethod: "" }).success, false);
   });
 
-  it("cartão de crédito sem parcelas → recusado", () => {
-    assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, paymentMethod: "CREDIT_CARD", installments: "" }).success, false);
+  it("cada uma das 4 formas Itaú é aceita; o genérico antigo CREDIT_CARD não", () => {
+    for (const m of ["ITAU_CREDIT_ELO_AMEX", "ITAU_CREDIT_MASTER", "ITAU_CREDIT_VISA", "ITAU_PIX"]) {
+      assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, paymentMethod: m }).success, true, m);
+    }
+    assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, paymentMethod: "CREDIT_CARD" }).success, false);
   });
 
-  it("outros métodos: parcelas ficam nulas (não aplicáveis)", () => {
-    const r = adminIntakeSchema.safeParse({ ...ADMIN, paymentMethod: "PIX" });
+  it("não há parcelas no fluxo novo: installments não é lido", () => {
+    const r = adminIntakeSchema.safeParse({ ...ADMIN, paymentMethod: "ITAU_CREDIT_VISA" });
     assert.ok(r.success);
-    assert.equal(r.data.installments, null);
+    assert.equal("installments" in r.data, false);
+  });
+
+  it("STI3 obrigatório, vazio e duplicado tratados (duplicado pela consulta e pela UNIQUE do banco)", () => {
+    assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, sti3SaleId: "" }).success, false);
+    assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, sti3SaleId: "  " }).success, false);
+    const act = read("src/app/admin/faturamento-envios/pre/actions.ts");
+    assert.match(act, /findIntakeBySti3\(parsed\.data\.sti3SaleId\)/);
+    assert.match(act, /Já existe uma solicitação para esta venda STI3/);
+  });
+
+  it("STI3 é preservado na aprovação (SQL copia do intake para o registro)", () => {
+    const sql = read("supabase/migrations/20261005250000_fulfillment_sti3_payment.sql");
+    assert.match(sql, /v_intake\.sti3_sale_id/);
+    assert.match(sql, /create unique index if not exists fulfillment_records_sti3_sale_id_uniq/);
+    assert.doesNotMatch(sql, /sti3_sale_id\s+text\s+not null/i);
+  });
+
+  it("STI3 não vai para a página pública, WhatsApp, analytics nem audit details", () => {
+    assert.doesNotMatch(read("src/app/dados-envio/[token]/page.tsx"), /sti3/i);
+    assert.doesNotMatch(read("src/app/dados-envio/[token]/actions.ts"), /sti3/i);
+    assert.doesNotMatch(read("src/lib/intake/messages.ts"), /sti3/i);
+    assert.doesNotMatch(read("src/lib/db/intakes.ts").split("insertIntakeAudit")[1] ?? "", /sti3/i);
   });
 
   it("valor precisa ser maior que zero", () => {
