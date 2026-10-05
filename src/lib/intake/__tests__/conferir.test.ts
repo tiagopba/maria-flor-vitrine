@@ -256,3 +256,28 @@ describe("J&T: complemento não separado na etiqueta", () => {
     assert.equal(r.verdict, "GREEN");
   });
 });
+
+describe("J&T sem logo lido pelo parser (carrier vazio)", () => {
+  it("rastreio 888… com carrier vazio é tratado como J&T: bairro não separado → NOT_COMPARABLE", () => {
+    const r = run({ label: { carrier: null, trackingCode: "888100009999998", neighborhood: null, addressComplement: null } });
+    assert.equal(fieldOf(r, "etiqueta_bairro"), "NOT_COMPARABLE");
+    assert.equal(fieldOf(r, "etiqueta_complemento"), "NOT_COMPARABLE");
+    assert.equal(r.verdict, "GREEN");
+  });
+
+  it("a transportadora gravada no registro é J&T Express quando o logo não foi lido", () => {
+    const r = run({ label: { carrier: null, trackingCode: "888100009999998" } });
+    assert.equal(r.extracted.carrier, "J&T Express");
+  });
+
+  it("rastreio dos Correios (AD…BR) com carrier vazio NÃO entra na regra J&T", () => {
+    const r = run({ label: { carrier: null, trackingCode: "AD981445191BR", neighborhood: null } });
+    assert.equal(fieldOf(r, "etiqueta_bairro"), "REVIEW");
+    assert.equal(r.extracted.carrier, null);
+  });
+
+  it("rastreio fora do padrão e carrier vazio NÃO é tratado como J&T", () => {
+    const r = run({ label: { carrier: null, trackingCode: "XX123", neighborhood: null } });
+    assert.equal(fieldOf(r, "etiqueta_bairro"), "REVIEW");
+  });
+});

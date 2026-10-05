@@ -39,6 +39,16 @@ const EMPTY_ADDRESS: AddressInput = {
   postalCode: null,
 };
 
+/**
+ * Etiqueta J&T. O logo da J&T é imagem: o parser deixa `carrier` vazio. Nesse caso o
+ * documento é tratado como J&T pelo padrão do rastreio (888…), que é como a loja emite.
+ * Correios (AD…BR) nunca cai aqui.
+ */
+export function isJtLabelDocument(label: ShippingLabelData | null): boolean {
+  if (label?.carrier) return trackingCarrier(label.carrier) === "jt";
+  return /^888\d{9,}$/.test(label?.trackingCode ?? "");
+}
+
 function prefixed(prefix: string, results: FieldResult[]): FieldResult[] {
   return results.map((r) => ({ ...r, field: `${prefix}${r.field}` }));
 }
@@ -100,7 +110,7 @@ export function conferir(input: ConfereInput): ConfereOutcome {
   // fica não comparável naquele documento. Bairro presente segue a regra normal (REVIEW se diferente).
   // A comparação cliente × DANFE continua valendo.
   // Mesma regra para o complemento: a etiqueta J&T não o separa de forma confiável.
-  const isJtLabel = trackingCarrier(label?.carrier) === "jt";
+  const isJtLabel = isJtLabelDocument(label);
   const NOT_SEPARATED: Record<string, string> = {
     bairro: "Bairro não separado na etiqueta J&T: não comparável neste documento.",
     complemento: "Complemento não separado na etiqueta J&T: não comparável neste documento.",
@@ -136,7 +146,7 @@ export function conferir(input: ConfereInput): ConfereOutcome {
       nfe_issued_at: danfe?.nfeIssuedAt ?? null,
       items_count: danfe?.itemsCount ?? null,
       invoice_total: danfe?.invoiceTotal ?? null,
-      carrier: label?.carrier ?? null,
+      carrier: label?.carrier ?? (isJtLabelDocument(label) ? "J&T Express" : null),
       shipping_service: label?.shippingService ?? null,
       tracking_code: label?.trackingCode ?? null,
       shipping_label_date: label?.labelDateTime ? label.labelDateTime.slice(0, 10) : null,
