@@ -58,7 +58,12 @@ export const adminIntakeSchema = z
   .object({
     customerName: fullName("Nome do cliente"),
     customerWhatsapp: whatsappField,
-    sellerId: z.string().trim().transform((v) => (v === "" ? null : v)),
+    // Vendedora obrigatória: a solicitação sempre tem uma vendedora ativa (conferida na action).
+    sellerId: z
+      .string()
+      .trim()
+      .min(1, "Escolha a vendedora.")
+      .refine((v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v), "Vendedora inválida."),
     saleDate: z.string().trim().refine(isRealIsoDate, "Data da venda inválida."),
     saleTotal: moneyField,
     paymentMethod: z.string().refine(isPaymentMethod, "Escolha a forma de pagamento."),

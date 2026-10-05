@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/app/admin/faturamento-envios/[id]/CopyButton";
@@ -21,6 +22,7 @@ export function ReopenPanel({
   const [whatsappUrl, setWhatsappUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const reopen = () => {
     if (!window.confirm("Gerar um novo link? O link anterior deixa de funcionar imediatamente.")) return;
@@ -31,8 +33,10 @@ export function ReopenPanel({
         setError(result.error);
         return;
       }
+      // O link fica na tela; só depois atualizamos o status da página.
       setLink(result.link);
       setWhatsappUrl(result.whatsappUrl);
+      router.refresh();
     });
   };
 

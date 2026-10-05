@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { getSiteUrl } from "@/lib/site";
 import { insertIntakeAudit, getIntakeRow, reopenIntake, createIntakeRow } from "@/lib/db/intakes";
-import { isUuid } from "@/lib/db/fulfillment";
+import { isActiveSeller, isUuid } from "@/lib/db/fulfillment";
 import { adminIntakeSchema } from "@/lib/intake/schema";
 import { canReopenCollection } from "@/lib/intake/status";
 import { generateIntakeToken, hashIntakeToken, intakeExpiresAt, intakePath } from "@/lib/intake/token";
@@ -36,7 +36,9 @@ export async function createIntakeAction(raw: Record<string, string>): Promise<I
     for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0] ?? "form")] ??= issue.message;
     return { ok: false, error: "Corrija os campos destacados.", fieldErrors };
   }
-  if (parsed.data.sellerId && !isUuid(parsed.data.sellerId)) return { ok: false, error: "Vendedora inválida." };
+  if (!isUuid(parsed.data.sellerId) || !(await isActiveSeller(parsed.data.sellerId))) {
+    return { ok: false, error: "Escolha uma vendedora ativa." };
+  }
 
   const token = generateIntakeToken();
   const expiresAt = intakeExpiresAt();
@@ -79,7 +81,8 @@ export async function reopenIntakeAction(id: string): Promise<IntakeActionResult
   const expiresAt = intakeExpiresAt();
   await reopenIntake({ id, tokenHash: hashIntakeToken(token), expiresAt: expiresAt.toISOString() });
   await insertIntakeAudit({ intakeId: id, action: "INTAKE_LINK_REOPENED", actorId: admin.id });
-  revalidatePath(`/admin/faturamento-envios/pre/${id}`);
+  // Não recarregar a página nesta ação: isso apagava o link recém-gerado.
+  // O status é atualizado pelo cliente (router.refresh) sem perder o link.
   const link = fullLink(token);
   return { ok: true, id, link, whatsappUrl: intakeWhatsappUrl(row.customer_whatsapp, row.customer_name, link) };
 }

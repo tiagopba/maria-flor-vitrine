@@ -11,7 +11,7 @@ const read = (p: string) => readFileSync(join(ROOT, p), "utf8").split("\r\n").jo
 const ADMIN = {
   customerName: "Neusa Cardim",
   customerWhatsapp: "(67) 99999-9999",
-  sellerId: "",
+  sellerId: "11111111-1111-4111-8111-111111111111",
   saleDate: "2026-10-05",
   saleTotal: "139,99",
   paymentMethod: "PIX",
@@ -25,7 +25,7 @@ describe("formulário interno SOLICITAR DADOS", () => {
     assert.ok(r.success);
     assert.equal(r.data.saleTotal, 139.99);
     assert.equal(r.data.customerWhatsapp, "5567999999999");
-    assert.equal(r.data.sellerId, null);
+    assert.equal(r.data.sellerId, "11111111-1111-4111-8111-111111111111");
   });
 
   it("CREDIT_CARD exige parcelas de 1 a 12", () => {

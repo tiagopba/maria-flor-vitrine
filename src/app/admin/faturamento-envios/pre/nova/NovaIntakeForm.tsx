@@ -72,14 +72,15 @@ export function NovaIntakeForm({ sellers }: { sellers: { id: string; name: strin
 
       <label className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-text">Vendedora</span>
-        <select name="sellerId" defaultValue="" className="h-11 rounded-xl border border-border bg-surface px-3 text-sm">
-          <option value="">Sem vendedora</option>
+        <select name="sellerId" defaultValue="" required className="h-11 rounded-xl border border-border bg-surface px-3 text-sm">
+          <option value="" disabled>Escolha a vendedora</option>
           {sellers.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}
             </option>
           ))}
         </select>
+        {errors.sellerId && <p className="text-xs text-red-600">{errors.sellerId}</p>}
       </label>
 
       <Input id="saleDate" name="saleDate" label="Data da venda *" type="date" error={errors.saleDate} />
