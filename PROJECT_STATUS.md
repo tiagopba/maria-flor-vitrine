@@ -662,6 +662,30 @@ dry-run com o CSV real; apply do importador.
 - **Validação visual:** realizada nas 9 telas no Preview `7cmhz3gcs`: Dashboard, Produtos, Categorias, Vendedoras, Configurações, Faturamento e Envios, Pré-faturamento, Nova Venda e detalhe de registro. Nenhuma grande superfície escura encontrada (medição de luminância, sem resultado). Sidebar medida em branco, e o CTA primário em `rgb(214,33,125)`.
 - **Site público:** não foi aberto nesta validação, para não gerar eventos de analytics nem de Pixel. Nenhum token global foi alterado. O único ajuste compartilhado é o atributo `data-variant` no `Button`, sem efeito visual.
 
+### Cancelamento de venda, máscara do CEP e campos obrigatórios (aprovado)
+
+- **Status `CANCELLED` (rótulo "Cancelada")** implementado no pré-faturamento.
+- **Cancelamento só antes de existir fulfillment aprovado.** Não é permitido com status `APPROVED` nem com `approved_record_id` preenchido. Depois de aprovada, o tratamento passa pelo fluxo do fulfillment.
+- **Motivos (códigos):** `CUSTOMER_WITHDREW` (Cliente desistiu da compra), `CANCELLED_IN_STI3` (Venda cancelada no STI3), `CREATED_BY_MISTAKE` (Cadastro criado por engano), `OTHER` (Outro).
+- **`OTHER` exige observação curta e privada**: até 280 caracteres, guardada só em `cancel_note` (registro privado da intake). Motivos fixos não gravam texto.
+- **Efeitos do cancelamento, na mesma transação** (função `cancel_fulfillment_intake`):
+  - o token é invalidado (o hash é trocado), e o link público mostra "Este link não é válido.";
+  - a cancelada não pode reabrir a coleta, nem reenviar, nem receber DANFE/etiqueta, nem ser conferida ou aprovada;
+  - o histórico é preservado: tentativas, logs e PDFs não são apagados, e nenhum `fulfillment_record` é criado.
+- **Seção "Canceladas"** (com contador) ao final da listagem. Mostra cliente, Venda STI3, data da venda, motivo amigável e data do cancelamento. As demais seções não listam canceladas. O detalhe e o histórico continuam acessíveis.
+- **Auditoria `INTAKE_CANCELLED` sem PII:** grava só ação, ator, data e o código do motivo (`{"reason": "..."}`). Nunca grava nome, CPF, telefone, endereço nem `cancel_note`.
+- **Migration aplicada:** `supabase/migrations/20261006120000_fulfillment_intake_cancellation.sql`. Função `SECURITY INVOKER` com `is_admin()` antes de qualquer escrita. `anon` e `PUBLIC` sem `EXECUTE`. Constraints: motivos válidos, observação de 1 a 280 caracteres só com `OTHER`, `CANCELLED` exige data e motivo, e campos de cancelamento só existem em `CANCELLED`. Trigger impede sair de `CANCELLED` ou mudar seus campos e token. Nenhuma policy ou RLS removida.
+- **CEP:** máscara visual `00000-000` na coleta pública. O banco recebe e guarda só os 8 dígitos (`79500000`). Validação no navegador e no servidor.
+- **Página pública:** aviso "Todos os campos são obrigatórios." no topo do formulário, sem alerta vermelho. Labels obrigatórias com `*`. Complemento exige texto OU "Não possui complemento".
+- **Teste funcional do cancelamento (Preview, dados sintéticos): aprovado.** Cancelamento por "Cliente desistiu da compra", status, data e motivo conferidos; link antigo inválido; seção Canceladas; log sem PII; máscara do CEP; aviso e `*`; regra do complemento.
+- **Ressalva:** o bloqueio direto dos endpoints para intake `CANCELLED` (upload, conferência, aprovação) não foi exercitado com uma chamada manual. Está coberto por código, testes automatizados, constraints/trigger do banco e pela interface (os botões somem).
+
+**Estado final do banco após os testes:**
+- `fulfillment_records = 2`, somente Neusa (`62bbd574-702c-4c31-9e51-a92f97325e50`) e Rosiane (`6bbabf84-77a1-4de9-a190-a233b22c930b`), com `updated_at` inalterados.
+- `fulfillment_intakes = 0`, `fulfillment_verification_attempts = 0`, `fulfillment_intake_audit_logs = 0`.
+- `fulfillment_audit_logs = 5`, mesmo conjunto original.
+- Storage de intakes vazio. PDFs reais de Neusa e Rosiane presentes.
+
 ### Migrations
 - Todas aplicadas, incluindo `20261006100000_fulfillment_intake_created_audit.sql` (só atualiza `approve_fulfillment_intake` para gravar `CREATED` em `fulfillment_audit_logs`; sem alteração de tabela, constraint ou grant).
 - `20261005250000_fulfillment_sti3_payment.sql`: colunas, índices UNIQUE parciais (`WHERE sti3_sale_id IS NOT NULL`), constraints de pagamento, `installments` mantida, função `SECURITY DEFINER` com `is_admin()`, grants conferidos.

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { publicSubmitSchema } from "@/lib/intake/schema";
+import { formatCep } from "@/lib/intake/cep";
 import { submitPublicIntakeAction, type PublicSubmitValues } from "./actions";
 
 const EMPTY: PublicSubmitValues = {
@@ -33,6 +34,10 @@ export function PublicIntakeForm({ token }: { token: string }) {
 
   const set = (key: keyof PublicSubmitValues) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setValues((v) => ({ ...v, [key]: e.target.value }));
+
+  /** CEP com máscara 00000-000 durante a digitação. O servidor guarda só os 8 dígitos. */
+  const setPostalCode = (e: React.ChangeEvent<HTMLInputElement>) =>
+    setValues((v) => ({ ...v, postalCode: formatCep(e.target.value) }));
 
   /** Validação imediata no navegador (mesmo schema do servidor). O servidor valida de novo antes de gravar. */
   const clientErrors = (v: PublicSubmitValues): Record<string, string> => {
@@ -74,6 +79,10 @@ export function PublicIntakeForm({ token }: { token: string }) {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-6" noValidate>
+      <p className="rounded-xl border border-border bg-muted/60 px-4 py-3 text-center text-sm text-text-muted">
+        Todos os campos são obrigatórios.
+      </p>
+
       <section className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted">Dados pessoais</h2>
         <Input id="fullName" label="Nome completo *" value={values.fullName} onChange={set("fullName")} error={errors.fullName} autoComplete="name" />
@@ -84,7 +93,7 @@ export function PublicIntakeForm({ token }: { token: string }) {
 
       <section className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted">Endereço de entrega</h2>
-        <Input id="postalCode" label="CEP *" value={values.postalCode} onChange={set("postalCode")} error={errors.postalCode} inputMode="numeric" autoComplete="postal-code" />
+        <Input id="postalCode" label="CEP *" value={values.postalCode} onChange={setPostalCode} error={errors.postalCode} inputMode="numeric" autoComplete="postal-code" placeholder="00000-000" maxLength={9} />
         <Input id="addressLine" label="Rua *" value={values.addressLine} onChange={set("addressLine")} error={errors.addressLine} autoComplete="address-line1" />
         <Input id="addressNumber" label="Número *" value={values.addressNumber} onChange={set("addressNumber")} error={errors.addressNumber} autoComplete="address-line2" />
 
