@@ -48,11 +48,11 @@ export async function createIntakeRow(input: {
   return { id: data.id };
 }
 
-export async function listIntakes(): Promise<Pick<IntakeRow, "id" | "customer_name" | "sale_date" | "sale_total" | "status" | "submitted_at" | "created_at" | "token_expires_at">[]> {
+export async function listIntakes(): Promise<Pick<IntakeRow, "id" | "customer_name" | "sale_date" | "sale_total" | "status" | "submitted_at" | "created_at" | "token_expires_at" | "sti3_sale_id" | "cancelled_at" | "cancel_reason">[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("fulfillment_intakes")
-    .select("id, customer_name, sale_date, sale_total, status, submitted_at, created_at, token_expires_at")
+    .select("id, customer_name, sale_date, sale_total, status, submitted_at, created_at, token_expires_at, sti3_sale_id, cancelled_at, cancel_reason")
     .order("created_at", { ascending: false })
     .limit(200);
   if (error) throw new Error(error.message);
@@ -95,6 +95,7 @@ export async function reopenIntake(input: {
       submitted_state: null,
     })
     .eq("id", input.id)
+    .not("status", "in", "(APPROVED,CANCELLED)")
     .neq("status", "APPROVED");
   if (error) throw new Error(error.message);
 }
@@ -219,7 +220,7 @@ export async function setIntakeStatusRow(id: string, status: IntakeRow["status"]
     .from("fulfillment_intakes")
     .update({ status })
     .eq("id", id)
-    .neq("status", "APPROVED");
+    .not("status", "in", "(APPROVED,CANCELLED)");
   if (error) throw new Error(error.message);
 }
 
@@ -241,4 +242,15 @@ export async function findIntakeBySti3(sti3SaleId: string): Promise<{ id: string
   const { data, error } = await supabase.from("fulfillment_intakes").select("id").eq("sti3_sale_id", sti3SaleId).maybeSingle();
   if (error) throw new Error(error.message);
   return data ?? null;
+}
+
+/** CANCELAR VENDA: função atômica no banco (só antes da aprovação; invalida o link; log sem PII). */
+export async function cancelIntakeRpc(input: { id: string; reason: string; note: string | null }): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("cancel_fulfillment_intake", {
+    p_intake: input.id,
+    p_reason: input.reason,
+    p_note: input.note,
+  });
+  if (error) throw new Error(error.message);
 }

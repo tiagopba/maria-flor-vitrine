@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { getSiteUrl } from "@/lib/site";
-import { insertIntakeAudit, getIntakeRow, reopenIntake, createIntakeRow, findIntakeBySti3 } from "@/lib/db/intakes";
+import { insertIntakeAudit, getIntakeRow, reopenIntake, createIntakeRow, findIntakeBySti3, cancelIntakeRpc } from "@/lib/db/intakes";
 import { isActiveSeller, isUuid } from "@/lib/db/fulfillment";
 import { adminIntakeSchema } from "@/lib/intake/schema";
-import { canReopenCollection } from "@/lib/intake/status";
+import { canCancelIntake, canReopenCollection } from "@/lib/intake/status";
+import { validateCancelInput, type CancelReason } from "@/lib/intake/cancel";
 import { generateIntakeToken, hashIntakeToken, intakeExpiresAt, intakePath } from "@/lib/intake/token";
 import { intakeWhatsappUrl } from "@/lib/intake/messages";
 
@@ -68,6 +69,35 @@ export async function createIntakeAction(raw: Record<string, string>): Promise<I
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Não foi possível criar a solicitação." };
   }
+}
+
+export type CancelIntakeResult = { ok: true } | { ok: false; error: string; fieldErrors?: Partial<Record<"reason" | "note", string>> };
+
+/**
+ * CANCELAR VENDA: só antes da aprovação. Invalida o link e impede reenvio, reabertura, upload,
+ * conferência e aprovação. Nada é excluído. O log guarda só o código do motivo.
+ */
+export async function cancelIntakeAction(id: string, raw: { reason: unknown; note: unknown }): Promise<CancelIntakeResult> {
+  await requireAdmin(["admin", "master"]);
+  if (!isUuid(id)) return { ok: false, error: "Solicitação inválida." };
+
+  const input = validateCancelInput(raw);
+  if (!input.ok) return { ok: false, error: "Confira o motivo do cancelamento.", fieldErrors: input.fieldErrors };
+
+  const row = await getIntakeRow(id);
+  if (!row) return { ok: false, error: "Solicitação não encontrada." };
+  if (!canCancelIntake(row.status, row.approved_record_id)) {
+    return { ok: false, error: "Esta venda já foi aprovada ou cancelada. O cancelamento agora segue pelo fulfillment." };
+  }
+
+  try {
+    await cancelIntakeRpc({ id, reason: input.reason satisfies CancelReason, note: input.note });
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Não foi possível cancelar." };
+  }
+  revalidatePath("/admin/faturamento-envios/pre");
+  revalidatePath("/admin/faturamento-envios/pre/" + id);
+  return { ok: true };
 }
 
 /**

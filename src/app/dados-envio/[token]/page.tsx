@@ -25,7 +25,9 @@ function Frame({ children }: { children: React.ReactNode }) {
 export default async function PublicIntakePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const validShape = token.length >= 20 && token.length <= 100;
-  const row = validShape ? await findIntakeByTokenHash(hashIntakeToken(token)) : null;
+  const found = validShape ? await findIntakeByTokenHash(hashIntakeToken(token)) : null;
+  // Venda cancelada: o link deixa de valer, mesmo que alguma linha ainda case com o token.
+  const row = found && found.status !== "CANCELLED" ? found : null;
 
   if (!row) {
     return (

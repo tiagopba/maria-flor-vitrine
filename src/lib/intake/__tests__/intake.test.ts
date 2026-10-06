@@ -181,7 +181,7 @@ describe("veredito do CONFERE GERAL", () => {
 });
 
 describe("status do pré-faturamento", () => {
-  it("tem os 7 status pedidos", () => {
+  it("tem os 8 status pedidos (inclui CANCELLED)", () => {
     assert.deepEqual([...INTAKE_STATUSES], [
       "AWAITING_CUSTOMER_DATA",
       "DATA_RECEIVED",
@@ -190,6 +190,7 @@ describe("status do pré-faturamento", () => {
       "REVIEW_REQUIRED",
       "BLOCKED",
       "APPROVED",
+      "CANCELLED",
     ]);
   });
 

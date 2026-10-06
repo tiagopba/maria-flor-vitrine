@@ -511,7 +511,11 @@ export interface Database {
             | "CHECKING"
             | "REVIEW_REQUIRED"
             | "BLOCKED"
-            | "APPROVED";
+            | "APPROVED"
+            | "CANCELLED";
+          cancelled_at: string | null;
+          cancel_reason: "CUSTOMER_WITHDREW" | "CANCELLED_IN_STI3" | "CREATED_BY_MISTAKE" | "OTHER" | null;
+          cancel_note: string | null;
           token_hash: string;
           token_expires_at: string;
           submitted_at: string | null;
@@ -549,7 +553,8 @@ export interface Database {
             | "INTAKE_CHECK_RESTARTED"
             | "INTAKE_REVIEW_COMPLETED"
             | "INTAKE_APPROVED"
-            | "FULFILLMENT_CREATED";
+            | "FULFILLMENT_CREATED"
+            | "INTAKE_CANCELLED";
           actor_id: string | null;
           details: Record<string, unknown>;
           created_at: string;
@@ -579,6 +584,10 @@ export interface Database {
       approve_fulfillment_intake: {
         Args: { p_intake: string; p_attempt: number; p_record: Record<string, unknown> };
         Returns: string;
+      };
+      cancel_fulfillment_intake: {
+        Args: { p_intake: string; p_reason: string; p_note: string | null };
+        Returns: undefined;
       };
       try_claim_email_otp_send: {
         Args: {

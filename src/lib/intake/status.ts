@@ -8,6 +8,7 @@ export const INTAKE_STATUSES = [
   "REVIEW_REQUIRED",
   "BLOCKED",
   "APPROVED",
+  "CANCELLED",
 ] as const;
 export type IntakeStatus = (typeof INTAKE_STATUSES)[number];
 
@@ -19,6 +20,7 @@ export const INTAKE_STATUS_LABELS: Record<IntakeStatus, string> = {
   REVIEW_REQUIRED: "Revisar",
   BLOCKED: "Conferência bloqueada",
   APPROVED: "Conferência aprovada",
+  CANCELLED: "Cancelada",
 };
 
 export function isIntakeStatus(value: unknown): value is IntakeStatus {
@@ -30,12 +32,30 @@ export function canCustomerSubmit(status: IntakeStatus, expired: boolean): boole
   return status === "AWAITING_CUSTOMER_DATA" && !expired;
 }
 
-/** Admin/Master pode reabrir a coleta em qualquer estado, exceto depois de aprovada. */
+/** Link público utilizável: aguardando dados, dentro do prazo. Cancelada nunca vale. */
+export function isIntakeLinkUsable(status: IntakeStatus, expired: boolean): boolean {
+  return canCustomerSubmit(status, expired);
+}
+
+/** Admin/Master pode reabrir a coleta em qualquer estado, exceto aprovada ou cancelada. */
 export function canReopenCollection(status: IntakeStatus): boolean {
-  return status !== "APPROVED";
+  return status !== "APPROVED" && status !== "CANCELLED";
 }
 
 /** Os documentos só podem ser enviados para a conferência depois que a cliente enviou os dados. */
 export function canUploadDocuments(status: IntakeStatus): boolean {
   return status === "DATA_RECEIVED" || status === "DOCUMENTS_PENDING" || status === "BLOCKED" || status === "REVIEW_REQUIRED";
+}
+
+/** Aprovação só a partir da conferência verde ou com revisão. Nunca cancelada, bloqueada ou já aprovada. */
+export function canApproveIntake(status: IntakeStatus): boolean {
+  return status === "CHECKING" || status === "REVIEW_REQUIRED";
+}
+
+/**
+ * Cancelamento só antes da aprovação. Depois de aprovada (ou com fulfillment criado),
+ * o tratamento passa pelo fluxo do fulfillment, não por este mecanismo.
+ */
+export function canCancelIntake(status: IntakeStatus, approvedRecordId: string | null): boolean {
+  return status !== "APPROVED" && status !== "CANCELLED" && approvedRecordId === null;
 }

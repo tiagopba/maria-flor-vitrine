@@ -22,7 +22,7 @@ import { normalizeForCompare } from "@/lib/fulfillment/text";
 import type { DanfeData, ShippingLabelData } from "@/lib/fulfillment/types";
 import { canApprove, type ConfereResult } from "@/lib/intake/confere";
 import { conferir, type ConfereOutcome } from "@/lib/intake/conferir";
-import { canUploadDocuments, type IntakeStatus } from "@/lib/intake/status";
+import { canApproveIntake, canUploadDocuments, type IntakeStatus } from "@/lib/intake/status";
 
 export type ConferenciaResult =
   | { ok: true; attemptNo: number; verdict: "GREEN" | "REVIEW" | "BLOCKED" }
@@ -179,6 +179,7 @@ export async function approveConferenciaAction(intakeId: string, attemptNo: numb
 
   const row = await getIntakeRow(intakeId);
   if (!row) return { ok: false, error: "Solicitação não encontrada." };
+  if (!canApproveIntake(row.status as IntakeStatus)) return { ok: false, error: "Esta solicitação não pode ser aprovada no estado atual." };
   const attempts = await listAttempts(intakeId);
   const attempt: AttemptRow | undefined = attempts[0];
   if (!attempt || attempt.attempt_no !== attemptNo) return { ok: false, error: "Só a tentativa atual pode ser aprovada." };
