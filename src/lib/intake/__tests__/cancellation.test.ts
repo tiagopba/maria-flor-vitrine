@@ -142,6 +142,53 @@ describe("cancelamento: histórico e auditoria no banco", () => {
     assert.match(fn, /for update/);
   });
 
+  it("função roda como SECURITY INVOKER (sem privilégio elevado)", () => {
+    const fn = MIGRATION.slice(MIGRATION.indexOf("create or replace function public.cancel_fulfillment_intake"), MIGRATION.indexOf("-- 7. Privilégios"));
+    assert.doesNotMatch(fn.toLowerCase(), /security definer/);
+  });
+
+  it("is_admin() é verificado antes de qualquer leitura ou escrita", () => {
+    const fn = MIGRATION.slice(MIGRATION.indexOf("create or replace function public.cancel_fulfillment_intake"), MIGRATION.indexOf("-- 7. Privilégios"));
+    const guard = fn.indexOf("if not is_admin() then");
+    assert.ok(guard > 0, "guarda is_admin presente");
+    for (const write of ["for update", "update fulfillment_intakes", "insert into fulfillment_intake_audit_logs"]) {
+      assert.ok(guard < fn.indexOf(write), write);
+    }
+  });
+
+  it("anon e PUBLIC não têm EXECUTE; authenticated tem", () => {
+    assert.match(MIGRATION, /revoke all on function public\.cancel_fulfillment_intake\(uuid, text, text\) from public, anon;/);
+    assert.match(MIGRATION, /grant execute on function public\.cancel_fulfillment_intake\(uuid, text, text\) to authenticated;/);
+  });
+
+  it("não remove policy, RLS nem grant existente", () => {
+    assert.doesNotMatch(MIGRATION, /drop policy/i);
+    assert.doesNotMatch(MIGRATION, /disable row level security/i);
+    assert.doesNotMatch(MIGRATION, /\brevoke\b[^;]*\bfrom\s+authenticated\b/i);
+  });
+
+  it("observação só existe com OTHER; a função não grava observação para os demais motivos", () => {
+    assert.match(MIGRATION, /cancel_note is null or \(length\(cancel_note\) between 1 and 280 and cancel_reason = 'OTHER'\)/);
+    const fn = MIGRATION.slice(MIGRATION.indexOf("create or replace function public.cancel_fulfillment_intake"), MIGRATION.indexOf("-- 7. Privilégios"));
+    assert.match(fn, /else\s+v_note := null;/);
+  });
+
+  it("integridade: CANCELLED exige data e motivo; fora de CANCELLED nenhum campo fica preenchido", () => {
+    assert.match(MIGRATION, /status <> 'CANCELLED' or \(\s*cancelled_at is not null/);
+    assert.match(MIGRATION, /status = 'CANCELLED' or \(cancelled_at is null and cancel_reason is null and cancel_note is null\)/);
+  });
+
+  it("motivos aceitos no banco são exatamente os quatro", () => {
+    assert.match(MIGRATION, /cancel_reason in \(\s*'CUSTOMER_WITHDREW', 'CANCELLED_IN_STI3', 'CREATED_BY_MISTAKE', 'OTHER'/);
+  });
+
+  it("cancelada não volta ao fluxo ativo: trigger bloqueia mudança de status e de campos de cancelamento", () => {
+    assert.match(MIGRATION, /create trigger fulfillment_intakes_block_cancelled[\s\S]*before update on public\.fulfillment_intakes/);
+    assert.match(MIGRATION, /if old\.status = 'CANCELLED' and \(/);
+    assert.match(MIGRATION, /new\.status is distinct from old\.status/);
+    assert.match(MIGRATION, /new\.token_hash is distinct from old\.token_hash/);
+  });
+
   it("a migration não é aplicada automaticamente e está marcada como proposta", () => {
     assert.match(MIGRATION, /PROPOSTA — NÃO APLICADA/);
   });
