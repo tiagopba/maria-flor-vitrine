@@ -119,6 +119,8 @@ export function compareAddress(expected: AddressInput, actual: AddressInput): Fi
   const soft = (field: string, a: string | null, b: string | null) => {
     const na = normalizeText(a);
     const nb = normalizeText(b);
+    // Cliente e documento sem o campo (ex.: "Não possui complemento") = nada a comparar
+    if (!na && !nb) return { field, verdict: "OK" as const, reason: "" };
     if (!nb) return { field, verdict: "REVIEW" as const, reason: `${field} ausente no documento.` };
     if (!na) return { field, verdict: "REVIEW" as const, reason: `${field} não informado pela cliente.` };
     if (na !== nb) return { field, verdict: "REVIEW" as const, reason: `${field} diferente: revisar.` };

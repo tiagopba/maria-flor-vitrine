@@ -129,6 +129,11 @@ describe("endereço: abreviações e regras", () => {
     assert.equal(res.find((r) => r.field === "bairro")!.verdict, "REVIEW");
   });
 
+  it("sem complemento na cliente e sem complemento no documento → OK, sem REVIEW", () => {
+    const res = compareAddress({ ...ADDR, complement: null }, { ...ADDR, complement: null });
+    assert.equal(res.find((r) => r.field === "complemento")!.verdict, "OK");
+  });
+
   it("campo não legível no documento → REVIEW", () => {
     assert.equal(compareAddress(ADDR, { ...ADDR, street: null }).find((r) => r.field === "rua")!.verdict, "REVIEW");
   });
