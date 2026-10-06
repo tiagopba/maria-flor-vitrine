@@ -176,7 +176,7 @@ export function RecordDetailView({
             {record.carrier ? formatCarrier(record.carrier, record.shipping_service) : record.shipping_service}
           </Field>
           <Field label="Data da etiqueta">
-            {record.shipping_label_date ? formatStoreDateTime(record.shipping_label_date) : ""}
+            {record.shipping_label_date ? formatIsoDate(record.shipping_label_date) : ""}
           </Field>
           <div className="sm:col-span-2">
             <Field label="Código de rastreio">
