@@ -1,7 +1,7 @@
 import type { RankingRow } from "@/lib/analytics/dashboard";
 
 export const dashboardCardClass =
-  "rounded-2xl border border-black/[0.03] bg-white p-4 shadow-[0_1px_2px_rgba(20,10,20,0.04),0_8px_24px_-16px_rgba(20,10,20,0.12)] sm:p-5";
+  "rounded-2xl border border-admin-border bg-white p-4 shadow-[0_1px_2px_rgba(20,10,20,0.04),0_8px_24px_-16px_rgba(20,10,20,0.12)] sm:p-5";
 const CARD_CLASS = dashboardCardClass;
 
 /** Iniciais pra um avatar-monograma — usado nos rankings de produto no

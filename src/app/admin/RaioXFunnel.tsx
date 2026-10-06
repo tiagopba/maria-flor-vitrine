@@ -72,7 +72,7 @@ export function RaioXFunnel({
           COMPRAR" (qualquer sessão, sem exigir etapas anteriores) e
           "completou este funil sequencial" — nunca para fazer os dois
           números baterem, eles medem coisas diferentes. */}
-      <p className="mt-3 border-t border-black/[0.04] pt-3 text-xs text-text-muted">
+      <p className="mt-3 border-t border-admin-border pt-3 text-xs text-text-muted">
         {whatsappSessions} sessões clicaram em COMPRAR no período
         <br />
         {completedFunnelSessions} completaram todas as etapas deste funil no período

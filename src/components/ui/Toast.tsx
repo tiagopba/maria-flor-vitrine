@@ -18,8 +18,9 @@ export function Toast({ message, onDismiss }: { message: string; onDismiss?: () 
   return (
     <div
       role="status"
-      className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-text px-4 py-2.5 text-sm font-medium text-background shadow-lg"
+      className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 rounded-full border border-border bg-surface px-4 py-2.5 text-sm font-medium text-text shadow-[0_8px_24px_-12px_rgba(45,38,41,0.25)]"
     >
+      <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
       {message}
     </div>
   );

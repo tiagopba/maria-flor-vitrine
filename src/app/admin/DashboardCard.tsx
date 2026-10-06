@@ -29,7 +29,7 @@ export function DashboardCard({
   const positive = rounded !== null && rounded >= 0;
 
   return (
-    <div className="rounded-2xl border border-black/[0.03] bg-white p-4 shadow-[0_1px_2px_rgba(20,10,20,0.04),0_8px_24px_-16px_rgba(20,10,20,0.12)]">
+    <div className="rounded-2xl border border-admin-border bg-white p-4 shadow-[0_1px_2px_rgba(20,10,20,0.04),0_8px_24px_-16px_rgba(20,10,20,0.12)]">
       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
         <Icon className="h-[18px] w-[18px] text-primary" strokeWidth={1.75} />
       </div>

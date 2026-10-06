@@ -65,7 +65,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps<"/a
         </div>
 
         <div className="flex items-center gap-3 self-start sm:order-first sm:flex-col sm:items-end sm:self-auto">
-          <div className="flex items-center gap-2.5 rounded-full border border-black/[0.04] bg-white py-1.5 pl-1.5 pr-3.5 shadow-[0_1px_2px_rgba(20,10,20,0.04),0_8px_24px_-16px_rgba(20,10,20,0.12)]">
+          <div className="flex items-center gap-2.5 rounded-full border border-admin-border bg-white py-1.5 pl-1.5 pr-3.5 shadow-[0_1px_2px_rgba(20,10,20,0.04),0_8px_24px_-16px_rgba(20,10,20,0.12)]">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
               {initialOf(admin?.name)}
             </div>

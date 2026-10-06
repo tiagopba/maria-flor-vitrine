@@ -6,7 +6,7 @@ import { AdminNav } from "./AdminNav";
 import { logout } from "./login/actions";
 
 /**
- * Sidebar escura + shell claro pro conteúdo — redesign visual (ver
+ * Sidebar clara + shell claro pro conteúdo — redesign visual (ver
  * docs/stable-modules.md: isto é chrome compartilhado do admin, não lógica
  * de nenhum módulo específico). Mesmo mecanismo de antes (Server Component,
  * `getCurrentAdmin` decide o que renderiza, logout via Server Action) — só
@@ -26,21 +26,21 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   const pendingSizeFitCount = await countPendingSizeFitProductsLight();
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#faf6f3] sm:flex-row">
-      <header className="flex items-center justify-between border-b border-white/10 bg-[#18141f] px-4 py-3 sm:hidden">
+    <div className="admin-scope flex min-h-screen flex-col bg-admin-bg sm:flex-row">
+      <header className="flex items-center justify-between border-b border-admin-border bg-admin-surface px-4 py-3 sm:hidden">
         <div className="flex items-center gap-2">
-          <Menu className="h-5 w-5 text-white/70" strokeWidth={1.75} />
-          <span className="font-display text-lg text-white">Maria Flor</span>
+          <Menu className="h-5 w-5 text-admin-text-muted" strokeWidth={1.75} />
+          <span className="font-display text-lg text-admin-text">Maria Flor</span>
         </div>
         <form action={logout}>
-          <button type="submit" className="text-sm text-white/60 hover:text-white">
+          <button type="submit" className="text-sm text-admin-text-muted hover:text-admin-text">
             Sair
           </button>
         </form>
       </header>
 
-      <aside className="flex flex-col bg-[#18141f] sm:w-64 sm:shrink-0">
-        <div className="hidden shrink-0 items-center gap-3 border-b border-white/10 px-5 py-5 sm:flex">
+      <aside className="flex flex-col border-admin-border bg-admin-surface sm:w-64 sm:shrink-0 sm:border-r">
+        <div className="hidden shrink-0 items-center gap-3 border-b border-admin-border px-5 py-5 sm:flex">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white p-1.5 shadow-sm">
             <Image
               src="/logo-maria-flor.png"
@@ -51,8 +51,8 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
             />
           </div>
           <div className="min-w-0">
-            <p className="truncate font-display text-base leading-tight text-white">Maria Flor</p>
-            <p className="truncate text-[11px] uppercase tracking-wide text-white/40">Moda Feminina</p>
+            <p className="truncate font-display text-base leading-tight text-admin-text">Maria Flor</p>
+            <p className="truncate text-[11px] uppercase tracking-wide text-admin-text-muted">Moda Feminina</p>
           </div>
         </div>
 
@@ -60,12 +60,12 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
           <AdminNav role={admin.role} pendingSizeFitCount={pendingSizeFitCount} />
         </div>
 
-        <div className="hidden shrink-0 border-t border-white/10 px-4 py-3 sm:block">
-          <p className="mb-2 truncate text-xs text-white/40">{admin.name}</p>
+        <div className="hidden shrink-0 border-t border-admin-border px-4 py-3 sm:block">
+          <p className="mb-2 truncate text-xs text-admin-text-muted">{admin.name}</p>
           <form action={logout}>
             <button
               type="submit"
-              className="flex items-center gap-2 text-sm text-white/60 transition-colors hover:text-white"
+              className="flex items-center gap-2 text-sm text-admin-text-muted transition-colors hover:text-admin-text"
             >
               <LogOut className="h-4 w-4" strokeWidth={1.75} />
               Sair
