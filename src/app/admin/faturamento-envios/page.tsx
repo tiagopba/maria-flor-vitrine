@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SuccessToast } from "@/components/admin/SuccessToast";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { FULFILLMENT_PAGE_SIZE, getFulfillmentFilterOptions, listFulfillmentRecords } from "@/lib/db/fulfillment";
 import {
@@ -62,8 +62,8 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl text-text">Faturamento e Envios</h1>
-        <Link href="/admin/faturamento-envios/pre/nova">
-          <Button size="md">+ NOVA VENDA</Button>
+        <Link href="/admin/faturamento-envios/pre/nova" className={buttonClasses({ size: "md" })}>
+          + NOVA VENDA
         </Link>
       </div>
 
