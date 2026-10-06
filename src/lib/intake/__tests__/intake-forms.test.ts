@@ -122,7 +122,7 @@ describe("mensagem do link", () => {
     assert.equal(
       text,
       [
-        "Olá, Neusa Cardim! 💕",
+        "Olá, Neusa! 💕",
         "Para emitirmos sua nota fiscal e prepararmos o envio do seu pedido, precisamos que você preencha seus dados neste link seguro:",
         "https://x.test/dados-envio/abc",
         "É rapidinho. 🌷",

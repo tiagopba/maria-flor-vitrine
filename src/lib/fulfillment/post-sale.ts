@@ -3,6 +3,7 @@
 // e registra o clique. "Enviado" só existe quando o funcionário confirma.
 import type { DeliveryStatus } from "./delivery.ts";
 import { normalizeCustomerWhatsapp } from "./phone.ts";
+import { customerFirstName, greetingHello } from "./greeting.ts";
 import { normalizeForCompare } from "./text.ts";
 
 export const POST_SALE_KINDS = ["tracking", "delivery", "review"] as const;
@@ -47,19 +48,6 @@ export function trackingCarrier(carrier: string | null | undefined): TrackingCar
   return null;
 }
 
-const CONNECTIVES = new Set(["da", "de", "do", "das", "dos", "e"]);
-
-/** "NEUSA CARDIM" → "Neusa Cardim" (só para a saudação; o nome gravado não muda). */
-export function greetingName(name: string): string {
-  return name
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLowerCase()
-    .split(" ")
-    .map((word, i) => (i > 0 && CONNECTIVES.has(word) ? word : word.charAt(0).toUpperCase() + word.slice(1)))
-    .join(" ");
-}
-
 export interface TrackingMessageInput {
   customerName: string;
   carrier: string | null;
@@ -72,11 +60,11 @@ export function buildTrackingMessage(input: TrackingMessageInput): string | null
   const carrier = trackingCarrier(input.carrier);
   const code = input.trackingCode?.trim();
   if (!carrier || !code) return null;
-  const name = greetingName(input.customerName);
+  const hello = customerFirstName(input.customerName) ? greetingHello(input.customerName) : "Olá!";
 
   if (carrier === "jt") {
     return [
-      `Olá, ${name}`,
+      hello,
       "Seu pedido já foi enviado pela transportadora J&T Express 📦✨",
       "Aqui está o seu código de rastreio:",
       code,
@@ -89,7 +77,7 @@ export function buildTrackingMessage(input: TrackingMessageInput): string | null
 
   const service = input.service?.trim();
   return [
-    `Olá, ${name}`,
+    hello,
     `Seu pedido já foi enviado pelos Correios${service ? ` (${service})` : ""} 📦✨`,
     "Aqui está o seu código de rastreio:",
     code,
@@ -102,7 +90,7 @@ export function buildTrackingMessage(input: TrackingMessageInput): string | null
 
 export function buildDeliveryConfirmationMessage(customerName: string): string {
   return [
-    `Olá, ${greetingName(customerName)}! 💕`,
+    `${greetingHello(customerName)}! 💕`,
     "Passando para confirmar se o seu pedido da Maria Flor chegou tudo certinho. 📦✨",
     "Deu tudo certo com a entrega e com as peças? 🥰",
     "Se precisar de qualquer ajuda, estamos por aqui!",
@@ -112,7 +100,7 @@ export function buildDeliveryConfirmationMessage(customerName: string): string {
 
 export function buildGoogleReviewMessage(customerName: string): string {
   return [
-    `Olá, ${greetingName(customerName)}! 💕`,
+    `${greetingHello(customerName)}! 💕`,
     "Espero que tenha gostado do meu atendimento e que seu pedido tenha chegado tudo certinho. 🥰",
     "Sua opinião é muito importante para nós!",
     "Se puder, deixe uma avaliação da sua experiência com a Maria Flor no Google. ⭐⭐⭐⭐⭐",

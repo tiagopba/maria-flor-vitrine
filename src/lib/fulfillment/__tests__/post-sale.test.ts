@@ -9,7 +9,6 @@ import {
   buildGoogleReviewMessage,
   buildTrackingMessage,
   derivePostSaleState,
-  greetingName,
   planPostSaleEvent,
   postSaleAvailability,
   trackingCarrier,
@@ -26,7 +25,7 @@ describe("mensagem de rastreio", () => {
     assert.equal(
       text,
       [
-        "Olá, Neusa Cardim",
+        "Olá, Neusa",
         "Seu pedido já foi enviado pela transportadora J&T Express 📦✨",
         "Aqui está o seu código de rastreio:",
         "888100002197060",
@@ -70,7 +69,7 @@ describe("mensagens de entrega e avaliação", () => {
     assert.equal(
       text,
       [
-        "Olá, Neusa Cardim! 💕",
+        "Olá, Neusa! 💕",
         "Passando para confirmar se o seu pedido da Maria Flor chegou tudo certinho. 📦✨",
         "Deu tudo certo com a entrega e com as peças? 🥰",
         "Se precisar de qualquer ajuda, estamos por aqui!",
@@ -86,8 +85,14 @@ describe("mensagens de entrega e avaliação", () => {
     assert.match(text, /Muito obrigada pela confiança e preferência! 🛍️✨/);
   });
 
-  it("saudação em caixa de título, com conectivos minúsculos", () => {
-    assert.equal(greetingName("  MARIA DA SILVA   DE SOUZA "), "Maria da Silva de Souza");
+  it("avaliação Google cumprimenta só pelo primeiro nome", () => {
+    assert.ok(buildGoogleReviewMessage("NEUSA CARDIM").startsWith("Olá, Neusa! 💕\n"));
+    assert.ok(!buildGoogleReviewMessage("NEUSA CARDIM").includes("Cardim"));
+  });
+
+  it("nome vazio → saudação segura, sem 'undefined'", () => {
+    assert.ok(buildGoogleReviewMessage("   ").startsWith("Olá! 💕\n"));
+    assert.ok(!buildDeliveryConfirmationMessage("").includes("undefined"));
   });
 });
 
