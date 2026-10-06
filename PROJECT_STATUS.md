@@ -596,3 +596,74 @@ dry-run com o CSV real; apply do importador.
 - **Merge:** `feature/pos-venda-whatsapp` → `main` (`--no-ff`) autorizado pelo
   usuário nesta rodada; deploy de Production e smoke test somente leitura
   registrados na própria conversa.
+
+---
+
+## 18. Coleta de Dados + Confere Geral (pré-faturamento) — V1 APROVADA
+
+> **Estado final (2026-10-06).** Esta seção substitui as seções 1 a 15 no que
+> diz respeito à Coleta de Dados. Onde as seções antigas falarem de branch
+> `feature/gestao-vendedoras`, migrations pendentes ou teste final pendente,
+> valem os fatos desta seção.
+
+**Branch:** `feature/coleta-dados-faturamento` — funcionalmente aprovada (V1).
+**Commits finais da coleta:**
+- `48f92af` — complemento ausente dos dois lados (cliente "Não possui complemento" e DANFE sem complemento) = OK. Ausência de um lado só continua REVIEW.
+- `e842f79` — correção de exibição da data pura da etiqueta (sem deslocamento de dia).
+- `0a334d5` — auditoria `CREATED` para fulfillment originado de intake.
+
+### Migrations
+- Todas aplicadas, incluindo `20261006100000_fulfillment_intake_created_audit.sql` (só atualiza `approve_fulfillment_intake` para gravar `CREATED` em `fulfillment_audit_logs`; sem alteração de tabela, constraint ou grant).
+- `20261005250000_fulfillment_sti3_payment.sql`: colunas, índices UNIQUE parciais (`WHERE sti3_sale_id IS NOT NULL`), constraints de pagamento, `installments` mantida, função `SECURITY DEFINER` com `is_admin()`, grants conferidos.
+- **Não reaplicar** migrations no merge.
+
+### Regras de negócio vigentes
+- **Venda STI3 obrigatória** (texto, sem espaço nas pontas). Duplicidade recusada (consulta + UNIQUE parcial) com mensagem "Venda STI3 já cadastrada.". Não vai para a cliente, WhatsApp, analytics, Pixel ou CAPI.
+- **Vendedora obrigatória** (ativa, conferida no servidor).
+- **Valor da venda obrigatório** (`sale_total > 0`), comparado em centavos com a NF-e, sem tolerância.
+- **Pagamento (somente estas quatro formas):** `ITAU_CREDIT_ELO_AMEX`, `ITAU_CREDIT_MASTER`, `ITAU_CREDIT_VISA`, `ITAU_PIX`. Códigos genéricos antigos ficam só para registros existentes.
+- **Sem parcelas no fluxo novo:** `installments = NULL`. A coluna continua existindo.
+- **CPF validado pelos dígitos verificadores** (no navegador e no servidor).
+- **Campos públicos obrigatórios:** nome completo, CPF, e-mail, WhatsApp, CEP, rua, número, bairro, cidade e UF. Destinatário obrigatório se a entrega não for para a própria cliente.
+- **Complemento:** texto OU "Não possui complemento" (grava NULL, sem string falsa).
+- **Link com validade de 7 dias**, guardado só como hash. Uso único depois do envio.
+- **REABRIR COLETA** invalida o token anterior e mostra o novo link na tela Admin.
+- **Divergência crítica = BLOCKED, sem bypass** (botão de confirmação desabilitado). Amarelo exige revisão de todos os avisos.
+- **Tentativas preservadas**; cada reenvio recalcula tudo do zero (REVISAR E RECOMEÇAR).
+- **J&T** identificada pelo fallback de rastreio (888…) quando o logo não gera texto. Correios (AD…BR) nunca é J&T. Bairro e complemento ausentes na etiqueta J&T são `NOT_COMPARABLE`.
+- **Aprovação atômica e idempotente** no banco: só a tentativa atual, nunca BLOCKED, `is_admin()` obrigatório, clique repetido não duplica. O fulfillment entra como `PENDING`, copiando STI3, valor, pagamento, vendedora, data e WhatsApp.
+- **Auditoria:** o fulfillment criado por intake recebe exatamente 1 linha em `fulfillment_audit_logs` com `action = 'CREATED'` e `details = {"source":"FULFILLMENT_INTAKE"}`, sem dado pessoal.
+- **`record_source = 'PDF_UPLOAD'`** mantido nesta V1. Outro valor só em uma V2, se houver necessidade de separar origem.
+- **Pós-venda** (seções 15 a 17) continua disponível no registro aprovado.
+
+### Teste final da V1 — aprovado
+Dados sintéticos, Preview. Resultado:
+- Criação com STI3, forma Itaú, vendedora, data, valor; sem campo de parcelas; `installments = NULL`.
+- Duplicidade STI3 recusada, sem segunda intake, com mensagem compreensível.
+- Link público: campos obrigatórios, CPF válido, complemento (texto e "Não possui complemento"), `DATA_RECEIVED`; token usado não aceita nova submissão.
+- REABRIR COLETA: token antigo inválido, novo link na tela, validade de 7 dias, coleta refeita.
+- Confere tentativa 1 (valor divergente): `BLOCKED`, sem bypass, nenhum registro criado.
+- Tentativa 2 com DANFE e etiqueta coerentes: `GREEN`; J&T com fallback; bairro e complemento `NOT_COMPARABLE`.
+- Aprovação: 1 fulfillment `PENDING`, STI3/valor/pagamento/vendedora/WhatsApp preservados, `installments = NULL`, PDFs privados, aparece em Faturamento e Envios, pós-venda presente.
+- Aprovação repetida: não duplica fulfillment nem `CREATED`.
+- Data da etiqueta: `05/10/2026` e `06/10/2026` exibidas sem deslocamento.
+
+**Privacidade:** validada por código e por banco, **não por captura de rede** nesta rodada. Código: rota pública `/dados-envio/[token]` fora do layout público, sem Pixel, CAPI, analytics ou `localStorage`. Banco: varredura de `analytics_events` (1000 linhas mais recentes), `fulfillment_audit_logs` e `fulfillment_intake_audit_logs` sem dado pessoal nem STI3 de teste. PDFs sem acesso público (400 sem autenticação).
+
+**Limitação:** a leitura do corpo da função `approve_fulfillment_intake` no banco não foi feita por texto; a presença do `CREATED` foi comprovada pelo comportamento.
+
+### Limpeza dos dados sintéticos — concluída e verificada
+- `fulfillment_records = 2`: somente Neusa (`62bbd574-702c-4c31-9e51-a92f97325e50`) e Rosiane (`6bbabf84-77a1-4de9-a190-a233b22c930b`).
+- `updated_at` inalterados: Neusa `2026-10-05T16:05:40Z`, Rosiane `2026-10-05T18:27:46Z`.
+- `fulfillment_intakes = 0`, zero tentativas, zero logs de intake.
+- `fulfillment_audit_logs = 5`, mesmos IDs da linha de base.
+- Storage das intakes de teste vazio; `danfe.pdf` e `label.pdf` dos dois registros reais presentes.
+
+### Merge e Production
+- Merge `feature/coleta-dados-faturamento` → `main` (`--no-ff`) autorizado e executado nesta rodada, sem reaplicar migrations.
+- Deploy e smoke test somente leitura registrados na conversa.
+- Próximo passo: nenhum obrigatório. Pendências menores de outras seções (ex.: `staging` defasada, seção 12) seguem como estão.
+
+### Regra para a próxima sessão
+- Não criar dados de teste em Production. Testes sintéticos só em Preview, com limpeza pelos IDs exatos ao final.
+- Registros reais (Neusa e Rosiane) não são alvo de escrita.
