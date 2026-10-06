@@ -650,6 +650,18 @@ dry-run com o CSV real; apply do importador.
 - Storage de testes vazio. `danfe.pdf` e `label.pdf` dos dois registros reais presentes.
 - `updated_at` de Neusa e Rosiane inalterados.
 
+### Refinamento visual global do Admin (aprovado para Production)
+
+- **Tema:** Admin inteiro com tema claro. Escopo `.admin-scope` (em `src/app/globals.css`), aplicado no `admin/layout.tsx`. Os tokens públicos em `:root` não foram alterados, então o site público segue com os mesmos valores.
+- **Tokens do Admin:** `--admin-bg #fbf8f6`, `--admin-surface #ffffff`, `--admin-surface-muted #f6f1ec`, `--admin-border #e7ddd5`, `--admin-text #2d2629` (grafite quente), `--admin-text-muted #75695f`, `--admin-primary #d6217d` (rosa oficial), `--admin-primary-hover #b81a6b`, `--admin-primary-soft #fce8f2`, e status suaves para sucesso, aguardando e erro.
+- **Sidebar e header mobile:** fundo branco com borda suave. Item ativo com fundo `admin-primary-soft` e texto rosa. Itens normais em cinza.
+- **Botões:** primário em rosa, com hover `#b81a6b`. Secundário em branco com borda. Ghost com hover suave. Variante `danger` só para ação destrutiva. O `Button` marca `data-variant`, e a aparência muda só dentro de `.admin-scope`.
+- **Cards e tabelas:** cards brancos com borda leve, sombra mínima, cabeçalho de tabela em cinza claro (`admin-surface-muted`). Os `border-black` dos dashboards viraram `admin-border`.
+- **Toast:** o componente é usado só pelo Admin (`SuccessToast`). Foi restilizado para fundo branco, borda, sombra discreta e ponto verde. Validado por código, sem disparar ação, para não criar dados.
+- **Overlays de modal** (`bg-black/40`, `/60`, `/80`) mantidos, por serem scrims.
+- **Validação visual:** realizada nas 9 telas no Preview `7cmhz3gcs`: Dashboard, Produtos, Categorias, Vendedoras, Configurações, Faturamento e Envios, Pré-faturamento, Nova Venda e detalhe de registro. Nenhuma grande superfície escura encontrada (medição de luminância, sem resultado). Sidebar medida em branco, e o CTA primário em `rgb(214,33,125)`.
+- **Site público:** não foi aberto nesta validação, para não gerar eventos de analytics nem de Pixel. Nenhum token global foi alterado. O único ajuste compartilhado é o atributo `data-variant` no `Button`, sem efeito visual.
+
 ### Migrations
 - Todas aplicadas, incluindo `20261006100000_fulfillment_intake_created_audit.sql` (só atualiza `approve_fulfillment_intake` para gravar `CREATED` em `fulfillment_audit_logs`; sem alteração de tabela, constraint ou grant).
 - `20261005250000_fulfillment_sti3_payment.sql`: colunas, índices UNIQUE parciais (`WHERE sti3_sale_id IS NOT NULL`), constraints de pagamento, `installments` mantida, função `SECURITY DEFINER` com `is_admin()`, grants conferidos.

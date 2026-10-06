@@ -29,6 +29,7 @@ export default async function PreFaturamentoPage() {
         </div>
         <Link
           href="/admin/faturamento-envios/pre/nova"
+          data-variant="primary"
           className="inline-flex h-11 items-center justify-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground hover:opacity-90"
         >
           + NOVA VENDA

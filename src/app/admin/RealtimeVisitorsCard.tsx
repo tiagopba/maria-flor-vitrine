@@ -105,7 +105,7 @@ export function RealtimeVisitorsCard() {
       </p>
 
       {showBreakdown && (
-        <ul className="mt-3 flex flex-col gap-1 border-t border-black/[0.04] pt-3 text-sm">
+        <ul className="mt-3 flex flex-col gap-1 border-t border-admin-border pt-3 text-sm">
           {DISPLAY_ORDER.filter((pt) => breakdown[pt]).map((pt) => (
             <li key={pt} className="flex items-center justify-between text-text-muted">
               <span>{PAGE_TYPE_LABELS[pt]}</span>

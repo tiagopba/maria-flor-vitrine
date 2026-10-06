@@ -88,7 +88,7 @@ export function AdminNav({ role, pendingSizeFitCount }: { role: UserRole; pendin
             <span
               key={item.href}
               title={locked ? "Só administradoras" : "Em breve"}
-              className="flex shrink-0 items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm text-white/25 sm:whitespace-normal"
+              className="flex shrink-0 items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm text-admin-text-muted/50 sm:whitespace-normal"
             >
               <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
               {label}
@@ -103,8 +103,8 @@ export function AdminNav({ role, pendingSizeFitCount }: { role: UserRole; pendin
             className={cn(
               "flex shrink-0 items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition-colors sm:whitespace-normal",
               isActive
-                ? "bg-primary/15 text-primary"
-                : "text-white/65 hover:bg-white/[0.06] hover:text-white"
+                ? "bg-admin-primary-soft text-admin-primary"
+                : "text-admin-text-muted hover:bg-admin-surface-muted hover:text-admin-text"
             )}
           >
             <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />

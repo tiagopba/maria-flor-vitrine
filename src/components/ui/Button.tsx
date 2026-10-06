@@ -1,7 +1,7 @@
 import { type ButtonHTMLAttributes, forwardRef } from "react";
 import { cn } from "@/lib/utils";
 
-type Variant = "primary" | "secondary" | "ghost";
+type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -13,6 +13,8 @@ const variantClasses: Record<Variant, string> = {
   primary: "bg-primary text-primary-foreground hover:opacity-90",
   secondary: "bg-muted text-text hover:bg-border",
   ghost: "bg-transparent text-text hover:bg-muted",
+  // Só para ação realmente destrutiva. Nenhum uso no site público.
+  danger: "bg-red-600 text-white hover:bg-red-700",
 };
 
 const sizeClasses: Record<Size, string> = {
@@ -33,7 +35,7 @@ export function buttonClasses({ variant = "primary", size = "md", className }: {
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "primary", size = "md", ...props }, ref) => {
-    return <button ref={ref} className={buttonClasses({ variant, size, className })} {...props} />;
+    return <button ref={ref} data-variant={variant} className={buttonClasses({ variant, size, className })} {...props} />;
   }
 );
 

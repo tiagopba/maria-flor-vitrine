@@ -62,7 +62,7 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl text-text">Faturamento e Envios</h1>
-        <Link href="/admin/faturamento-envios/pre/nova" className={buttonClasses({ size: "md" })}>
+        <Link href="/admin/faturamento-envios/pre/nova" data-variant="primary" className={buttonClasses({ size: "md" })}>
           + NOVA VENDA
         </Link>
       </div>

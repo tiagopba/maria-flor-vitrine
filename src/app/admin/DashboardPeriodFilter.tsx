@@ -38,7 +38,7 @@ export function DashboardPeriodFilter({ current }: { current: DashboardPeriod })
 
   return (
     <div className="flex flex-col items-start gap-2 sm:items-end">
-      <div className="flex items-center gap-1 rounded-full border border-black/[0.04] bg-white p-1 shadow-[0_1px_2px_rgba(20,10,20,0.04),0_8px_24px_-16px_rgba(20,10,20,0.12)]">
+      <div className="flex items-center gap-1 rounded-full border border-admin-border bg-white p-1 shadow-[0_1px_2px_rgba(20,10,20,0.04),0_8px_24px_-16px_rgba(20,10,20,0.12)]">
         {OPTIONS.map((opt) => (
           <Link
             key={opt.value}

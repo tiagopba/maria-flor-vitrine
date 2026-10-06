@@ -38,6 +38,67 @@
   --font-sans: var(--font-manrope);
 
   --radius-card: var(--radius-card);
+
+  /* Tokens do Admin (valores definidos em .admin-scope abaixo) */
+  --color-admin-bg: var(--admin-bg);
+  --color-admin-surface: var(--admin-surface);
+  --color-admin-surface-muted: var(--admin-surface-muted);
+  --color-admin-border: var(--admin-border);
+  --color-admin-text: var(--admin-text);
+  --color-admin-text-muted: var(--admin-text-muted);
+  --color-admin-primary: var(--admin-primary);
+  --color-admin-primary-soft: var(--admin-primary-soft);
+}
+
+/* Escopo visual do Admin (aplicado em admin/layout.tsx). Só redefine dentro do
+   próprio elemento: os tokens públicos de :root NÃO mudam, então a vitrine segue igual. */
+.admin-scope {
+  --admin-bg: #fbf8f6;
+  --admin-surface: #ffffff;
+  --admin-surface-muted: #f6f1ec;
+  --admin-border: #e7ddd5;
+  --admin-text: #2d2629;
+  --admin-text-muted: #75695f;
+  --admin-primary: #d6217d;
+  --admin-primary-hover: #b81a6b;
+  --admin-primary-soft: #fce8f2;
+  --admin-success: #15803d;
+  --admin-success-soft: #ecfdf3;
+  --admin-warning: #92400e;
+  --admin-warning-soft: #fef6e7;
+  --admin-danger: #b42318;
+  --admin-danger-soft: #fdecea;
+  --admin-neutral-soft: #f1ece8;
+
+  /* Os tokens semânticos usados pelos componentes passam a apontar para a paleta do Admin */
+  --background: var(--admin-bg);
+  --foreground: var(--admin-text);
+  --color-surface: var(--admin-surface);
+  --color-muted: var(--admin-surface-muted);
+  --color-border: var(--admin-border);
+  --color-primary: var(--admin-primary);
+  --color-primary-foreground: #ffffff;
+  --color-text: var(--admin-text);
+  --color-text-muted: var(--admin-text-muted);
+  background: var(--admin-bg);
+  color: var(--admin-text);
+}
+
+/* Botões do Admin: o componente Button marca data-variant; a aparência muda só aqui. */
+.admin-scope [data-variant="primary"]:hover {
+  background-color: var(--admin-primary-hover);
+  opacity: 1;
+}
+.admin-scope [data-variant="secondary"] {
+  background-color: var(--admin-surface);
+  color: var(--admin-text);
+  border: 1px solid var(--admin-border);
+}
+.admin-scope [data-variant="secondary"]:hover {
+  background-color: var(--admin-surface-muted);
+}
+.admin-scope [data-variant="ghost"]:hover {
+  background-color: var(--admin-surface-muted);
 }
 
 html {
