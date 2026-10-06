@@ -1,9 +1,10 @@
 // Mensagem para enviar o link de coleta — PURO. Não é enviada automaticamente.
-import { greetingName, whatsappUrl } from "../fulfillment/post-sale.ts";
+import { greetingHello } from "../fulfillment/greeting.ts";
+import { whatsappUrl } from "../fulfillment/post-sale.ts";
 
 export function buildIntakeLinkMessage(customerName: string, link: string): string {
   return [
-    `Olá, ${greetingName(customerName)}! 💕`,
+    `${greetingHello(customerName)}! 💕`,
     "Para emitirmos sua nota fiscal e prepararmos o envio do seu pedido, precisamos que você preencha seus dados neste link seguro:",
     link,
     "É rapidinho. 🌷",

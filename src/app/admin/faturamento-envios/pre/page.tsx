@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth/permissions";
 import { listIntakes } from "@/lib/db/intakes";
 import { formatStoreDateTime, formatBRL, formatIsoDate } from "@/lib/fulfillment/format";
 import { INTAKE_STATUS_LABELS, type IntakeStatus } from "@/lib/intake/status";
+import { FulfillmentTabs } from "../FulfillmentTabs";
 
 export const metadata: Metadata = { title: "Pré-faturamento — Faturamento e Envios" };
 
@@ -23,16 +24,18 @@ export default async function PreFaturamentoPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-2xl text-text">Pré-faturamento</h1>
+          <h1 className="font-display text-2xl text-text">Faturamento e Envios</h1>
           <p className="text-sm text-text-muted">Coleta de dados da cliente e conferência antes do envio.</p>
         </div>
         <Link
           href="/admin/faturamento-envios/pre/nova"
           className="inline-flex h-11 items-center justify-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground hover:opacity-90"
         >
-          SOLICITAR DADOS DO CLIENTE
+          + NOVA VENDA
         </Link>
       </div>
+
+      <FulfillmentTabs active="pre" />
 
       {GROUPS.map((group) => {
         const items = rows.filter((r) => group.statuses.includes(r.status as IntakeStatus));

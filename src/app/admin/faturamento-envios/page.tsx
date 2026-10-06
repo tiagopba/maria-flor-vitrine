@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SuccessToast } from "@/components/admin/SuccessToast";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { FULFILLMENT_PAGE_SIZE, getFulfillmentFilterOptions, listFulfillmentRecords } from "@/lib/db/fulfillment";
 import {
@@ -11,6 +11,7 @@ import {
   formatOriginLabel,
 } from "@/lib/fulfillment/delivery";
 import { BR_STATES, FILTER_NONE, filtersToSearchParams, parseListFilters } from "@/lib/fulfillment/filters";
+import { FulfillmentTabs } from "./FulfillmentTabs";
 import { RecordsTable } from "./RecordsTable";
 
 export const metadata: Metadata = { title: "Faturamento e Envios" };
@@ -59,16 +60,18 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
     <div>
       <SuccessToast />
 
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl text-text">Faturamento e Envios</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <Link href="/admin/faturamento-envios/pre" className="text-sm text-text-muted hover:text-text">
-            Pré-faturamento
-          </Link>
-          <Link href="/admin/faturamento-envios/novo">
-            <Button size="md">NOVO REGISTRO</Button>
-          </Link>
-        </div>
+        <Link href="/admin/faturamento-envios/pre/nova" className={buttonClasses({ size: "md" })}>
+          + NOVA VENDA
+        </Link>
+      </div>
+
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <FulfillmentTabs active="envios" />
+        <Link href="/admin/faturamento-envios/novo" className="pb-3 text-xs text-text-muted hover:text-text">
+          Cadastro manual
+        </Link>
       </div>
 
       <form method="get" autoComplete="off" className="mb-6 flex flex-col gap-3">
@@ -165,7 +168,7 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
         </div>
       ) : result.records.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-text-muted">
-          {hasFilters ? "Nenhum registro encontrado para esta busca." : "Nenhum registro ainda. Clique em NOVO REGISTRO."}
+          {hasFilters ? "Nenhum registro encontrado para esta busca." : "Nenhum registro ainda. Comece por + NOVA VENDA."}
         </div>
       ) : (
         <>

@@ -612,6 +612,44 @@ dry-run com o CSV real; apply do importador.
 - `e842f79` — correção de exibição da data pura da etiqueta (sem deslocamento de dia).
 - `0a334d5` — auditoria `CREATED` para fulfillment originado de intake.
 
+### Estado final da V1 (fechamento, 2026-10-06)
+
+- **Branch:** `feature/coleta-dados-faturamento`. V1 funcionalmente aprovada, integrada a Faturamento e Pós-venda, e aprovada para Production.
+- **Último commit funcional:** `b005a0d`, CTA `+ NOVA VENDA` como `Link` estilizado, sem elemento interativo aninhado.
+- **Commits da coleta, em ordem:** `48f92af` (complemento vazio nos dois lados = OK), `e842f79` (data pura da etiqueta sem deslocamento), `0a334d5` (auditoria `CREATED` para fulfillment originado de intake), `0cda22a` (saudação só com primeiro nome), `ab2a644` (navegação), `b005a0d` (CTA sem botão aninhado).
+- **Saudação das mensagens:** só o primeiro nome, por helper único (`src/lib/fulfillment/greeting.ts`). Vale para rastreio J&T e Correios, confirmação de entrega, avaliação Google e link de coleta. Nome vazio ou inválido vira `Olá!`, nunca `undefined`. O nome gravado no banco, na NF-e, na etiqueta e no destinatário continua completo.
+- **Header do módulo Faturamento e Envios:**
+  - um único CTA, `+ NOVA VENDA`, como `Link` estilizado, para `/admin/faturamento-envios/pre/nova`;
+  - abas `Envios | Pré-faturamento`;
+  - `Cadastro manual` como ação secundária discreta (rota `/admin/faturamento-envios/novo`, mantida);
+  - `NOVO REGISTRO` não é mais CTA principal.
+
+**Regras de negócio vigentes (V1):**
+- Venda STI3 obrigatória e única. Duplicidade recusada com mensagem clara.
+- Vendedora obrigatória, ativa, conferida no servidor.
+- Valor da venda obrigatório (`sale_total > 0`), comparado em centavos com a NF-e, sem tolerância.
+- Pagamentos aceitos, somente as quatro formas Itaú: `ITAU_CREDIT_ELO_AMEX`, `ITAU_CREDIT_MASTER`, `ITAU_CREDIT_VISA`, `ITAU_PIX`. Códigos genéricos antigos ficam só para registros existentes.
+- Sem parcelas no fluxo novo: `installments = NULL`.
+- CPF validado pelos dígitos verificadores, no navegador e no servidor.
+- Campos da cliente obrigatórios. Complemento em texto ou "Não possui complemento" (grava NULL).
+- Link de coleta com validade de 7 dias, guardado só como hash, de uso único.
+- Reabertura invalida o token anterior e gera um novo link na tela Admin.
+- Divergência crítica bloqueia (`BLOCKED`), sem bypass. Tentativas anteriores são preservadas; cada reenvio recalcula do zero.
+- J&T identificada pelo fallback de rastreio (888…). Bairro e complemento ausentes na etiqueta J&T são `NOT_COMPARABLE`.
+- Aprovação atômica e idempotente. O fulfillment entra como `PENDING`, com STI3, valor, pagamento, vendedora, data e WhatsApp copiados da intake.
+- Fulfillment criado por intake recebe exatamente 1 linha em `fulfillment_audit_logs` com `action = 'CREATED'` e `details = {"source":"FULFILLMENT_INTAKE"}`, sem dado pessoal.
+- `record_source = 'PDF_UPLOAD'` mantido nesta V1.
+- Data da etiqueta exibida sem deslocamento de dia (correção só de exibição; nenhum dado salvo foi alterado).
+
+**Privacidade (validação):** Pixel, CAPI e analytics na rota pública `/dados-envio/[token]` foram validados **por código**, não por captura de rede. Banco: varredura sem dado pessoal nem STI3 de teste em analytics e auditoria. Nenhum dado pessoal em `localStorage`. PDFs sem acesso público.
+
+**Estado do banco após os testes (confirmado somente por leitura):**
+- `fulfillment_records = 2`, somente Neusa (`62bbd574-702c-4c31-9e51-a92f97325e50`) e Rosiane (`6bbabf84-77a1-4de9-a190-a233b22c930b`).
+- `fulfillment_intakes = 0`, zero tentativas, zero logs de intake.
+- `fulfillment_audit_logs = 5`, mesmos IDs da linha de base.
+- Storage de testes vazio. `danfe.pdf` e `label.pdf` dos dois registros reais presentes.
+- `updated_at` de Neusa e Rosiane inalterados.
+
 ### Migrations
 - Todas aplicadas, incluindo `20261006100000_fulfillment_intake_created_audit.sql` (só atualiza `approve_fulfillment_intake` para gravar `CREATED` em `fulfillment_audit_logs`; sem alteração de tabela, constraint ou grant).
 - `20261005250000_fulfillment_sti3_payment.sql`: colunas, índices UNIQUE parciais (`WHERE sti3_sale_id IS NOT NULL`), constraints de pagamento, `installments` mantida, função `SECURITY DEFINER` com `is_admin()`, grants conferidos.
