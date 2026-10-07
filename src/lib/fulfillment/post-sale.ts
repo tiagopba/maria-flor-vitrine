@@ -50,7 +50,7 @@ export const POST_SALE_LABELS: Record<PostSaleKind, string> = {
 
 // Links oficiais. J&T e Google vêm do pedido. O de Correios NÃO estava definido no projeto:
 // precisa de confirmação antes de qualquer uso real.
-export const JT_TRACKING_URL = "https://www.jtexpress.com.br/trajectoryQuery";
+export const JT_TRACKING_URL = "https://www.jtexpress.com.br";
 export const CORREIOS_TRACKING_URL = "https://rastreamento.correios.com.br/app/index.php";
 export const GOOGLE_REVIEW_URL = "https://g.page/r/CZ1LzmpdDum5EBM/review";
 

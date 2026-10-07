@@ -587,7 +587,7 @@ dry-run com o CSV real; apply do importador.
 - **Auditoria:** guarda só ação, registro, ator e data. `details` nunca tem
   telefone, CPF, endereço ou texto da mensagem. Edição do WhatsApp usa
   `DELIVERY_UPDATED` com `changed_fields` (só o nome do campo).
-- **Links:** J&T `https://www.jtexpress.com.br/trajectoryQuery`; Correios
+- **Links:** J&T `https://www.jtexpress.com.br`; Correios
   `https://rastreamento.correios.com.br/app/index.php` (**ainda sem
   confirmação formal de uso**); Google `https://g.page/r/CZ1LzmpdDum5EBM/review`.
   O link `api.whatsapp.com/send` é usado no lugar de `wa.me` (ver seção 13).

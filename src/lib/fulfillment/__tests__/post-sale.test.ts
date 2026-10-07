@@ -44,6 +44,11 @@ const sentFollowup = (overrides: Partial<FollowupRow> = {}): FollowupRow => ({
 const opened = (created_at: string, actor_name: string | null = "Mayra"): OpenedEvent => ({ created_at, actor_name });
 
 describe("mensagem de aviso de envio", () => {
+  it("J&T: link oficial é o site institucional, nunca o antigo /trajectoryQuery", () => {
+    assert.equal(JT_TRACKING_URL, "https://www.jtexpress.com.br");
+    assert.ok(!JT_TRACKING_URL.includes("trajectoryQuery"));
+  });
+
   it("J&T: tom natural, transportadora, código e link oficial", () => {
     const text = buildShippingNoticeMessage(JT)!;
     assert.equal(
