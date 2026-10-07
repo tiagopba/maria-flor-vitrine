@@ -578,6 +578,20 @@ export interface Database {
         },
         "intake_id" | "attempt_no" | "verdict" | "danfe_file_path" | "label_file_path"
       >;
+      fulfillment_followups: Table<
+        {
+          id: string;
+          record_id: string;
+          type: "SHIPPING_NOTICE" | "DELIVERY_CONFIRMATION" | "GOOGLE_REVIEW";
+          status: "OPEN" | "SENT";
+          sent_at: string | null;
+          sent_by: string | null;
+          message_snapshot: string | null;
+          created_at: string;
+          updated_at: string;
+        },
+        "record_id" | "type"
+      >;
     };
     Views: Record<string, never>;
     Functions: {

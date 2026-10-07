@@ -41,10 +41,42 @@ describe("pós-venda: acesso e nada automático", () => {
     assert.match(panel, /win\.location\.href = item\.url!/);
   });
 
-  it("nunca confirma sozinho: CONFIRMADO só sai do botão CONFIRMAR QUE ENVIEI com confirmação", () => {
+  it("nunca confirma sozinho: só o botão CONFIRMAR QUE ENVIEI abre a confirmação, e ABRIR/REENVIAR nunca chama confirmSent", () => {
     const panel = read(PANEL);
-    assert.match(panel, /const confirmSent = \(\) => \{\s*if \(!window\.confirm/);
-    assert.doesNotMatch(panel, /"confirmed"\)[^\n]*\n[^\n]*openWhatsapp/);
+    assert.match(panel, /onClick={\(\) => setConfirming\(true\)}/, "CONFIRMAR QUE ENVIEI só abre a confirmação inline");
+    assert.match(panel, /onConfirm={confirmSent}/, "só o botão CONFIRMAR ENVIO da confirmação inline chama confirmSent");
+    const openWhatsappBody = panel.slice(panel.indexOf("const openWhatsapp ="), panel.indexOf("const confirmSent ="));
+    assert.doesNotMatch(openWhatsappBody, /confirmSent\(/, "abrir/reenviar nunca confirma por conta própria");
+    assert.doesNotMatch(openWhatsappBody, /"confirmed"/, "abrir/reenviar nunca grava a fase confirmed");
+  });
+
+  it("a confirmação exige uma ação explícita em dois passos (abrir a confirmação, depois CONFIRMAR ENVIO)", () => {
+    const panel = read(PANEL);
+    assert.match(panel, /\{confirming && \(/);
+    assert.match(panel, /Confirma que esta mensagem foi realmente enviada/);
+  });
+});
+
+describe("pós-venda: SENT é um estado durável, não um efeito de copiar/abrir", () => {
+  const DB_SOURCE = () => read(DB);
+
+  it("confirmFollowupSent escreve em fulfillment_followups — nunca em fulfillment_audit_logs", () => {
+    const fn = DB_SOURCE().slice(DB_SOURCE().indexOf("export async function confirmFollowupSent"));
+    assert.match(fn, /\.from\("fulfillment_followups"\)/);
+    assert.doesNotMatch(fn, /fulfillment_audit_logs/);
+  });
+
+  it("a confirmação é condicional (status ainda OPEN): double submit não duplica nem sobrescreve", () => {
+    const fn = DB_SOURCE().slice(DB_SOURCE().indexOf("export async function confirmFollowupSent"));
+    assert.match(fn, /\.eq\("status", "OPEN"\)/);
+    assert.match(fn, /written: true/);
+    assert.match(fn, /written: false/);
+  });
+
+  it("a action nunca manda o texto da mensagem para insertPostSaleAudit (fica só em message_snapshot)", () => {
+    const source = read(ACTIONS);
+    const insertCall = source.slice(source.indexOf("insertPostSaleAudit({"), source.indexOf("});", source.indexOf("insertPostSaleAudit({")));
+    assert.doesNotMatch(insertCall, /message/i);
   });
 });
 

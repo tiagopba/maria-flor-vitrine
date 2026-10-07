@@ -1,16 +1,37 @@
 // Pós-venda por WhatsApp — PURO. Monta mensagens, links e estados.
 // NENHUMA mensagem é enviada aqui: o sistema só prepara o texto, abre o WhatsApp
 // e registra o clique. "Enviado" só existe quando o funcionário confirma.
+//
+// Duas fontes, cada uma com um papel:
+//  - fulfillment_followups: o estado durável (OPEN/SENT), com quem confirmou, quando,
+//    e o texto exato confirmado (message_snapshot). COPIAR e ABRIR nunca mudam isto.
+//  - fulfillment_audit_logs: só a trilha de "abri o WhatsApp" (sem texto, sem PII),
+//    usada para a sub-mensagem "WhatsApp aberto" e para exigir abertura antes de confirmar.
 import type { DeliveryStatus } from "./delivery.ts";
+import { customerFirstName } from "./greeting.ts";
 import { normalizeCustomerWhatsapp } from "./phone.ts";
-import { customerFirstName, greetingHello } from "./greeting.ts";
 import { normalizeForCompare } from "./text.ts";
 
 export const POST_SALE_KINDS = ["tracking", "delivery", "review"] as const;
 export type PostSaleKind = (typeof POST_SALE_KINDS)[number];
 export type PostSalePhase = "opened" | "confirmed";
 
-/** Ações da trilha de auditoria (nomes fixos; sem texto de mensagem, telefone ou CPF). */
+/** Tipo gravado em fulfillment_followups (nome estável, independente do `kind` interno). */
+export const FOLLOWUP_TYPES = ["SHIPPING_NOTICE", "DELIVERY_CONFIRMATION", "GOOGLE_REVIEW"] as const;
+export type FollowupType = (typeof FOLLOWUP_TYPES)[number];
+
+export const FOLLOWUP_TYPE_BY_KIND: Record<PostSaleKind, FollowupType> = {
+  tracking: "SHIPPING_NOTICE",
+  delivery: "DELIVERY_CONFIRMATION",
+  review: "GOOGLE_REVIEW",
+};
+export const KIND_BY_FOLLOWUP_TYPE: Record<FollowupType, PostSaleKind> = {
+  SHIPPING_NOTICE: "tracking",
+  DELIVERY_CONFIRMATION: "delivery",
+  GOOGLE_REVIEW: "review",
+};
+
+/** Ações da trilha de "abri o WhatsApp" (nomes fixos; sem texto de mensagem, telefone ou CPF). */
 export const POST_SALE_ACTIONS = {
   tracking: { opened: "TRACKING_WHATSAPP_OPENED", confirmed: "TRACKING_MESSAGE_CONFIRMED" },
   delivery: { opened: "DELIVERY_CONFIRMATION_WHATSAPP_OPENED", confirmed: "DELIVERY_CONFIRMATION_CONFIRMED" },
@@ -22,7 +43,7 @@ export type PostSaleAction = (typeof POST_SALE_ACTIONS)[PostSaleKind][PostSalePh
 export const POST_SALE_AUDIT_ACTIONS: readonly PostSaleAction[] = Object.values(POST_SALE_ACTIONS).flatMap((a) => [a.opened, a.confirmed]);
 
 export const POST_SALE_LABELS: Record<PostSaleKind, string> = {
-  tracking: "Rastreio",
+  tracking: "Aviso de envio",
   delivery: "Confirmação de entrega",
   review: "Avaliação Google",
 };
@@ -48,6 +69,12 @@ export function trackingCarrier(carrier: string | null | undefined): TrackingCar
   return null;
 }
 
+/** "Oi, Neusa!" — nunca "Oi, undefined!". Sem nome válido: "Oi!" (nunca quebra o texto). */
+function oi(customerName: string | null | undefined): string {
+  const first = customerFirstName(customerName);
+  return first ? `Oi, ${first}!` : "Oi!";
+}
+
 export interface TrackingMessageInput {
   customerName: string;
   carrier: string | null;
@@ -55,58 +82,62 @@ export interface TrackingMessageInput {
   trackingCode: string | null;
 }
 
-/** Mensagem de rastreio. Devolve null quando não há código ou a transportadora não tem mensagem definida. */
-export function buildTrackingMessage(input: TrackingMessageInput): string | null {
+/**
+ * Aviso de envio. Tom de mensagem escrita por uma pessoa da loja, não um texto
+ * publicitário. Devolve null quando não há código ou a transportadora não tem
+ * mensagem definida (a UI nem chega a mostrar o bloco de copiar/abrir nesse caso).
+ */
+export function buildShippingNoticeMessage(input: TrackingMessageInput): string | null {
   const carrier = trackingCarrier(input.carrier);
   const code = input.trackingCode?.trim();
   if (!carrier || !code) return null;
-  const hello = customerFirstName(input.customerName) ? greetingHello(input.customerName) : "Olá!";
 
-  if (carrier === "jt") {
-    return [
-      hello,
-      "Seu pedido já foi enviado pela transportadora J&T Express 📦✨",
-      "Aqui está o seu código de rastreio:",
-      code,
-      "📦 Você pode acompanhar a entrega pelo site:",
-      JT_TRACKING_URL,
-      "Obrigada por comprar com a Maria Flor 🌷",
-      "Esperamos que você ame suas peças! 💛",
-    ].join("\n");
-  }
+  const carrierName = carrier === "jt" ? "J&T Express" : input.service?.trim() ? `Correios (${input.service.trim()})` : "Correios";
+  const link = carrier === "jt" ? JT_TRACKING_URL : CORREIOS_TRACKING_URL;
 
-  const service = input.service?.trim();
   return [
-    hello,
-    `Seu pedido já foi enviado pelos Correios${service ? ` (${service})` : ""} 📦✨`,
-    "Aqui está o seu código de rastreio:",
+    `${oi(input.customerName)} 💗`,
+    "Passando pra avisar que seu pedido já saiu daqui e está a caminho 😊",
+    "",
+    `A entrega será feita pela ${carrierName}.`,
+    "Seu código de rastreio é:",
     code,
-    "📦 Você pode acompanhar a entrega pelo site dos Correios:",
-    CORREIOS_TRACKING_URL,
-    "Obrigada por comprar com a Maria Flor 🌷",
-    "Esperamos que você ame suas peças! 💛",
+    "",
+    "Você consegue acompanhar por aqui:",
+    link,
+    "",
+    "Qualquer dúvida durante a entrega, pode me chamar por aqui, tá? 🥰",
   ].join("\n");
 }
+
+/** Mantido por compatibilidade com o nome anterior. */
+export const buildTrackingMessage = buildShippingNoticeMessage;
 
 export function buildDeliveryConfirmationMessage(customerName: string): string {
   return [
-    `${greetingHello(customerName)}! 💕`,
-    "Passando para confirmar se o seu pedido da Maria Flor chegou tudo certinho. 📦✨",
-    "Deu tudo certo com a entrega e com as peças? 🥰",
-    "Se precisar de qualquer ajuda, estamos por aqui!",
-    "Muito obrigada por comprar com a Maria Flor 🌷",
+    `${oi(customerName)} 💗`,
+    "Vi que seu pedido foi entregue e vim saber se chegou tudo certinho por aí 😊",
+    "",
+    "Deu tudo certo com as peças? Você gostou?",
+    "Quando puder, me conta por aqui 🥰",
   ].join("\n");
 }
 
+/**
+ * Avaliação Google. O sistema não guarda satisfação/resposta da cliente, então a
+ * abertura é sempre neutra — nunca "que bom que você gostou" sem ter essa confirmação.
+ */
 export function buildGoogleReviewMessage(customerName: string): string {
   return [
-    `${greetingHello(customerName)}! 💕`,
-    "Espero que tenha gostado do meu atendimento e que seu pedido tenha chegado tudo certinho. 🥰",
-    "Sua opinião é muito importante para nós!",
-    "Se puder, deixe uma avaliação da sua experiência com a Maria Flor no Google. ⭐⭐⭐⭐⭐",
-    "É rapidinho e ajuda muito nossa loja a continuar crescendo! 💕",
-    "Muito obrigada pela confiança e preferência! 🛍️✨",
+    `${oi(customerName)} 💗`,
+    "Espero que tenha dado tudo certo com seu pedido.",
+    "",
+    "Se você gostou do atendimento e puder deixar uma avaliação pra gente no Google, vai ajudar muito a Maria Flor 🥰",
+    "É rapidinho e faz uma diferença enorme pra nossa loja.",
+    "",
     GOOGLE_REVIEW_URL,
+    "",
+    "Obrigada pela confiança em comprar com a gente! 💗",
   ].join("\n");
 }
 
@@ -157,56 +188,97 @@ export function postSaleAvailability(input: PostSaleInput): Record<PostSaleKind,
   return { tracking, delivery, review };
 }
 
-export interface PostSaleEvent {
-  action: string;
+/** Evento "abri o WhatsApp" lido da trilha (fulfillment_audit_logs). Sem texto, sem PII. */
+export interface OpenedEvent {
   created_at: string;
   actor_name: string | null;
 }
 
+/** Linha de fulfillment_followups (o estado durável de UM follow-up de UM registro). */
+export interface FollowupRow {
+  type: FollowupType;
+  status: "OPEN" | "SENT";
+  sent_at: string | null;
+  sent_by_name: string | null;
+  message_snapshot: string | null;
+}
+
 export interface PostSaleState {
-  state: "none" | "opened" | "confirmed";
-  opened: PostSaleEvent | null;
-  confirmed: PostSaleEvent | null;
+  status: "OPEN" | "SENT";
+  /** Preenchido só quando SENT. */
+  sentAt: string | null;
+  sentByName: string | null;
+  /** Texto EXATO confirmado como enviado. Nulo em follow-ups antigos, confirmados antes
+   * de o sistema guardar o texto — nesse caso a UI mostra um aviso, nunca inventa o texto. */
+  messageSnapshot: string | null;
+  /** Sub-detalhe "WhatsApp aberto" — só tem sentido enquanto OPEN. */
+  openedAt: string | null;
+  openedByName: string | null;
+  /**
+   * Alguma vez essa ação foi aberta pelo ABRIR WHATSAPP deste painel. Só informativo
+   * (mostra "WhatsApp aberto em...") — NÃO é condição para confirmar. A funcionária
+   * pode ter enviado por outro caminho (WhatsApp Desktop, celular, copiar e colar);
+   * CONFIRMAR QUE ENVIEI é a única fonte da verdade sobre o envio.
+   */
+  hasOpenedBefore: boolean;
 }
 
 const time = (iso: string) => new Date(iso).getTime();
 
 /**
- * Estado de uma ação a partir da trilha. OPENED nunca vira CONFIRMED sozinho:
- * só CONFIRMED (mais recente ou igual ao último OPENED) vale como "enviado".
+ * Estado de UM follow-up: a linha de fulfillment_followups decide SENT ou OPEN —
+ * nunca os cliques de copiar/abrir. A trilha de auditoria só alimenta o sub-detalhe
+ * "WhatsApp aberto" e a exigência de abrir antes de confirmar.
  */
-export function derivePostSaleState(events: readonly PostSaleEvent[], kind: PostSaleKind): PostSaleState {
-  const actions = POST_SALE_ACTIONS[kind];
-  const latest = (action: string) =>
-    events
-      .filter((e) => e.action === action)
-      .reduce<PostSaleEvent | null>((best, e) => (!best || time(e.created_at) > time(best.created_at) ? e : best), null);
-
-  const opened = latest(actions.opened);
-  const confirmed = latest(actions.confirmed);
-  if (confirmed && (!opened || time(confirmed.created_at) >= time(opened.created_at))) {
-    return { state: "confirmed", opened, confirmed };
+export function derivePostSaleState(followup: FollowupRow, openedEvents: readonly OpenedEvent[]): PostSaleState {
+  if (followup.status === "SENT") {
+    return {
+      status: "SENT",
+      sentAt: followup.sent_at,
+      sentByName: followup.sent_by_name,
+      messageSnapshot: followup.message_snapshot,
+      openedAt: null,
+      openedByName: null,
+      hasOpenedBefore: true,
+    };
   }
-  if (opened) return { state: "opened", opened, confirmed };
-  return { state: "none", opened: null, confirmed: null };
+
+  const latestOpened = openedEvents.reduce<OpenedEvent | null>(
+    (best, e) => (!best || time(e.created_at) > time(best.created_at) ? e : best),
+    null
+  );
+  return {
+    status: "OPEN",
+    sentAt: null,
+    sentByName: null,
+    messageSnapshot: null,
+    openedAt: latestOpened?.created_at ?? null,
+    openedByName: latestOpened?.actor_name ?? null,
+    hasOpenedBefore: openedEvents.length > 0,
+  };
 }
 
 export type PostSalePlan = { ok: true; action: PostSaleAction } | { ok: false; error: string };
 
 /**
  * Decide o que o clique pode registrar.
- *  - ABRIR (opened): só se a ação estiver liberada.
- *  - CONFIRMAR (confirmed): só depois de um ABRIR — confirmação manual, nunca automática.
+ *  - ABRIR (opened): liberado sempre que a ação estiver disponível — mesmo depois de SENT
+ *    (é o "REENVIAR PELO WHATSAPP": reabre a conversa, não volta o status a OPEN).
+ *    Nunca muda o status do follow-up.
+ *  - CONFIRMAR (confirmed): liberado sempre que a ação estiver disponível e ainda OPEN —
+ *    NÃO exige ter aberto o WhatsApp por este painel antes. A funcionária pode ter enviado
+ *    por outro caminho (WhatsApp Desktop, celular, copiar e colar); CONFIRMAR QUE ENVIEI
+ *    é a única fonte da verdade, e é sempre uma ação humana explícita, nunca automática.
  */
 export function planPostSaleEvent(input: {
   kind: PostSaleKind;
   phase: PostSalePhase;
   availability: Availability;
-  state: PostSaleState["state"];
+  state: PostSaleState;
 }): PostSalePlan {
   if (!input.availability.enabled) return { ok: false, error: input.availability.reason ?? "Ação indisponível." };
-  if (input.phase === "confirmed" && input.state !== "opened") {
-    return { ok: false, error: "Abra o WhatsApp antes de confirmar o envio." };
+  if (input.phase === "confirmed" && input.state.status === "SENT") {
+    return { ok: false, error: "Este follow-up já foi confirmado como enviado." };
   }
   return { ok: true, action: POST_SALE_ACTIONS[input.kind][input.phase] };
 }

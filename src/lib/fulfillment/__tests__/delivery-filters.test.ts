@@ -88,6 +88,7 @@ describe("parseListFilters", () => {
       carrier: "Correios",
       status: "DELIVERED",
       state: "MS",
+      followup: "",
       page: 3,
     });
   });
