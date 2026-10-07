@@ -25,13 +25,22 @@ export function DeliveryStatusBadge({ status }: { status: DeliveryStatus }) {
   );
 }
 
+function FollowupBadge({ openCount }: { openCount: number | undefined }) {
+  // undefined = tabela de follow-ups ainda não existe neste banco (migration não aplicada).
+  if (openCount === undefined) return <span className="text-xs text-text-muted">—</span>;
+  return openCount === 0 ? <Badge tone="success">✓ Concluídos</Badge> : <Badge tone="warning">● {openCount} em aberto</Badge>;
+}
+
 export function RecordsTable({
   records,
   sellerNames,
+  followupOpenCounts,
 }: {
   records: FulfillmentListItem[];
   /** id da vendedora → nome (só as vendedoras cadastradas em public.sellers). */
   sellerNames: Record<string, string>;
+  /** id do registro → quantos follow-ups ainda estão OPEN (0 = os 3 enviados). `null` = migration ainda não aplicada. */
+  followupOpenCounts: Record<string, number> | null;
 }) {
   return (
     <div className="overflow-x-auto rounded-2xl border border-border bg-surface">
@@ -45,6 +54,7 @@ export function RecordsTable({
             <th className="px-4 py-3 font-medium">Rastreio</th>
             <th className="px-4 py-3 font-medium">Previsão</th>
             <th className="px-4 py-3 font-medium">Status</th>
+            <th className="px-4 py-3 font-medium">Follow-ups</th>
             <th className="px-4 py-3" />
           </tr>
         </thead>
@@ -85,6 +95,9 @@ export function RecordsTable({
                       Entregue em {formatIsoDate(record.delivered_at)}
                     </div>
                   )}
+                </td>
+                <td className="px-4 py-3">
+                  <FollowupBadge openCount={followupOpenCounts === null ? undefined : followupOpenCounts[record.id] ?? 0} />
                 </td>
                 <td className="px-4 py-3 text-right">
                   <Link

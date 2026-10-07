@@ -94,6 +94,18 @@ export async function listFulfillmentRecords(filters: FulfillmentListFilters): P
   if (filters.origin === FILTER_NONE) query = query.is("sales_origin", null);
   else if (filters.origin) query = query.eq("sales_origin", filters.origin);
 
+  // Pendência de follow-up: calculada numa tabela pequena (3 linhas por registro), não
+  // nos filtros já paginados em blocos de 1000 — o volume de pedidos não chega lá.
+  if (filters.followup === "pending" || filters.followup === "completed") {
+    const pendingIds = [...(await listRecordIdsWithOpenFollowups())];
+    if (filters.followup === "pending") {
+      if (pendingIds.length === 0) return { status: "ok", records: [], hasMore: false };
+      query = query.in("id", pendingIds);
+    } else if (pendingIds.length > 0) {
+      query = query.not("id", "in", `(${pendingIds.join(",")})`);
+    }
+  }
+
   const { data, error } = await query;
   if (isMissingTableError(error)) return { status: "unavailable" };
   if (error) throw new Error(error.message);
@@ -104,6 +116,38 @@ export async function listFulfillmentRecords(filters: FulfillmentListFilters): P
     records: rows.slice(0, FULFILLMENT_PAGE_SIZE),
     hasMore: rows.length > FULFILLMENT_PAGE_SIZE,
   };
+}
+
+/**
+ * IDs de registros com pelo menos 1 follow-up OPEN. Usado para o filtro "Com
+ * pendência" e para a contagem na listagem — não para decidir nada automático.
+ */
+export async function listRecordIdsWithOpenFollowups(): Promise<Set<string>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("fulfillment_followups").select("record_id").eq("status", "OPEN");
+  if (isMissingTableError(error)) return new Set();
+  if (error) throw new Error(error.message);
+  return new Set((data ?? []).map((r) => r.record_id));
+}
+
+/**
+ * Quantos follow-ups ainda estão OPEN, por registro — para o badge "N em aberto" na
+ * listagem. `null` quando a migration ainda não foi aplicada (tabela não existe): a UI
+ * deve mostrar "—", nunca "Concluídos" por falta de dado.
+ */
+export async function getFollowupOpenCounts(recordIds: readonly string[]): Promise<Record<string, number> | null> {
+  if (recordIds.length === 0) return {};
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("fulfillment_followups")
+    .select("record_id")
+    .eq("status", "OPEN")
+    .in("record_id", recordIds as string[]);
+  if (isMissingTableError(error)) return null;
+  if (error) throw new Error(error.message);
+  const counts: Record<string, number> = {};
+  for (const row of data ?? []) counts[row.record_id] = (counts[row.record_id] ?? 0) + 1;
+  return counts;
 }
 
 export async function getFulfillmentRecord(id: string): Promise<FulfillmentRecord | null> {

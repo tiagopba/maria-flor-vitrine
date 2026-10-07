@@ -3,7 +3,7 @@ import Link from "next/link";
 import { SuccessToast } from "@/components/admin/SuccessToast";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { requireAdmin } from "@/lib/auth/permissions";
-import { FULFILLMENT_PAGE_SIZE, getFulfillmentFilterOptions, listFulfillmentRecords } from "@/lib/db/fulfillment";
+import { FULFILLMENT_PAGE_SIZE, getFollowupOpenCounts, getFulfillmentFilterOptions, listFulfillmentRecords } from "@/lib/db/fulfillment";
 import {
   ALL_DELIVERY_STATUSES,
   DELIVERY_STATUS_LABELS,
@@ -42,9 +42,11 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
       filters.origin ||
       filters.carrier ||
       filters.status ||
-      filters.state
+      filters.state ||
+      filters.followup
   );
   const sellerNames = Object.fromEntries(options.sellers.map((s) => [s.id, s.name]));
+  const followupCounts = result.status === "ok" ? await getFollowupOpenCounts(result.records.map((r) => r.id)) : null;
   // Mantém no select uma transportadora/origem filtrada mesmo que nenhum registro a use mais.
   const carriers = [...new Set([...options.carriers, ...(filters.carrier ? [filters.carrier] : [])])].sort();
   const origins = [
@@ -144,6 +146,13 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
               ))}
             </select>
           </FilterField>
+          <FilterField label="Follow-up">
+            <select name="followup" defaultValue={filters.followup} className={FIELD_CLASS}>
+              <option value="">Todos</option>
+              <option value="pending">Com pendência</option>
+              <option value="completed">Concluídos</option>
+            </select>
+          </FilterField>
         </div>
 
         <div className="flex items-center gap-3">
@@ -172,7 +181,7 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
         </div>
       ) : (
         <>
-          <RecordsTable records={result.records} sellerNames={sellerNames} />
+          <RecordsTable records={result.records} sellerNames={sellerNames} followupOpenCounts={followupCounts} />
 
           {(filters.page > 1 || result.hasMore) && (
             <div className="mt-4 flex items-center justify-between text-sm">

@@ -53,26 +53,26 @@ describe("mensagens de WhatsApp usam o primeiro nome", () => {
   const JT = { customerName: "ROSIANE IANEL JOAQUIM DE SOUZA", carrier: "J&T Express", service: null, trackingCode: "888100005315635" };
   const CORREIOS = { customerName: "ROSIANE IANEL JOAQUIM DE SOUZA", carrier: "Correios", service: "SEDEX", trackingCode: "AD981445191BR" };
 
-  it("rastreio J&T: primeiro nome", () => {
-    assert.ok(buildTrackingMessage(JT)!.startsWith("Olá, Rosiane\n"));
+  it("aviso de envio J&T: primeiro nome", () => {
+    assert.ok(buildTrackingMessage(JT)!.startsWith("Oi, Rosiane! 💗\n"));
   });
 
-  it("rastreio Correios: primeiro nome", () => {
-    assert.ok(buildTrackingMessage(CORREIOS)!.startsWith("Olá, Rosiane\n"));
+  it("aviso de envio Correios: primeiro nome", () => {
+    assert.ok(buildTrackingMessage(CORREIOS)!.startsWith("Oi, Rosiane! 💗\n"));
   });
 
-  it("rastreio sem nome válido: 'Olá!' sem undefined", () => {
+  it("aviso de envio sem nome válido: 'Oi!' sem undefined", () => {
     const text = buildTrackingMessage({ ...JT, customerName: "  " })!;
-    assert.ok(text.startsWith("Olá!\n"));
+    assert.ok(text.startsWith("Oi! 💗\n"));
     assert.ok(!text.includes("undefined"));
   });
 
   it("confirmação de entrega: primeiro nome", () => {
-    assert.ok(buildDeliveryConfirmationMessage("ROSIANE IANEL JOAQUIM DE SOUZA").startsWith("Olá, Rosiane! 💕\n"));
+    assert.ok(buildDeliveryConfirmationMessage("ROSIANE IANEL JOAQUIM DE SOUZA").startsWith("Oi, Rosiane! 💗\n"));
   });
 
   it("avaliação Google: primeiro nome", () => {
-    assert.ok(buildGoogleReviewMessage("ROSIANE IANEL JOAQUIM DE SOUZA").startsWith("Olá, Rosiane! 💕\n"));
+    assert.ok(buildGoogleReviewMessage("ROSIANE IANEL JOAQUIM DE SOUZA").startsWith("Oi, Rosiane! 💗\n"));
   });
 
   it("mensagem de coleta: primeiro nome", () => {

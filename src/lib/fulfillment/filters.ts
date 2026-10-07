@@ -18,6 +18,8 @@ export interface FulfillmentListFilters {
   carrier: string;
   status: DeliveryStatus | "";
   state: string;
+  /** "" (todas) · "pending" (com pelo menos 1 follow-up em aberto) · "completed" (os 3 enviados) */
+  followup: "" | "pending" | "completed";
   page: number;
 }
 
@@ -49,6 +51,7 @@ export function parseListFilters(params: Record<string, string | string[] | unde
     carrier: first(params.transportadora).slice(0, 80),
     status: isDeliveryStatus(status) ? status : "",
     state: /^[A-Z]{2}$/.test(state) ? state : "",
+    followup: first(params.followup) === "pending" || first(params.followup) === "completed" ? (first(params.followup) as "pending" | "completed") : "",
     page: Number.isFinite(pageNumber) && pageNumber > 0 ? pageNumber : 1,
   };
 }
@@ -64,6 +67,7 @@ export function filtersToSearchParams(filters: FulfillmentListFilters, page: num
   if (filters.carrier) params.set("transportadora", filters.carrier);
   if (filters.status) params.set("status", filters.status);
   if (filters.state) params.set("uf", filters.state);
+  if (filters.followup) params.set("followup", filters.followup);
   if (page > 1) params.set("pagina", String(page));
   return params;
 }
