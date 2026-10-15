@@ -8,12 +8,13 @@ export async function GET(_request: Request, { params }: RouteContext<"/admin/fa
   const admin = await requireAdmin(["admin", "master"]);
 
   const { id, tipo } = await params;
-  if (tipo !== "danfe" && tipo !== "etiqueta") return new Response("Not found", { status: 404 });
+  if (tipo !== "danfe" && tipo !== "etiqueta" && tipo !== "xml") return new Response("Not found", { status: 404 });
 
   const record = await getFulfillmentRecord(id);
   if (!record) return new Response("Not found", { status: 404 });
 
-  // Registro histórico não tem PDFs: responde 404 SEM consultar o Storage.
+  // Registro sem esse documento responde 404 SEM consultar o Storage
+  // (histórico nunca tem PDF; XML_UPLOAD nunca tem DANFE/etiqueta; e vice-versa).
   const path = documentPathFor(record, tipo);
   if (!path) return new Response("Documento não disponível", { status: 404 });
   const bytes = await downloadFulfillmentDocument(path);
@@ -26,10 +27,13 @@ export async function GET(_request: Request, { params }: RouteContext<"/admin/fa
     details: { document: tipo },
   });
 
+  const contentType = tipo === "xml" ? "application/xml" : "application/pdf";
+  const filename = tipo === "danfe" ? "danfe.pdf" : tipo === "etiqueta" ? "etiqueta.pdf" : "nfe.xml";
+
   return new Response(bytes, {
     headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${tipo === "danfe" ? "danfe" : "etiqueta"}.pdf"`,
+      "Content-Type": contentType,
+      "Content-Disposition": `inline; filename="${filename}"`,
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "no-referrer",

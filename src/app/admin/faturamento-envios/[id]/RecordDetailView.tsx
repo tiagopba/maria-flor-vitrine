@@ -1,7 +1,12 @@
 import Link from "next/link";
 import type { FulfillmentRecord } from "@/lib/db/fulfillment";
-import { UNKNOWN_SELLER_LABEL, formatOriginLabel, statusesForSource } from "@/lib/fulfillment/delivery";
-import { HISTORICAL_NO_DOCUMENTS_MESSAGE, documentAvailability } from "@/lib/fulfillment/documents";
+import { UNKNOWN_SELLER_LABEL, formatOriginLabel, isPendingTracking, statusesForSource } from "@/lib/fulfillment/delivery";
+import {
+  HISTORICAL_NO_DOCUMENTS_MESSAGE,
+  XML_DOCUMENT_AVAILABLE_MESSAGE,
+  XML_DOCUMENT_LABEL,
+  documentAvailability,
+} from "@/lib/fulfillment/documents";
 import { formatBRL, formatCarrier, formatIsoDate, formatStoreDateTime } from "@/lib/fulfillment/format";
 import { formatCpfCnpj, formatPostalCode } from "@/lib/fulfillment/text";
 import { formatPayment } from "@/lib/intake/payment";
@@ -10,6 +15,7 @@ import { CopyButton } from "./CopyButton";
 import { updateDeliveryAction } from "./actions";
 import { CustomerWhatsappPanel } from "./CustomerWhatsappPanel";
 import { PostSalePanel, type PostSaleItem } from "./PostSalePanel";
+import { TrackingPendingPanel } from "./TrackingPendingPanel";
 import { UpdateSituationPanel } from "./UpdateSituationPanel";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -60,7 +66,26 @@ export function RecordDetailView({
         {record.record_source === "HISTORICAL_IMPORT" && " · Histórico (importado da planilha antiga)"}
       </p>
 
-      {documents.any ? (
+      {record.record_source === "XML_UPLOAD" ? (
+        <div className="mb-5 flex flex-wrap items-center gap-3">
+          <div>
+            <p className="text-sm font-medium text-text">{XML_DOCUMENT_LABEL}</p>
+            <p className="text-xs text-text-muted">{XML_DOCUMENT_AVAILABLE_MESSAGE}</p>
+          </div>
+          {documents.xml && (
+            // Mesmo mecanismo seguro dos outros documentos: servido pelo servidor
+            // (sessão Admin + bucket privado), nunca uma URL pública.
+            <a
+              href={`/admin/faturamento-envios/${record.id}/arquivo/xml`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={documentButton}
+            >
+              VER XML
+            </a>
+          )}
+        </div>
+      ) : documents.any ? (
         <div className="mb-5 flex flex-wrap gap-3">
           {/* Abre o PDF servido pelo servidor (sessão Admin + RLS) — nunca uma URL pública. */}
           {documents.danfe && (
@@ -93,6 +118,12 @@ export function RecordDetailView({
       <div className="mb-5">
         <CustomerWhatsappPanel recordId={record.id} display={customerWhatsapp} />
       </div>
+
+      {isPendingTracking(record.tracking_code, record.delivery_status) && (
+        <div className="mb-5">
+          <TrackingPendingPanel recordId={record.id} carrier={record.carrier} />
+        </div>
+      )}
 
       <div className="mb-5">
         <PostSalePanel recordId={record.id} items={postSale} />

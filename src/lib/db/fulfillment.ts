@@ -1,5 +1,6 @@
 import "server-only";
 import type { DeliveryState } from "@/lib/fulfillment/delivery-update";
+import { isPendingTracking } from "@/lib/fulfillment/delivery";
 import { FILTER_NONE, type FulfillmentListFilters } from "@/lib/fulfillment/filters";
 import { buildSearchFilter } from "@/lib/fulfillment/search";
 import { collectFilterOptions, fetchAllPages } from "@/lib/fulfillment/paginate";
@@ -181,6 +182,36 @@ export async function findDuplicateRecords(input: {
   return data ?? [];
 }
 
+export interface PendingTrackingRecord {
+  id: string;
+  customer_name: string;
+  sti3_sale_id: string | null;
+  carrier: string | null;
+  sale_date: string;
+}
+
+const TRACKING_NOT_BLOCKING_SEARCH = "(DELIVERED,REFUNDED,UNKNOWN)";
+
+/**
+ * Registros aprovados que ainda precisam de código de rastreio (status ativo +
+ * tracking_code vazio — ver `isPendingTracking`). Usado para bloquear Nova Venda:
+ * nunca inclui DELIVERED/REFUNDED/UNKNOWN, que não exigem rastreio novo.
+ */
+export async function listPendingTrackingRecords(): Promise<PendingTrackingRecord[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("fulfillment_records")
+    .select("id, customer_name, sti3_sale_id, carrier, tracking_code, delivery_status, sale_date")
+    .not("delivery_status", "in", TRACKING_NOT_BLOCKING_SEARCH)
+    .order("sale_date", { ascending: true });
+  if (isMissingTableError(error)) return [];
+  if (error) throw new Error(error.message);
+
+  return (data ?? [])
+    .filter((r) => isPendingTracking(r.tracking_code, r.delivery_status))
+    .map(({ id, customer_name, sti3_sale_id, carrier, sale_date }) => ({ id, customer_name, sti3_sale_id, carrier, sale_date }));
+}
+
 /**
  * Sobe os dois PDFs e grava o registro. Se qualquer passo falhar, remove o
  * que já tinha sido enviado — nunca deixa arquivo órfão de um registro que
@@ -314,4 +345,21 @@ export async function updateFulfillmentDelivery(id: string, update: DeliveryStat
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Não foi possível atualizar o registro.");
+}
+
+/**
+ * SALVAR RASTREAMENTO: grava só `tracking_code` + `carrier`. Nunca toca em
+ * `delivery_status` nem em qualquer outro dado da venda — ver decisão do produto
+ * (preencher o rastreio não significa que a transportadora já coletou).
+ */
+export async function saveTrackingInfo(id: string, input: { trackingCode: string; carrier: string }): Promise<void> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("fulfillment_records")
+    .update({ tracking_code: input.trackingCode, carrier: input.carrier })
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Não foi possível salvar o rastreamento.");
 }

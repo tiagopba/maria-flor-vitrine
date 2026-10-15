@@ -25,9 +25,9 @@ describe("tentativas: recomeçar gera nova tentativa e nada é apagado", () => {
     assert.doesNotMatch(read(SQL), /delete from public\.fulfillment_verification_attempts/i);
   });
 
-  it("o resultado antigo nunca libera: a conferência é recalculada do zero (conferir é chamado a cada envio)", () => {
+  it("o resultado antigo nunca libera: a conferência é recalculada do zero (conferirXml é chamado a cada envio)", () => {
     const src = code(CONF);
-    assert.match(src, /const outcome: ConfereOutcome = conferir\(/);
+    assert.match(src, /const outcome: ConfereXmlOutcome = conferirXml\(/);
   });
 });
 
@@ -75,9 +75,10 @@ describe("registro aprovado: entra com PENDING e preserva pagamento", () => {
     assert.match(sql, /v_intake\.sale_total, v_intake\.payment_method, v_intake\.installments, v_actor/);
   });
 
-  it("os PDFs do registro são os da tentativa aprovada (paths reais, nunca inventados)", () => {
+  it("os documentos do registro são os da tentativa aprovada (paths reais, nunca inventados) — PDFs OU XML", () => {
     assert.match(read(CONF), /danfe_file_path: attempt\.danfe_file_path/);
     assert.match(read(CONF), /label_file_path: attempt\.label_file_path/);
+    assert.match(read(CONF), /xml_file_path: attempt\.xml_file_path/);
   });
 });
 

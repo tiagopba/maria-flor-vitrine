@@ -15,43 +15,30 @@ import {
   type AttemptRow,
 } from "@/lib/db/intakes";
 import { createClient } from "@/lib/supabase/server";
-import { parseDanfeSimplificado } from "@/lib/fulfillment/parse-danfe";
-import { parseShippingLabel } from "@/lib/fulfillment/parse-label";
-import { extractPdfText } from "@/lib/fulfillment/pdf-text";
+import { parseNfeXml } from "@/lib/fulfillment/parse-nfe-xml";
 import { normalizeForCompare } from "@/lib/fulfillment/text";
-import type { DanfeData, ShippingLabelData } from "@/lib/fulfillment/types";
 import { canApprove, type ConfereResult } from "@/lib/intake/confere";
-import { conferir, type ConfereOutcome } from "@/lib/intake/conferir";
+import { conferirXml, type ConfereXmlOutcome } from "@/lib/intake/conferir-xml";
 import { canApproveIntake, canUploadDocuments, type IntakeStatus } from "@/lib/intake/status";
 
 export type ConferenciaResult =
   | { ok: true; attemptNo: number; verdict: "GREEN" | "REVIEW" | "BLOCKED" }
   | { ok: false; error: string };
 
-const MAX_PDF_BYTES = 2 * 1024 * 1024;
+const MAX_XML_BYTES = 2 * 1024 * 1024;
 
-async function readPdf(value: FormDataEntryValue | null, label: string): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; error: string }> {
-  if (!(value instanceof File) || value.size === 0) return { ok: false, error: `Selecione o PDF de ${label}.` };
-  if (value.size > MAX_PDF_BYTES) return { ok: false, error: `O PDF de ${label} é maior que 2MB.` };
-  const bytes = new Uint8Array(await value.arrayBuffer());
-  const magic = new TextDecoder().decode(bytes.slice(0, 5));
-  if (magic !== "%PDF-") return { ok: false, error: `O arquivo de ${label} não é um PDF válido.` };
-  return { ok: true, bytes };
-}
-
-/** Lê o texto do próprio PDF (sem OCR) e aplica os parsers existentes. Campo não achado vira null. */
-async function readDocuments(danfeBytes: Uint8Array, labelBytes: Uint8Array) {
-  const [danfeText, labelText] = await Promise.all([extractPdfText(danfeBytes), extractPdfText(labelBytes)]);
-  if (danfeText.status === "invalid") return { ok: false as const, error: "Não foi possível abrir o PDF do DANFE Simplificado." };
-  if (labelText.status === "invalid") return { ok: false as const, error: "Não foi possível abrir o PDF da Etiqueta de Envio." };
-  const danfe: DanfeData | null = danfeText.status === "ok" ? parseDanfeSimplificado(danfeText.text) : null;
-  const label: ShippingLabelData | null = labelText.status === "ok" ? parseShippingLabel(labelText.text) : null;
-  return { ok: true as const, danfe, label };
+async function readXml(value: FormDataEntryValue | null): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  if (!(value instanceof File) || value.size === 0) return { ok: false, error: "Selecione o XML da NF-e." };
+  if (value.size > MAX_XML_BYTES) return { ok: false, error: "O XML é maior que 2MB." };
+  if (!value.name.toLowerCase().endsWith(".xml")) return { ok: false, error: "Selecione um arquivo .xml (o XML da NF-e, não a DANFE nem a etiqueta)." };
+  return { ok: true, text: await value.text() };
 }
 
 /**
- * INICIAR CONFERÊNCIA / REVISAR E RECOMEÇAR: cada envio de PDFs é uma NOVA tentativa.
- * A anterior fica como histórico; a conferência é recalculada do zero.
+ * INICIAR CONFERÊNCIA / REVISAR E RECOMEÇAR: cada envio de XML é uma NOVA tentativa.
+ * A anterior fica como histórico; a conferência é recalculada do zero. Fluxo XML-only:
+ * nunca mais pede DANFE nem etiqueta aqui — tentativas antigas com os dois PDFs
+ * continuam existindo e visíveis, só não são criadas por este caminho.
  */
 export async function startConferenciaAction(intakeId: string, formData: FormData): Promise<ConferenciaResult> {
   const admin = await requireAdmin(["admin", "master"]);
@@ -66,15 +53,13 @@ export async function startConferenciaAction(intakeId: string, formData: FormDat
     return { ok: false, error: "A cliente ainda não enviou os dados." };
   }
 
-  const danfeFile = await readPdf(formData.get("danfe"), "DANFE");
-  if (!danfeFile.ok) return { ok: false, error: danfeFile.error };
-  const labelFile = await readPdf(formData.get("label"), "etiqueta");
-  if (!labelFile.ok) return { ok: false, error: labelFile.error };
+  const xmlFile = await readXml(formData.get("xml"));
+  if (!xmlFile.ok) return { ok: false, error: xmlFile.error };
 
-  const docs = await readDocuments(danfeFile.bytes, labelFile.bytes);
-  if (!docs.ok) return { ok: false, error: docs.error };
+  const parsed = parseNfeXml(xmlFile.text);
+  if (!parsed.ok) return { ok: false, error: parsed.error };
 
-  const outcome: ConfereOutcome = conferir({
+  const outcome: ConfereXmlOutcome = conferirXml({
     expected: {
       customerName: row.submitted_name,
       cpf: row.submitted_cpf,
@@ -90,28 +75,18 @@ export async function startConferenciaAction(intakeId: string, formData: FormDat
       recipientName: row.submitted_delivery_to_customer ? row.submitted_name : (row.submitted_recipient_name ?? ""),
       saleTotal: Number(row.sale_total),
     },
-    danfe: docs.danfe,
-    label: docs.label,
+    xml: parsed.data,
   });
 
   const previous = await listAttempts(intakeId);
   const attemptNo = (previous[0]?.attempt_no ?? 0) + 1;
-  const danfePath = `intakes/${intakeId}/attempt-${attemptNo}/danfe.pdf`;
-  const labelPath = `intakes/${intakeId}/attempt-${attemptNo}/label.pdf`;
+  const xmlPath = `intakes/${intakeId}/attempt-${attemptNo}/nfe.xml`;
 
   const supabase = await createClient();
-  const uploaded: string[] = [];
-  for (const [path, bytes] of [
-    [danfePath, danfeFile.bytes],
-    [labelPath, labelFile.bytes],
-  ] as const) {
-    const { error } = await supabase.storage.from(FULFILLMENT_BUCKET).upload(path, bytes, { contentType: "application/pdf", upsert: false });
-    if (error) {
-      if (uploaded.length > 0) await supabase.storage.from(FULFILLMENT_BUCKET).remove(uploaded);
-      return { ok: false, error: `Não foi possível guardar o PDF: ${error.message}` };
-    }
-    uploaded.push(path);
-  }
+  const { error: uploadError } = await supabase.storage
+    .from(FULFILLMENT_BUCKET)
+    .upload(xmlPath, new TextEncoder().encode(xmlFile.text), { contentType: "application/xml", upsert: false });
+  if (uploadError) return { ok: false, error: `Não foi possível guardar o XML: ${uploadError.message}` };
 
   await insertAttempt({
     intakeId,
@@ -120,8 +95,7 @@ export async function startConferenciaAction(intakeId: string, formData: FormDat
     blockingFields: outcome.blocking.map((r) => r.field),
     reviewFields: outcome.reviewFields,
     comparison: { results: outcome.results.map(({ field, verdict, reason }) => ({ field, verdict, reason })), extracted: outcome.extracted },
-    danfePath,
-    labelPath,
+    xmlPath,
     actorId: admin.id,
   });
 
@@ -215,8 +189,11 @@ export async function approveConferenciaAction(intakeId: string, attemptNo: numb
     shipping_service: extracted.shipping_service ?? null,
     tracking_code: extracted.tracking_code ?? null,
     shipping_label_date: extracted.shipping_label_date ?? null,
+    // Um dos dois conjuntos vem null: fluxo antigo tem danfe+label e xml null;
+    // fluxo XML-only tem xml e os dois outros null. A RPC aceita qualquer um.
     danfe_file_path: attempt.danfe_file_path,
     label_file_path: attempt.label_file_path,
+    xml_file_path: attempt.xml_file_path,
   };
 
   try {

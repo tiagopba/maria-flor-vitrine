@@ -54,6 +54,10 @@ export const JT_TRACKING_URL = "https://www.jtexpress.com.br";
 export const CORREIOS_TRACKING_URL = "https://rastreamento.correios.com.br/app/index.php";
 export const GOOGLE_REVIEW_URL = "https://g.page/r/CZ1LzmpdDum5EBM/review";
 
+/** Opções fechadas da tela de "salvar rastreamento" — as duas transportadoras que trackingCarrier reconhece. */
+export const CARRIER_OPTIONS = ["J&T Express", "Correios"] as const;
+export type CarrierOption = (typeof CARRIER_OPTIONS)[number];
+
 export function isPostSaleKind(value: unknown): value is PostSaleKind {
   return typeof value === "string" && (POST_SALE_KINDS as readonly string[]).includes(value);
 }
