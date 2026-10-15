@@ -741,3 +741,272 @@ Dados sintéticos, Preview. Resultado:
 ### Regra para a próxima sessão
 - Não criar dados de teste em Production. Testes sintéticos só em Preview, com limpeza pelos IDs exatos ao final.
 - Registros reais (Neusa e Rosiane) não são alvo de escrita.
+
+---
+
+## 19. Confere Geral por XML — bug real da Arielli + edição administrativa da intake (rodada atual, 2026-10-15)
+
+> Esta seção documenta trabalho feito **depois** da seção 18 e cobre rodadas que
+> nunca haviam sido registradas neste arquivo. Leia-a por último; ela reflete o
+> estado mais recente.
+
+### 19.0 O que já está em `main`/Production (não precisa reler as seções antigas)
+
+Desde a seção 18, mais 3 rodadas foram **mergeadas em `main` e implantadas em
+Production**, sem passar por este arquivo:
+- Follow-ups profissionais de pós-venda (envio, entrega, avaliação) — commit
+  `6993de2`, merge `8d9b7a9`.
+- Correção do link de rastreio J&T (site institucional
+  `https://www.jtexpress.com.br`, sem `/trajectoryQuery`) — commit `67273e9`,
+  merge `d75c823`.
+- **Rastreamento pendente + Confere Geral por XML da NF-e** — commit `9d146de`,
+  merge `f83db77`. Substituiu a conferência por DANFE+etiqueta em PDF (fluxo
+  `/admin/faturamento-envios/pre/nova`, **só para intakes NOVAS**) por upload
+  de **um único XML da NF-e**, parseado estruturalmente (`fast-xml-parser`,
+  `src/lib/fulfillment/parse-nfe-xml.ts`). Aprovar uma venda deixou de exigir
+  código de rastreio (`isPendingTracking`/`requiresTrackingInfo` em
+  `src/lib/fulfillment/delivery.ts`); "+ NOVA VENDA" fica bloqueado enquanto
+  houver rastreamento pendente; salvar rastreamento **nunca** muda
+  `delivery_status` sozinho; transportadora é um `<select>` fechado (J&T
+  Express/Correios) pré-preenchido pelo XML mas editável. Novo
+  `record_source = 'XML_UPLOAD'` (constraint e RPC `approve_fulfillment_intake`
+  ajustados). O **fluxo antigo (Cadastro Manual, `/admin/faturamento-envios/novo`,
+  DANFE+etiqueta em PDF) continua intocado**, só para o histórico. Migrations
+  aplicadas nesta rodada: `20261015100000_fulfillment_tracking_pending.sql` e
+  `20261015110000_fulfillment_xml_files_by_source_fix.sql`.
+
+`main` (`HEAD` = `f83db77`) é a base de tudo que vem a seguir.
+
+### 19.1 Branch atual: `fix/confere-geral-xml-valor-endereco` — **NÃO commitada, NÃO mergeada**
+
+Criada a partir de `main` (`f83db77`). Contém **duas rodadas de trabalho ainda
+só em arquivo**, nenhuma commitada:
+
+#### A) Bug real reportado pelo usuário (cliente ARIELLE) — implementado e testado
+
+Caso real: intake de ARIELLE DO NASCIMENTO LIMA FIGUEIRA (STI3 23706, id real
+`2f948b89-d562-4e8e-984a-5d857a0257af`) ficou **BLOCKED** com XML correto,
+mostrando "Rua diferente", "Complemento diferente" e "Valor da NF-e diferente"
+(listagem mostrava R$ 33.497,00 em vez de R$ 334,97).
+
+- **Bug do valor (causa raiz, corrigido):** `moneyField` em
+  `src/lib/intake/schema.ts` (usado por "Nova Venda") removia **todo** ponto do
+  texto digitado, mesmo sem vírgula — `"334.97"` (ponto como decimal, erro
+  comum de digitação) virava `33497`. Corrigido para só tratar ponto como
+  separador de milhar quando **há vírgula** no texto — mesmo padrão já correto
+  de `parseMoneyInput` em `src/lib/fulfillment/schema.ts` (Cadastro Manual).
+- **Bug da rua (causa raiz, corrigido):** `normalizeStreet` em
+  `src/lib/intake/address.ts` nunca removia o prefixo de logradouro
+  ("Rua", "Avenida" etc.) quando só um lado o tinha por extenso — cliente
+  digita só "Itapaci", XML sempre vem com "Rua Itapaci" → `BLOCKED` por
+  engano. Corrigido: novo `STREET_PREFIXES`, remove o primeiro token só
+  quando sobra pelo menos mais um (nunca esvazia uma rua cujo nome de verdade
+  é só o prefixo).
+- **Complemento — NÃO é bug, não foi tocado:** já é campo soft (`REVIEW`,
+  nunca `BLOCKED`) em `compareAddress`. A diferença de texto reportada
+  ("Entre as ruas 7 e 9" × "ENTRE RUA 7 E RUA 9") é real e vai corretamente
+  para revisão humana — regra de conferência **não foi enfraquecida**.
+- **Achado em passar, NÃO corrigido (fora de escopo, flag para o usuário):**
+  `src/app/admin/configuracoes/FreeShippingRulesForm.tsx:41` (`parseAmount`)
+  tem o **mesmo bug de ponto/vírgula** do valor, numa tela não relacionada
+  (Configurações → frete grátis). Decisão pendente do usuário se vale um fix
+  separado.
+- **UX do upload do XML:** `ConferenciaPanel.tsx` — dropzone com borda
+  tracejada, ícone, "Clique para selecionar o XML da NF-e" / "Arquivo .xml,
+  até 2 MB", chip com nome do arquivo + botão de remover, erro inline
+  (`role="alert"`), aceita só `.xml`, botão de envio só habilita com arquivo
+  válido selecionado (máx. 2MB, checado no cliente).
+- **Botão em estado BLOCKED:** "CONFIRMAR CONFERÊNCIA" agora **some**
+  (não só desabilita) quando a tentativa mais recente é `BLOCKED` — o aviso
+  vermelho já explica que é preciso corrigir/recomeçar.
+- **Testado ao vivo (dados sintéticos; intake `98d45cc1-...` limpa depois):**
+  "334.97" grava `334.97` (não `33497`); rua sem prefixo × XML com prefixo →
+  `REVISAR`, não `BLOCKED`; dropzone valida extensão/tamanho; botão some em
+  `BLOCKED`. Intake real da Arielli só foi **visualizada** (confirma o
+  diagnóstico); **nada nela foi alterado**.
+
+#### B) Edição administrativa da intake + "Dados para emissão da NF-e" — implementado e testado
+
+Pedido do usuário (aprovado o bloco A antes de pedir este): Admin/Master
+precisa poder corrigir dados já gravados de uma intake **antes** de
+`APPROVED`, sem precisar reabrir a coleta.
+
+- **Permissão — auditada primeiro, menor alteração possível:** todo o módulo
+  `faturamento-envios/pre` já usa `requireAdmin(["admin","master"])` como
+  primeira linha de toda action/page (padrão 100% estabelecido); a RLS do
+  banco (`is_admin()`) já restringe `UPDATE` em `fulfillment_intakes`. A nova
+  action só replica esse padrão — **nenhuma mudança de RLS, grant ou papel**.
+  Enum de roles: `admin | catalog_editor | seller | master`
+  (`src/types/database.ts`); `seller` (operador/funcionário) nunca teve acesso
+  a este módulo.
+- **Novos arquivos:**
+  - `src/lib/intake/edit.ts` (PURO) — motivos fechados (`SALE_TYPO`,
+    `CUSTOMER_REQUESTED_CORRECTION`, `NFE_ISSUANCE_CORRECTION`, `OTHER`),
+    `CONFERENCE_AFFECTING_COLUMNS` (campos que participam de `conferirXml`:
+    nome, CPF, endereço, destinatário, valor — **não** inclui STI3, vendedora,
+    pagamento, observação, e-mail, WhatsApp) e `nextStatusAfterEdit` (só força
+    `status → DATA_RECEIVED` quando um campo da conferência mudou **e** já
+    havia uma tentativa `DOCUMENTS_PENDING/CHECKING/REVIEW_REQUIRED/BLOCKED`;
+    a tentativa antiga nunca é alterada, só fica "superada").
+  - `src/lib/intake/edit-schema.ts` — `editSaleSchema` (STI3, cliente,
+    WhatsApp, vendedora, data, valor, pagamento, observação — reaproveita
+    `fullName`/`moneyField`/`whatsappField` de `schema.ts`, agora exportados)
+    e `editCustomerSchema` (nome, CPF, e-mail, WhatsApp, CEP, rua, número,
+    complemento, bairro, cidade, UF, destinatário/entrega-para-cliente — com
+    CAIXA ALTA preservando acentos nos campos pedidos).
+  - `src/app/admin/faturamento-envios/pre/[id]/edit-actions.ts` —
+    `editIntakeAction`: valida motivo, checa `canEditIntake` (não
+    `APPROVED`/`CANCELLED`), valida os dois schemas, calcula diff de colunas
+    (nunca loga valor, só nome do campo), chama `nextStatusAfterEdit`,
+    persiste via `updateIntakeAdminFields` (guarda
+    `.not("status","in","(APPROVED,CANCELLED)")` no `UPDATE`, mesmo padrão de
+    `setIntakeStatusRow`) e grava auditoria `INTAKE_EDITED` com
+    `{fields, reason, conferenceInvalidated}` — **sem PII, sem valor
+    antigo/novo**.
+  - `src/app/admin/faturamento-envios/pre/[id]/EditIntakePanel.tsx` — botão
+    "EDITAR DADOS" → formulário com os campos da venda (sempre) + dados da
+    cliente (só se já recebidos) + motivo obrigatório (rádio; "Outro" exige
+    observação, mas **a observação não é persistida em lugar nenhum** —
+    decisão explícita para bater exatamente com "audit log sem PII, só ator,
+    horário, campos alterados e código do motivo"; se o usuário quiser manter
+    essa observação para consulta futura, precisa de uma coluna nova, tipo o
+    `cancel_note` do cancelamento — **pendência aberta, seção 19.3**).
+  - `src/app/admin/faturamento-envios/pre/[id]/NfeDataSection.tsx` — substitui
+    a antiga seção somente-leitura "Dados recebidos da cliente" por "DADOS
+    PARA EMISSÃO DA NF-e": cada campo (Nome, CPF, E-mail, WhatsApp, CEP, Rua,
+    Número, Complemento, Bairro, Cidade, UF, Destinatário se houver) com ícone
+    de copiar ao lado; clique copia só aquele valor, ícone vira ✓ verde por
+    1,5s, feedback "Copiado" discreto; **sem "copiar todos"**.
+- **CAIXA ALTA — também corrigido no formulário PÚBLICO, não só na edição
+  Admin** (achado durante a implementação: o pedido dizia "para novos dados
+  da cliente **e** correções administrativas"): `publicSubmitSchema` em
+  `src/lib/intake/schema.ts` agora normaliza nome, rua, complemento, bairro,
+  cidade e destinatário em CAIXA ALTA preservando acentos **desde o envio
+  pela própria cliente**, não só quando o Admin edita depois. Helpers novos
+  reaproveitados nos dois schemas: `upperText`/`upperOptionalText` (mesmo
+  arquivo `schema.ts`). E-mail nunca vira maiúscula; CPF/CEP/WhatsApp
+  continuam só dígitos. **Nada retroativo** — só dados novos a partir de
+  agora, nenhum `UPDATE` em massa foi feito ou cogitado.
+- **Migration 🔴 PENDENTE, escrita, NÃO aplicada:**
+  `supabase/migrations/20261016100000_fulfillment_intake_admin_edit.sql` — só
+  adiciona `'INTAKE_EDITED'` ao check constraint de
+  `fulfillment_intake_audit_logs.action`. Nenhuma coluna nova, nenhum status
+  novo, nenhuma RLS nova (tudo o resto já existe). **Confirmado ao vivo:**
+  sem essa migration, `editIntakeAction` salva a correção na intake
+  normalmente, mas o `insertIntakeAudit` final falha com
+  `violates check constraint fulfillment_intake_audit_logs_action_check` —
+  ou seja, hoje uma edição real **funcionaria mas ficaria sem registro de
+  auditoria** até a migration ser aplicada.
+- **Testado ao vivo, de ponta a ponta, dados 100% sintéticos (intake
+  `d5230e22-...`, limpa depois por ID exato — ver 19.2):**
+  1. Intake sintética, XML sintético com endereço diferente → tentativa 1
+     `BLOCKED` (rua/número/CEP/cidade/UF). Botão CONFIRMAR CONFERÊNCIA oculto.
+  2. EDITAR DADOS: troquei a rua para minúsculo de propósito, motivo
+     "Correção para emissão da NF-e", salvei.
+  3. **Confirmado no banco:** `submitted_address_line` virou `"RUA ITAPACI"`
+     (CAIXA ALTA aplicada); `status` `BLOCKED → DATA_RECEIVED` (conferência
+     invalidada); tentativa 1 **inalterada** no histórico (nenhuma linha
+     apagada ou editada).
+  4. Subi um segundo XML (mesma rua corrigida) → tentativa 2 criada, ainda
+     `BLOCKED` (número/CEP/cidade/UF, que eu não editei) mas **sem** mais
+     acusar "Rua diferente" — prova que a nova conferência usou o dado já
+     corrigido, não um valor em cache; tentativa 1 preservada em "Histórico
+     de tentativas" na tela.
+  5. Botão de copiar: o navegador da ferramenta de teste nega permissão de
+     clipboard (ambiente da própria ferramenta); com
+     `navigator.clipboard.writeText` simulado para resolver, confirmei que o
+     ícone vira ✓ verde e aparece "Copiado" — comportamento correto.
+  6. Toda a intake sintética (intake, 2 tentativas, 7 logs de auditoria, 2
+     XMLs no Storage) removida por ID exato ao final;
+     `fulfillment_records` confirmado em **5** (inalterado) antes e depois.
+  7. **Intake real da Arielli:** só visualizada (confirma visualmente o
+     diagnóstico e que o botão CONFIRMAR CONFERÊNCIA já não aparece para
+     ela); **nada nela foi alterado**.
+
+### 19.2 Estado do banco real após os testes desta rodada (confirmado só por leitura)
+- `fulfillment_records = 5` (inalterado antes/depois de todos os testes
+  sintéticos desta rodada).
+- `fulfillment_intakes`, `fulfillment_verification_attempts` e
+  `fulfillment_intake_audit_logs`: sem nenhuma linha de teste residual (tudo
+  removido por ID exato — intakes `98d45cc1-...` e `d5230e22-...`).
+- Storage (`fulfillment-documents`): sem XML/PDF de teste residual.
+- Intake real da Arielli (`2f948b89-d562-4e8e-984a-5d857a0257af`):
+  **continua com `sale_total = 33497` (errado) e status `BLOCKED`, com as 3
+  tentativas antigas (veredito calculado com o bug antigo) intactas.** O
+  código corrigido vale para comparações **novas**, não reprocessa
+  retroativamente o que já está salvo. Ver pendência 19.3.1.
+
+### 19.3 Pendências abertas desta rodada (nada decidido sem o usuário)
+
+1. **Aplicar a migration** `20261016100000_fulfillment_intake_admin_edit.sql`
+   (só adiciona `'INTAKE_EDITED'` ao check de audit log) — aguardando
+   aprovação explícita. Sem ela, editar uma intake real funciona mas fica
+   sem log de auditoria.
+2. **Corrigir a intake real da Arielli** (`2f948b89-d562-4e8e-984a-5d857a0257af`,
+   STI3 23706): hoje só é possível **depois** que a migration acima estiver
+   aplicada (a edição precisa gravar auditoria) **e** com decisão explícita
+   do usuário de que valor correto gravar e se quer reenviar o XML real dela
+   depois (usando "REVISAR E RECOMEÇAR CONFERÊNCIA", que vai gerar a
+   tentativa 4, mantendo as 3 antigas no histórico). **Não fazer nada nela
+   sem pedido explícito.**
+3. **Observação do motivo "Outro" na edição administrativa não é persistida
+   em lugar nenhum** (decisão tomada para bater literalmente com "audit log
+   sem PII, só ator/horário/campos/código do motivo"). Se o usuário quiser
+   manter essa observação para consulta futura (como existe `cancel_note`
+   para cancelamento), precisa de uma coluna nova + migration — avaliar com
+   o usuário.
+4. **Bug irmão não corrigido** (fora de escopo, só flag):
+   `src/app/admin/configuracoes/FreeShippingRulesForm.tsx:41` (`parseAmount`)
+   tem o mesmo bug de ponto/vírgula do valor. Tela de Configurações, não
+   relacionada ao pré-faturamento.
+5. **Commit:** nada desta rodada (bloco A nem bloco B) foi commitado ainda —
+   só este arquivo (`PROJECT_STATUS.md`) foi commitado, a pedido explícito,
+   separado do resto. O restante segue como alteração de arquivo não
+   commitada na branch `fix/confere-geral-xml-valor-endereco`.
+6. **Merge:** nenhum. Branch `fix/confere-geral-xml-valor-endereco` não foi
+   mergeada em `main`.
+
+### 19.4 Arquivos tocados nesta rodada (branch `fix/confere-geral-xml-valor-endereco`, sem commit)
+
+Modificados: `src/app/admin/faturamento-envios/pre/[id]/ConferenciaPanel.tsx`,
+`src/app/admin/faturamento-envios/pre/[id]/page.tsx`, `src/lib/db/intakes.ts`,
+`src/lib/intake/address.ts`, `src/lib/intake/schema.ts`,
+`src/lib/intake/status.ts`, `src/types/database.ts`,
+`src/lib/intake/__tests__/intake-forms.test.ts`,
+`src/lib/intake/__tests__/xml-only-flow.test.ts`.
+
+Novos: `src/lib/intake/edit.ts`, `src/lib/intake/edit-schema.ts`,
+`src/app/admin/faturamento-envios/pre/[id]/edit-actions.ts`,
+`src/app/admin/faturamento-envios/pre/[id]/EditIntakePanel.tsx`,
+`src/app/admin/faturamento-envios/pre/[id]/NfeDataSection.tsx`,
+`src/lib/intake/__tests__/address.test.ts`,
+`src/lib/intake/__tests__/edit.test.ts`,
+`src/lib/intake/__tests__/edit-schema.test.ts`,
+`supabase/migrations/20261016100000_fulfillment_intake_admin_edit.sql`
+(🔴 não aplicada).
+
+### 19.5 Verificação desta rodada
+`tsc --noEmit`: limpo. `eslint`: limpo. `npm test`: **580/580** (sem
+falhas, 0 pendentes). `next build`: sucesso, todas as rotas listadas.
+
+### 19.6 Próximos passos exatos (em ordem; nada sem aprovação)
+1. Usuário decide: aplicar a migration `20261016100000` (SQL Editor, como
+   script único) — só depois disso o log de auditoria `INTAKE_EDITED`
+   funciona.
+2. Usuário decide: commitar o bloco A + bloco B desta rodada (hoje só
+   arquivo, numa branch só).
+3. Usuário decide: testar no Preview com login Admin antes de aprovar merge
+   de `fix/confere-geral-xml-valor-endereco` → `main`.
+4. Com aprovação, merge (`--no-ff`), deploy, smoke test somente leitura.
+5. Só depois disso, com pedido explícito, decidir o que fazer com a intake
+   real da Arielli (pendência 19.3.2).
+6. Decidir a pendência 19.3.3 (guardar ou não a observação do motivo "Outro").
+7. Decidir a pendência 19.3.4 (corrigir ou não o bug irmão em
+   `FreeShippingRulesForm.tsx`).
+
+### Regra para a próxima sessão
+- Não aplicar a migration `20261016100000` nem fazer merge desta branch sem
+  pedido explícito do usuário na nova conversa.
+- Não mexer na intake real da Arielli sem pedido explícito.
+- Antes de continuar, rode `git status`, `git log --oneline -5` e confira
+  contra este arquivo — ele pode ter envelhecido entre uma sessão e outra.
