@@ -25,7 +25,17 @@ export interface VariantBlockData {
   key: string;
   /** id real do produto, só quando esta variante já existe salva. */
   id: string | null;
+  /**
+   * Código legado — nunca mais editável pela interface (ver migration
+   * 20261018100000_products_internal_code.sql). Mantido aqui só como valor
+   * interno/somente-leitura: produto existente carrega o `code` real do
+   * banco pra o slug continuar estável quando nome/cor mudam; produto novo
+   * fica com "" (o identificador nasce no banco só depois de salvar — ver
+   * `internalCode`). Nunca enviado para a RPC.
+   */
   code: string;
+  /** Formatado com 8 dígitos (lpad), só leitura. null = ainda não existe (variante nova, não salva). */
+  internalCode: string | null;
   colorId: string | null;
   status: string;
   featured: boolean;
@@ -163,13 +173,10 @@ export function VariantBlock({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-text">Código</label>
-          <input
-            value={block.code}
-            onChange={(e) => update({ code: e.target.value })}
-            placeholder="MF-7284"
-            className="h-11 rounded-lg border border-border bg-surface px-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
-          />
+          <span className="text-sm font-medium text-text">Código interno</span>
+          <p className="flex h-11 items-center rounded-lg border border-border bg-muted/50 px-3 text-sm text-text-muted">
+            {block.internalCode ?? "Gerado automaticamente ao salvar"}
+          </p>
         </div>
 
         <div className="flex flex-col gap-1.5">

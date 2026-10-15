@@ -6,6 +6,7 @@ import { getCurrentAdmin } from "@/lib/auth/permissions";
 import { getActiveCategoriesPublic } from "@/lib/db/categories";
 import { listActiveColorsAdmin } from "@/lib/db/colors";
 import { getProductByIdAdmin, listGroupMemberIdsAdmin, type ProductDetail } from "@/lib/db/products";
+import { formatInternalCode } from "@/lib/catalog/internal-code";
 import { getSizeFitCompatibilityByProductIds, type LabelSizeFit } from "@/lib/db/product-size-fit";
 import { listActiveSizeOptionsAdmin, listSizeOptionsForVariantEdit } from "@/lib/db/sizes";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
@@ -28,6 +29,7 @@ function toVariantBlock(
     key: product.id,
     id: product.id,
     code: product.code,
+    internalCode: formatInternalCode(product.internal_code),
     colorId: product.color_id,
     status: product.status,
     featured: product.featured,

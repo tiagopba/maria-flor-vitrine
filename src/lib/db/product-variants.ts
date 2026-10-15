@@ -7,7 +7,7 @@ const PRODUCTS_BUCKET = "products";
 
 export interface SaveProductWithVariantsResult {
   groupId: string | null;
-  variants: { id: string; code: string; slug: string }[];
+  variants: { id: string; clientKey: string; slug: string; internalCode: string }[];
 }
 
 /**
@@ -65,7 +65,15 @@ export async function saveProductWithVariants(
     }
   }
 
-  return { groupId: result.group_id, variants: result.variants };
+  return {
+    groupId: result.group_id,
+    variants: result.variants.map((v) => ({
+      id: v.id,
+      clientKey: v.client_key,
+      slug: v.slug,
+      internalCode: v.internal_code,
+    })),
+  };
 }
 
 /**

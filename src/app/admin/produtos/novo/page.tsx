@@ -67,6 +67,7 @@ export default async function NewProductPage({ searchParams }: PageProps<"/admin
           key: "duplicated-variant",
           id: null,
           code: "",
+          internalCode: null,
           colorId: null,
           status: sourceProduct.status,
           featured: false,

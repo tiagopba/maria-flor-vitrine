@@ -24,6 +24,7 @@ function emptyVariant(sizeOptions: SizeOption[], suggestedSizes: string[] = []):
     key: crypto.randomUUID(),
     id: null,
     code: "",
+    internalCode: null,
     colorId: null,
     status: "ACTIVE",
     featured: false,
@@ -206,23 +207,30 @@ export function ProductForm({
     if (!block.colorId) return null;
     const dupe = variants.find((v) => v.key !== block.key && v.colorId === block.colorId);
     if (!dupe) return null;
-    return dupe.code ? `código ${dupe.code}` : "outra cor já cadastrada com este mesmo tom";
+    return dupe.internalCode
+      ? `código interno ${dupe.internalCode}`
+      : "outra cor já cadastrada com este mesmo tom";
   }
 
   const nameChanged = name !== (sharedDefaults?.name ?? "");
 
   /**
    * Enquanto a admin não editar o campo com a própria mão (manualSlug
-   * null), um produto JÁ SALVO mantém o slug atual até nome/código/cor
-   * mudarem de propósito — não recalcula do zero só por abrir a tela (o
-   * slug salvo pode nem seguir mais o padrão nome-código-cor, ex: produto
-   * antigo). Um bloco novo (nunca salvo) sempre segue o automático.
+   * null), um produto JÁ SALVO mantém o slug atual até nome/cor mudarem de
+   * propósito — não recalcula do zero só por abrir a tela (o slug salvo
+   * pode nem seguir mais o padrão nome-código-cor, ex: produto antigo).
+   * `code` não entra mais nesta comparação porque deixou de ser editável
+   * pela interface (ver VariantBlock) — nunca "muda" por ação da admin.
+   * Um bloco novo (nunca salvo) sempre segue o automático; `block.code`
+   * nesse caso é "" (produto novo não tem code ainda), e
+   * `buildProductSlugBase` já descarta partes vazias, então o slug de um
+   * produto novo vira só nome(+cor) — sem código, porque o código
+   * (derivado de internal_code) só nasce no banco depois do primeiro save.
    */
   function computeSlug(block: VariantBlockData): string {
     if (block.manualSlug !== null) return block.manualSlug;
 
-    const unchanged =
-      block.id !== null && !nameChanged && block.code === block.initialCode && block.colorId === block.initialColorId;
+    const unchanged = block.id !== null && !nameChanged && block.colorId === block.initialColorId;
     if (unchanged && block.initialSlug) return block.initialSlug;
 
     const colorName = block.colorId ? (colors.find((c) => c.id === block.colorId)?.name ?? null) : null;
@@ -287,7 +295,7 @@ export function ProductForm({
       },
       variants: variants.map((v) => ({
         id: v.id,
-        code: v.code,
+        client_key: v.key,
         color_id: v.colorId,
         status: v.status,
         featured: v.featured,
@@ -309,12 +317,13 @@ export function ProductForm({
     // Segundo save, deliberadamente separado e depois do primeiro: nunca
     // desfaz produto/fotos/preços/variantes/cores/slug já commitados, mesmo
     // se falhar. Mapeamento pro product_id real nunca por posição — usa o id
-    // já existente (variante que já era salva) ou o código único (variante
-    // nova, cujo id só a RPC de cima acabou de gerar).
+    // já existente (variante que já era salva) ou o client_key opaco
+    // (variante nova, cujo id só a RPC de cima acabou de gerar — não existe
+    // mais nenhum "código" conhecido do client antes de salvar).
     const fitPayload = variants
       .map((block) => {
         if (block.sizes.length === 0) return null;
-        const productId = block.id ?? result.variants.find((v) => v.code === block.code.trim())?.id ?? null;
+        const productId = block.id ?? result.variants.find((v) => v.clientKey === block.key)?.id ?? null;
         if (!productId) return null;
         return {
           product_id: productId,
