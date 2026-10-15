@@ -61,6 +61,26 @@ describe("formulário interno SOLICITAR DADOS", () => {
     assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, saleDate: "2026-02-31" }).success, false);
   });
 
+  it("valor com ponto como decimal (334.97) dá o MESMO resultado que vírgula (334,97) — bug real: virava 33497", () => {
+    const withDot = adminIntakeSchema.safeParse({ ...ADMIN, saleTotal: "334.97" });
+    const withComma = adminIntakeSchema.safeParse({ ...ADMIN, saleTotal: "334,97" });
+    assert.ok(withDot.success);
+    assert.ok(withComma.success);
+    assert.equal(withDot.data.saleTotal, 334.97);
+    assert.equal(withComma.data.saleTotal, 334.97);
+  });
+
+  it("formato BR com milhar (1.234,56) continua funcionando — ponto só vira separador de milhar quando há vírgula", () => {
+    const r = adminIntakeSchema.safeParse({ ...ADMIN, saleTotal: "1.234,56" });
+    assert.ok(r.success);
+    assert.equal(r.data.saleTotal, 1234.56);
+  });
+
+  it("valor com R$ e espaços nas pontas continua sendo aceito, nos dois formatos", () => {
+    assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, saleTotal: " R$ 334.97 " }).success, true);
+    assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, saleTotal: " R$ 334,97 " }).success, true);
+  });
+
   it("WhatsApp inválido é recusado", () => {
     assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, customerWhatsapp: "6733334444" }).success, false);
   });
@@ -91,6 +111,25 @@ describe("formulário público da cliente", () => {
     assert.equal(r.data.state, "MS");
     assert.equal(r.data.noComplement, true);
     assert.equal(r.data.postalCode, "79000000");
+  });
+
+  it("nome, rua, bairro e cidade viram CAIXA ALTA preservando acentos; e-mail nunca vira caixa alta", () => {
+    const r = publicSubmitSchema.safeParse({ ...PUBLIC, fullName: "maria exemplo", addressLine: "rua itapaci", neighborhood: "jardim exemplo", city: "goiânia", email: "Maria.Exemplo@Teste.com" });
+    assert.ok(r.success);
+    if (!r.success) return;
+    assert.equal(r.data.fullName, "MARIA EXEMPLO");
+    assert.equal(r.data.addressLine, "RUA ITAPACI");
+    assert.equal(r.data.neighborhood, "JARDIM EXEMPLO");
+    assert.equal(r.data.city, "GOIÂNIA");
+    assert.equal(r.data.email, "Maria.Exemplo@Teste.com");
+  });
+
+  it("complemento e destinatário também viram CAIXA ALTA quando preenchidos", () => {
+    const r = publicSubmitSchema.safeParse({ ...PUBLIC, addressComplement: "entre as ruas 7 e 9", noComplement: false, deliveryToCustomer: false, recipientName: "joão exemplo da silva" });
+    assert.ok(r.success);
+    if (!r.success) return;
+    assert.equal(r.data.addressComplement, "ENTRE AS RUAS 7 E 9");
+    assert.equal(r.data.recipientName, "JOÃO EXEMPLO DA SILVA");
   });
 
   it("CPF inválido é recusado", () => {

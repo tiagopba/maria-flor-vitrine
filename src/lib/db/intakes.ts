@@ -100,6 +100,34 @@ export async function reopenIntake(input: {
   if (error) throw new Error(error.message);
 }
 
+export type EditIntakeRpcResult = { status: IntakeRow["status"]; fields: string[] };
+
+/**
+ * EDIÇÃO ADMINISTRATIVA: corrige dados já gravados (venda e/ou dados da cliente),
+ * antes da aprovação. Atômica no banco (ver edit_fulfillment_intake): permissão,
+ * status, UPDATE, invalidação de conferência, audit log e histórico privado de
+ * edição numa única transação — nunca uma sequência de chamadas deste módulo.
+ * `patch` já vem normalizado pela action (CAIXA ALTA, dígitos etc., via Zod);
+ * a função SQL decide sozinha quais colunas realmente mudaram e se a conferência
+ * precisa ser invalidada. Sessão do Admin, para is_admin() valer.
+ */
+export async function editIntakeRpc(
+  intakeId: string,
+  patch: Record<string, unknown>,
+  reasonCode: string,
+  reasonNote: string | null
+): Promise<EditIntakeRpcResult> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("edit_fulfillment_intake", {
+    p_intake: intakeId,
+    p_patch: patch,
+    p_reason_code: reasonCode,
+    p_reason_note: reasonNote,
+  });
+  if (error || !data) throw new Error(error?.message ?? "Não foi possível salvar a correção.");
+  return data as unknown as EditIntakeRpcResult;
+}
+
 export async function insertIntakeAudit(input: {
   intakeId: string;
   action: IntakeAuditAction;

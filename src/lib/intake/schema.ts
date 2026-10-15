@@ -13,24 +13,45 @@ const isRealIsoDate = (value: string) => {
 };
 
 /** Nome completo: pelo menos duas palavras. */
-const fullName = (label: string) =>
+export const fullName = (label: string) =>
   z
     .string()
     .trim()
     .max(200, `${label} muito longo.`)
     .refine((v) => v.split(/\s+/).filter(Boolean).length >= 2, `${label} precisa ter nome e sobrenome.`);
 
-const requiredText = (label: string, max = 200) =>
+export const requiredText = (label: string, max = 200) =>
   z.string().trim().min(1, `Informe ${label.toLowerCase()}.`).max(max, `${label} muito longo.`);
 
-const optionalText = (max: number, message: string) =>
+export const optionalText = (max: number, message: string) =>
   z
     .string()
     .trim()
     .max(max, message)
     .transform((v) => (v === "" ? null : v));
 
-const whatsappField = z.string().transform((raw, ctx) => {
+/**
+ * CAIXA ALTA preservando acentos (ex.: "Goiânia" → "GOIÂNIA") — ".toUpperCase()"
+ * nativo já preserva acento em JS. Usado nos campos "novos dados da cliente" (formulário
+ * público) e "correções administrativas" (edição Admin/Master): nome, rua, complemento,
+ * bairro, cidade e destinatário. Nunca aplicado retroativamente a dados já gravados.
+ */
+export const upperText = (label: string, max: number) =>
+  z
+    .string()
+    .trim()
+    .min(1, `Informe ${label.toLowerCase()}.`)
+    .max(max, `${label} muito longo.`)
+    .transform((v) => v.toUpperCase());
+
+export const upperOptionalText = (max: number, message: string) =>
+  z
+    .string()
+    .trim()
+    .max(max, message)
+    .transform((v) => (v === "" ? null : v.toUpperCase()));
+
+export const whatsappField = z.string().transform((raw, ctx) => {
   const result = normalizeCustomerWhatsapp(raw);
   if (!result.ok) {
     ctx.addIssue({ code: "custom", message: result.error });
@@ -39,8 +60,17 @@ const whatsappField = z.string().transform((raw, ctx) => {
   return result.value;
 });
 
-const moneyField = z.string().transform((raw, ctx) => {
-  const normalized = raw.trim().replace(/^R\$\s*/i, "").replace(/\./g, "").replace(",", ".");
+/**
+ * "334,97" (formato BR) e "334.97" (ponto como decimal, erro comum de digitação)
+ * precisam dar o MESMO resultado. Bug real: sem a checagem de vírgula, "334.97"
+ * tinha o ponto tratado como separador de milhar e virava 33497 — a mesma
+ * normalização segura já usada em lib/fulfillment/schema.ts (parseMoneyInput).
+ * Só remove pontos como separador de milhar quando HÁ vírgula (aí sim "1.234,56"
+ * é inequívoco); sem vírgula, "334.97" fica como está e valida normalmente.
+ */
+export const moneyField = z.string().transform((raw, ctx) => {
+  const v = raw.trim().replace(/^R\$\s*/i, "");
+  const normalized = v.includes(",") ? v.replace(/\./g, "").replace(",", ".") : v;
   if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
     ctx.addIssue({ code: "custom", message: "Valor da venda inválido." });
     return z.NEVER;
@@ -82,14 +112,15 @@ export type AdminIntakeInput = z.output<typeof adminIntakeSchema>;
 /** Dados que a cliente preenche no link público. Nada aqui vai para analytics ou log. */
 export const publicSubmitSchema = z
   .object({
-    fullName: fullName("Nome completo"),
+    // Nome, rua, complemento, bairro, cidade e destinatário: CAIXA ALTA preservando acentos.
+    fullName: fullName("Nome completo").transform((v) => v.toUpperCase()),
     // CPF: obrigatório, com dígitos verificadores (isValidCpf). Vazio e inválido têm mensagens distintas.
     cpf: z
       .string()
       .transform((v) => v.replace(/\D/g, ""))
       .refine((v) => v.length > 0, "Informe o CPF.")
       .refine((v) => v.length === 0 || isValidCpf(v), "Informe um CPF válido."),
-    // E-mail obrigatório (não aceita só espaços) e em formato válido.
+    // E-mail obrigatório (não aceita só espaços) e em formato válido. Nunca vira caixa alta.
     email: z
       .string()
       .trim()
@@ -97,18 +128,22 @@ export const publicSubmitSchema = z
       .refine((v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), "Informe um e-mail válido."),
     whatsapp: whatsappField,
     deliveryToCustomer: z.boolean(),
-    recipientName: z.string().trim(),
+    recipientName: z.string().trim().transform((v) => v.toUpperCase()),
     postalCode: z
       .string()
       .transform((v) => v.replace(/\D/g, ""))
       .refine((v) => v.length === 8, "CEP deve ter 8 dígitos."),
-    addressLine: requiredText("Rua", 200),
+    addressLine: upperText("Rua", 200),
     addressNumber: requiredText("Número", 30),
     // Complemento: texto OU a declaração "não possui complemento". Nunca vazio sem declarar.
-    addressComplement: z.string().trim().max(200, "Complemento muito longo."),
+    addressComplement: z
+      .string()
+      .trim()
+      .max(200, "Complemento muito longo.")
+      .transform((v) => v.toUpperCase()),
     noComplement: z.boolean(),
-    neighborhood: requiredText("Bairro", 120),
-    city: requiredText("Cidade", 120),
+    neighborhood: upperText("Bairro", 120),
+    city: upperText("Cidade", 120),
     state: z
       .string()
       .trim()

@@ -42,6 +42,11 @@ export function canReopenCollection(status: IntakeStatus): boolean {
   return status !== "APPROVED" && status !== "CANCELLED";
 }
 
+/** Admin/Master pode corrigir os dados da venda em qualquer estado, exceto aprovada ou cancelada. */
+export function canEditIntake(status: IntakeStatus): boolean {
+  return status !== "APPROVED" && status !== "CANCELLED";
+}
+
 /** Os documentos só podem ser enviados para a conferência depois que a cliente enviou os dados. */
 export function canUploadDocuments(status: IntakeStatus): boolean {
   return status === "DATA_RECEIVED" || status === "DOCUMENTS_PENDING" || status === "BLOCKED" || status === "REVIEW_REQUIRED";

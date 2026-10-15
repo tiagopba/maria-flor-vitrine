@@ -4,16 +4,20 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { isUuid } from "@/lib/db/fulfillment";
 import { getIntakeRow, listAttempts } from "@/lib/db/intakes";
+import { listSellersAdmin } from "@/lib/db/sellers";
+import { selectableSellers } from "@/lib/sellers/management";
 import { formatBRL, formatIsoDate, formatStoreDateTime } from "@/lib/fulfillment/format";
 import { formatCustomerWhatsapp } from "@/lib/fulfillment/phone";
 import { formatPayment } from "@/lib/intake/payment";
 import { CANCEL_REASON_LABELS, isCancelReason } from "@/lib/intake/cancel";
-import { INTAKE_STATUS_LABELS, canCancelIntake, canReopenCollection, canUploadDocuments, type IntakeStatus } from "@/lib/intake/status";
+import { INTAKE_STATUS_LABELS, canCancelIntake, canEditIntake, canReopenCollection, canUploadDocuments, type IntakeStatus } from "@/lib/intake/status";
 import { isIntakeTokenExpired } from "@/lib/intake/token";
 import { formatCpfCnpj, formatPostalCode } from "@/lib/fulfillment/text";
 import { ReopenPanel } from "./ReopenPanel";
 import { CancelIntakePanel } from "./CancelIntakePanel";
 import { ConferenciaPanel, type AttemptView } from "./ConferenciaPanel";
+import { EditIntakePanel, type EditIntakeInitial } from "./EditIntakePanel";
+import { NfeDataSection } from "./NfeDataSection";
 
 export const metadata: Metadata = { title: "Solicitação de pré-faturamento — Faturamento e Envios" };
 
@@ -54,18 +58,56 @@ export default async function PreFaturamentoDetailPage({ params }: { params: Pro
       })
     : [];
 
+  const editable = canEditIntake(status);
+  let editSellers: { id: string; name: string }[] = [];
+  let editInitial: EditIntakeInitial | null = null;
+  if (editable) {
+    const allSellers = await listSellersAdmin();
+    editSellers = selectableSellers(allSellers).map((s) => ({ id: s.id, name: s.name }));
+    if (!editSellers.some((s) => s.id === row.seller_id)) {
+      const current = allSellers.find((s) => s.id === row.seller_id);
+      if (current) editSellers = [{ id: current.id, name: current.name }, ...editSellers];
+    }
+    editInitial = {
+      sti3SaleId: row.sti3_sale_id ?? "",
+      customerName: row.customer_name,
+      customerWhatsapp: formatCustomerWhatsapp(row.customer_whatsapp) ?? row.customer_whatsapp ?? "",
+      sellerId: row.seller_id ?? "",
+      saleDate: row.sale_date,
+      saleTotal: Number(row.sale_total).toFixed(2).replace(".", ","),
+      paymentMethod: row.payment_method,
+      internalNotes: row.internal_notes ?? "",
+      submittedName: row.submitted_name ?? "",
+      submittedCpf: formatCpfCnpj(row.submitted_cpf) || (row.submitted_cpf ?? ""),
+      submittedEmail: row.submitted_email ?? "",
+      submittedWhatsapp: formatCustomerWhatsapp(row.submitted_whatsapp) ?? (row.submitted_whatsapp ?? ""),
+      submittedDeliveryToCustomer: row.submitted_delivery_to_customer ?? true,
+      submittedRecipientName: row.submitted_recipient_name ?? "",
+      submittedPostalCode: formatPostalCode(row.submitted_postal_code) || (row.submitted_postal_code ?? ""),
+      submittedAddressLine: row.submitted_address_line ?? "",
+      submittedAddressNumber: row.submitted_address_number ?? "",
+      submittedAddressComplement: row.submitted_address_complement ?? "",
+      submittedNeighborhood: row.submitted_neighborhood ?? "",
+      submittedCity: row.submitted_city ?? "",
+      submittedState: row.submitted_state ?? "",
+    };
+  }
+
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <Link href="/admin/faturamento-envios/pre" className="text-sm text-text-muted hover:text-text">
         ← Pré-faturamento
       </Link>
-      <div>
-        <h1 className="font-display text-2xl text-text">{row.customer_name}</h1>
-        <p className="text-sm text-text-muted">
-          {INTAKE_STATUS_LABELS[status]}
-          {cancelled && row.cancelled_at ? ` em ${formatStoreDateTime(row.cancelled_at)}` : ""}
-          {!received && !cancelled && (expired ? " · link expirado" : ` · link válido até ${formatStoreDateTime(row.token_expires_at)}`)}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl text-text">{row.customer_name}</h1>
+          <p className="text-sm text-text-muted">
+            {INTAKE_STATUS_LABELS[status]}
+            {cancelled && row.cancelled_at ? ` em ${formatStoreDateTime(row.cancelled_at)}` : ""}
+            {!received && !cancelled && (expired ? " · link expirado" : ` · link válido até ${formatStoreDateTime(row.token_expires_at)}`)}
+          </p>
+        </div>
+        {editable && editInitial && <EditIntakePanel intakeId={row.id} sellers={editSellers} received={received} initial={editInitial} />}
       </div>
 
       <section className="rounded-2xl border border-border bg-surface p-5">
@@ -81,25 +123,28 @@ export default async function PreFaturamentoDetailPage({ params }: { params: Pro
       </section>
 
       <section className="rounded-2xl border border-border bg-surface p-5">
-        <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-text-muted">Dados recebidos da cliente</h2>
+        <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-text-muted">Dados para emissão da NF-e</h2>
         {!received ? (
           <p className="text-sm text-text-muted">Ainda não recebidos.</p>
         ) : (
           <>
             <p className="mb-4 text-xs text-text-muted">Recebidos em {formatStoreDateTime(row.submitted_at)}. Dados pessoais: só Admin/Master.</p>
-            <dl className="grid gap-4 sm:grid-cols-2">
-              <Field label="Nome completo" value={row.submitted_name} />
-              <Field label="CPF" value={formatCpfCnpj(row.submitted_cpf)} />
-              <Field label="E-mail" value={row.submitted_email} />
-              <Field label="WhatsApp" value={formatCustomerWhatsapp(row.submitted_whatsapp)} />
-              <Field label="Entrega para" value={row.submitted_delivery_to_customer ? "A própria cliente" : row.submitted_recipient_name} />
-              <Field label="CEP" value={formatPostalCode(row.submitted_postal_code)} />
-              <Field label="Rua" value={row.submitted_address_line} />
-              <Field label="Número" value={row.submitted_address_number} />
-              <Field label="Complemento" value={row.submitted_address_complement} />
-              <Field label="Bairro" value={row.submitted_neighborhood} />
-              <Field label="Cidade / UF" value={row.submitted_city && row.submitted_state ? `${row.submitted_city} / ${row.submitted_state}` : null} />
-            </dl>
+            <NfeDataSection
+              fields={{
+                name: row.submitted_name,
+                cpf: formatCpfCnpj(row.submitted_cpf) || row.submitted_cpf,
+                email: row.submitted_email,
+                whatsapp: formatCustomerWhatsapp(row.submitted_whatsapp),
+                postalCode: formatPostalCode(row.submitted_postal_code) || row.submitted_postal_code,
+                addressLine: row.submitted_address_line,
+                addressNumber: row.submitted_address_number,
+                addressComplement: row.submitted_address_complement,
+                neighborhood: row.submitted_neighborhood,
+                city: row.submitted_city,
+                state: row.submitted_state,
+                recipientName: row.submitted_delivery_to_customer ? null : row.submitted_recipient_name,
+              }}
+            />
           </>
         )}
       </section>

@@ -1,10 +1,13 @@
 "use client";
 
+import { AlertCircle, FileText, Upload, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { fieldLabel } from "@/lib/intake/labels";
 import { approveConferenciaAction, markReviewedAction, startConferenciaAction } from "./conferencia-actions";
+
+const MAX_XML_BYTES = 2 * 1024 * 1024;
 
 export interface AttemptView {
   id: string;
@@ -48,12 +51,40 @@ export function ConferenciaPanel({
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ kind: "error" | "info"; text: string } | null>(null);
   const [checked, setChecked] = useState<string[]>([]);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const latest = attempts[0] ?? null;
   const isBlocked = latest?.verdict === "BLOCKED";
   const reviewPending = latest ? latest.reviewFields.filter((f) => !latest.reviewedFields.includes(f)) : [];
   const canConfirm = latest !== null && (latest.verdict === "GREEN" || (latest.verdict === "REVIEW" && reviewPending.length === 0));
+
+  const pickFile = (file: File | null) => {
+    setFileError(null);
+    if (!file) {
+      setSelectedFile(null);
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".xml")) {
+      setSelectedFile(null);
+      setFileError("Selecione um arquivo .xml (o XML da NF-e, não a DANFE nem a etiqueta).");
+      return;
+    }
+    if (file.size > MAX_XML_BYTES) {
+      setSelectedFile(null);
+      setFileError("O XML é maior que 2MB.");
+      return;
+    }
+    setSelectedFile(file);
+  };
+
+  const clearFile = () => {
+    setSelectedFile(null);
+    setFileError(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const upload = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -64,6 +95,7 @@ export function ConferenciaPanel({
       if (!result.ok) return setMessage({ kind: "error", text: result.error });
       setChecked([]);
       formRef.current?.reset();
+      clearFile();
       setMessage({ kind: "info", text: "Conferência feita. A tentativa anterior continua no histórico." });
       router.refresh();
     });
@@ -153,14 +185,14 @@ export function ConferenciaPanel({
             </div>
           )}
 
-          <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
-            <Button type="button" onClick={approve} disabled={pending || !canConfirm}>
-              CONFIRMAR CONFERÊNCIA
-            </Button>
-            {!canConfirm && latest.verdict !== "BLOCKED" && (
-              <p className="self-center text-xs text-text-muted">Libera quando não houver avisos pendentes.</p>
-            )}
-          </div>
+          {!isBlocked && (
+            <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
+              <Button type="button" onClick={approve} disabled={pending || !canConfirm}>
+                CONFIRMAR CONFERÊNCIA
+              </Button>
+              {!canConfirm && <p className="self-center text-xs text-text-muted">Libera quando não houver avisos pendentes.</p>}
+            </div>
+          )}
         </div>
       )}
 
@@ -168,13 +200,52 @@ export function ConferenciaPanel({
         <form ref={formRef} onSubmit={upload} className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-5">
           <p className="text-sm font-medium text-text">{latest ? "REVISAR E RECOMEÇAR CONFERÊNCIA" : "INICIAR CONFERÊNCIA"}</p>
           <p className="text-xs text-text-muted">
-            Envie o XML autorizado da NF-e (.xml, até 2MB). A conferência é recalculada do zero e a tentativa anterior fica no histórico.
+            Envie o XML autorizado da NF-e. A conferência é recalculada do zero e a tentativa anterior fica no histórico.
           </p>
-          <label className="flex flex-col gap-1.5 text-sm">
-            XML da NF-e
-            <input name="xml" type="file" accept=".xml,application/xml,text/xml" className="text-sm" />
+
+          <label
+            htmlFor="xml-dropzone-input"
+            className="flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-border bg-muted/40 px-5 py-8 text-center transition-colors hover:border-primary/50 hover:bg-muted/70"
+          >
+            <Upload className="h-8 w-8 text-text-muted" aria-hidden="true" />
+            <span className="text-base font-medium text-text">Clique para selecionar o XML da NF-e</span>
+            <span className="text-xs text-text-muted">Arquivo .xml, até 2 MB</span>
+            <input
+              ref={fileInputRef}
+              id="xml-dropzone-input"
+              name="xml"
+              type="file"
+              accept=".xml,application/xml,text/xml"
+              className="sr-only"
+              onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+            />
           </label>
-          <Button type="submit" variant="secondary" disabled={pending}>
+
+          {selectedFile && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted px-3.5 py-2.5 text-sm">
+              <span className="flex min-w-0 items-center gap-2 text-text">
+                <FileText className="h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
+                <span className="truncate">{selectedFile.name}</span>
+              </span>
+              <button
+                type="button"
+                onClick={clearFile}
+                className="shrink-0 rounded-full p-1 text-text-muted hover:bg-border/60 hover:text-text"
+                aria-label="Remover arquivo selecionado"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
+          {fileError && (
+            <p role="alert" className="flex items-center gap-1.5 text-sm text-red-700">
+              <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+              {fileError}
+            </p>
+          )}
+
+          <Button type="submit" variant="secondary" disabled={pending || !selectedFile}>
             {latest ? "REVISAR E RECOMEÇAR CONFERÊNCIA" : "INICIAR CONFERÊNCIA"}
           </Button>
         </form>

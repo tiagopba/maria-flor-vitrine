@@ -50,3 +50,51 @@ describe("XML-only: fluxo histórico (DANFE + etiqueta) continua válido e intoc
     assert.match(src, /label: Uint8Array;/);
   });
 });
+
+describe("Conferência bloqueada: CONFIRMAR CONFERÊNCIA nunca fica ativo nem visível", () => {
+  it("o botão só é renderizado quando NÃO está bloqueado (!isBlocked)", () => {
+    const src = read(PANEL);
+    assert.match(src, /\{!isBlocked && \(/);
+    const blockIdx = src.indexOf("{!isBlocked && (");
+    const buttonIdx = src.indexOf("CONFIRMAR CONFERÊNCIA");
+    assert.ok(blockIdx > -1 && buttonIdx > blockIdx, "o botão precisa estar dentro do bloco condicional !isBlocked");
+  });
+
+  it("o aviso vermelho de bloqueio já orienta a corrigir/recomeçar, sem depender do botão desabilitado", () => {
+    const src = read(PANEL);
+    assert.match(src, /CONFERÊNCIA BLOQUEADA/);
+    assert.match(src, /Recomece com o XML correto ou corrija os dados da cliente/);
+  });
+});
+
+describe("Upload do XML: área destacada, feedback de arquivo e erro, submit só com arquivo válido", () => {
+  it("dropzone com ícone, texto grande e texto auxiliar", () => {
+    const src = read(PANEL);
+    assert.match(src, /border-dashed/);
+    assert.match(src, /Clique para selecionar o XML da NF-e/);
+    assert.match(src, /Arquivo \.xml, até 2 MB/);
+  });
+
+  it("aceita só .xml e valida a extensão no cliente antes de habilitar o envio", () => {
+    const src = read(PANEL);
+    assert.match(src, /accept=".xml,application\/xml,text\/xml"/);
+    assert.match(src, /\.name\.toLowerCase\(\)\.endsWith\(\"\.xml\"\)/);
+  });
+
+  it("mostra o nome do arquivo selecionado e um jeito de removê-lo", () => {
+    const src = read(PANEL);
+    assert.match(src, /selectedFile\.name/);
+    assert.match(src, /onClick=\{clearFile\}/);
+  });
+
+  it("estado de erro aparece logo abaixo do campo, nunca escondido", () => {
+    const src = read(PANEL);
+    assert.match(src, /fileError/);
+    assert.match(src, /role="alert"/);
+  });
+
+  it("botão principal do upload só habilita com arquivo selecionado", () => {
+    const src = read(PANEL);
+    assert.match(src, /disabled=\{pending \|\| !selectedFile\}/);
+  });
+});

@@ -557,7 +557,8 @@ export interface Database {
             | "INTAKE_REVIEW_COMPLETED"
             | "INTAKE_APPROVED"
             | "FULFILLMENT_CREATED"
-            | "INTAKE_CANCELLED";
+            | "INTAKE_CANCELLED"
+            | "INTAKE_EDITED";
           actor_id: string | null;
           details: Record<string, unknown>;
           created_at: string;
@@ -607,6 +608,10 @@ export interface Database {
       cancel_fulfillment_intake: {
         Args: { p_intake: string; p_reason: string; p_note: string | null };
         Returns: undefined;
+      };
+      edit_fulfillment_intake: {
+        Args: { p_intake: string; p_patch: Record<string, unknown>; p_reason_code: string; p_reason_note: string | null };
+        Returns: { status: string; fields: string[] };
       };
       try_claim_email_otp_send: {
         Args: {

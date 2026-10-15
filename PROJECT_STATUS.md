@@ -1010,3 +1010,222 @@ falhas, 0 pendentes). `next build`: sucesso, todas as rotas listadas.
 - Não mexer na intake real da Arielli sem pedido explícito.
 - Antes de continuar, rode `git status`, `git log --oneline -5` e confira
   contra este arquivo — ele pode ter envelhecido entre uma sessão e outra.
+
+---
+
+## 20. CHECKPOINT — fechamento da rodada: XML-only, edição administrativa e caso real da Arielle (2026-10-15, fim de sessão)
+
+> **Esta seção substitui o estado da seção 19 no que já foi resolvido.** A
+> seção 19 documentou o início desta rodada (migration `20261016100000` ainda
+> não aplicada, Arielle ainda bloqueada); esta seção 20 registra o fechamento:
+> as 3 migrations seguintes foram auditadas e aplicadas, e a venda real da
+> Arielle foi corrigida, conferida e **aprovada**. Leia esta seção por último.
+
+### 20.1 O que está em produção agora (banco real; branch ainda não mergeada em `main` — ver 20.4)
+
+Todo o código desta seção está só na branch `fix/confere-geral-xml-valor-endereco`
+(não mergeada — ver 20.4), mas as **migrations já foram aplicadas em
+Production** e os **dados reais já refletem o resultado** (a aprovação da
+Arielle foi feita pela interface local apontando para o banco real, com o
+código desta branch, exatamente como qualquer Preview faria).
+
+**Fluxo XML-only + rastreamento pendente** (já descrito na seção 19.0, sem
+mudança): upload de um único XML da NF-e substitui DANFE+etiqueta para
+intakes novas; `record_source = 'XML_UPLOAD'`; aprovar não exige mais código
+de rastreio; rastreamento vira um passo separado, pós-aprovação
+(`RASTREAMENTO PENDENTE`); Cadastro Manual (PDF) continua intocado.
+
+**Correções do bug real da Arielle** (seção 19.1-A, sem mudança): `moneyField`
+em `src/lib/intake/schema.ts` só trata ponto como separador de milhar quando
+há vírgula (`"334.97"` não vira mais `33497`); `normalizeStreet` em
+`src/lib/intake/address.ts` remove o prefixo de logradouro (`"Rua Itapaci"` =
+`"Itapaci"`); dropzone de upload do XML; botão CONFIRMAR CONFERÊNCIA some
+(não só desabilita) em `BLOCKED`.
+
+**Edição administrativa da intake** (seção 19.1-B, com uma mudança de
+arquitetura desde então — ver 20.2): Admin/Master corrige STI3, cliente,
+WhatsApp, vendedora, data, valor, pagamento, observação e os dados da cliente
+(nome, CPF, e-mail, CEP, rua, número, complemento, bairro, cidade, UF,
+destinatário) antes da aprovação, por `EDITAR DADOS`
+(`src/app/admin/faturamento-envios/pre/[id]/EditIntakePanel.tsx` +
+`edit-actions.ts`). Motivo obrigatório (`SALE_TYPO`,
+`CUSTOMER_REQUESTED_CORRECTION`, `NFE_ISSUANCE_CORRECTION`, `OTHER` — este
+último com observação obrigatória, guardada só no histórico privado, nunca no
+audit log genérico). Editar um campo que participa da conferência (nome, CPF,
+endereço, destinatário, valor) força o status de volta para `DATA_RECEIVED`
+— nunca aprova com o resultado antigo, nunca transforma `BLOCKED`/`REVIEW` em
+`GREEN` sozinho; a tentativa anterior fica intacta no histórico.
+
+**Normalização de complemento, conservadora** (nova nesta rodada, pós-seção
+19): `normalizeComplement` em `src/lib/intake/address.ts` trata só 3
+variações estruturais seguras como equivalentes — artigo (`a/as/o/os`) antes
+de `rua`/`ruas`, plural `ruas` → singular `rua`, e repetição do logradouro
+antes do segundo NÚMERO em `"rua X e Y"` (ex.: `"entre as ruas 7 e 9"` =
+`"entre rua 7 e rua 9"`). Nunca é fuzzy matching amplo: número diferente,
+segundo logradouro de tipo diferente (avenida ≠ rua) ou texto sem relação
+nenhuma continuam `REVIEW`. 18 testes (positivos e negativos) em
+`src/lib/intake/__tests__/address.test.ts`.
+
+**CAIXA ALTA nos dados novos da cliente** (nova nesta rodada): o formulário
+público (`publicSubmitSchema` em `src/lib/intake/schema.ts`) agora normaliza
+nome, rua, complemento, bairro, cidade e destinatário em CAIXA ALTA
+preservando acentos **desde o envio pela própria cliente** — não só quando o
+Admin edita depois. E-mail nunca vira maiúscula; CPF/CEP/WhatsApp continuam
+só dígitos. Nada retroativo: só dados novos a partir de agora.
+
+### 20.2 Edição administrativa — atomicidade, segurança e CAIXA ALTA no audit (mudança de arquitetura desde a seção 19)
+
+O teste em Preview revelou que a sequência "UPDATE da intake" + "INSERT do
+audit log", feita em duas chamadas separadas pelo Server Action, podia deixar
+o UPDATE salvo mesmo que o INSERT do audit falhasse. Isso foi corrigido
+movendo TUDO (permissão, status, UPDATE, invalidação de conferência, audit
+log, histórico privado) para dentro de **uma função SQL só**,
+`edit_fulfillment_intake` (`SECURITY DEFINER`, `SET search_path = public`,
+mesmo padrão de `approve_fulfillment_intake`/`cancel_fulfillment_intake`) —
+uma função PL/pgSQL roda como uma transação implícita só, sem `exception
+when` que possa engolir erro e deixar parte do trabalho salva. **Provado com
+Postgres de verdade** (`@electric-sql/pglite`, WASM, sem Docker — nova
+devDependency, sem vulnerabilidades novas): derrubei a tabela de histórico de
+propósito e confirmei que nem o UPDATE nem o audit log ficam salvos quando a
+escrita final falha.
+
+**Whitelist do patch** (achado numa revisão de segurança antes da aplicação):
+`edit_fulfillment_intake` só aceita uma lista fechada de 21 colunas
+administrativas; qualquer chave fora da whitelist é **rejeitada** (erro), não
+ignorada em silêncio; os 8 campos "da venda" são sempre obrigatórios; os 13
+campos "da cliente" são tudo ou nada. `id`, `status`, `approved_record_id`,
+token/hash, timestamps de sistema e paths de documento nunca são lidos do
+patch em lugar nenhum — não têm como ser alterados por este RPC.
+
+**Histórico privado de edição**, tabela nova `fulfillment_intake_edit_history`
+(append-only): `intake_id`, `actor_id`, `reason_code`, `reason_note` (só
+existe e é obrigatória quando `reason_code = 'OTHER'`, limite 280
+caracteres), `fields_changed` (nunca vazio), `conference_invalidated`. RLS
+habilitada; só `is_admin()` lê; **least privilege completo**: `REVOKE ALL` de
+`PUBLIC`/`anon`/`authenticated`, depois só `GRANT SELECT` para
+`authenticated` — nem `INSERT`, nem `UPDATE`, nem `DELETE`, nem `TRUNCATE`
+(achado real: o Supabase concede `TRUNCATE` por padrão a `authenticated` em
+tabela nova, e `TRUNCATE` não passa pela RLS — corrigido). A única escrita é
+a função `SECURITY DEFINER` (dona `postgres`, roda com privilégio de dono,
+não de ACL — confirmado por leitura antes de aplicar o least privilege).
+
+**Mudança só de CAIXA não conta como "campo corrigido"** (achado no teste
+real da Arielle: editar só o valor dela também "corrigiu" nome/rua/
+complemento/bairro/cidade porque esses já estavam em mixed case e o
+formulário sempre reenvia o bloco inteiro já normalizado). Os 7 campos que o
+Zod normaliza para CAIXA ALTA (`submitted_name`, `submitted_recipient_name`,
+`submitted_address_line`, `submitted_address_complement`,
+`submitted_neighborhood`, `submitted_city`, `submitted_state`) agora
+comparam com `upper(...) is distinct from upper(...)`; o banco continua
+gravando a versão em CAIXA ALTA normalmente, só não conta como mudança
+(não entra em `fields_changed`, não aparece no audit, não invalida conferência
+sozinha) quando a única diferença é a caixa. **Não retroage**: a edição já
+feita na Arielle não foi reescrita.
+
+**DADOS PARA EMISSÃO DA NF-e**: a antiga seção somente-leitura "Dados
+recebidos da cliente" virou essa área (`NfeDataSection.tsx`) — cada campo
+(Nome, CPF, E-mail, WhatsApp, CEP, Rua, Número, Complemento, Bairro, Cidade,
+UF, Destinatário se houver) com ícone de copiar individual; clique copia só
+aquele valor, ícone vira ✓ por 1,5s, "Copiado" discreto; sem "copiar todos".
+
+### 20.3 Migrations aplicadas nesta rodada (nenhuma reaplicada; ordem cronológica)
+
+| Migration | O que faz |
+|---|---|
+| `20261015100000_fulfillment_tracking_pending.sql` | Rastreamento pendente: `delivery_status`/`requiresTrackingInfo` desacoplados de aprovação; `xml_file_path`; `TRACKING_CODE_SAVED`. |
+| `20261015110000_fulfillment_xml_files_by_source_fix.sql` | `record_source = 'XML_UPLOAD'` explícito (constraint fechada por `record_source`, não mais `PDF_UPLOAD` por default incorreto). |
+| `20261016100000_fulfillment_intake_admin_edit.sql` | `INTAKE_EDITED` no audit log; tabela `fulfillment_intake_edit_history`; RPC `edit_fulfillment_intake` (whitelist completa, atômica). |
+| `20261016110000_fulfillment_intake_edit_history_least_privilege.sql` | `REVOKE ALL` + `GRANT SELECT` só para `authenticated` na tabela de histórico (remove `TRUNCATE`/`REFERENCES`/`TRIGGER` concedidos por padrão). |
+| `20261017100000_fulfillment_intake_edit_case_insensitive_diff.sql` | `edit_fulfillment_intake`: os 7 campos CAIXA ALTA comparam com `upper(...)` — diferença só de caixa não conta como mudança. |
+
+As duas primeiras já estavam aplicadas antes desta rodada (seção 19.0); as
+três últimas foram auditadas uma a uma e aplicadas nesta rodada, sempre via
+`supabase db query --linked --file <arquivo>` (nunca `db push`, nunca
+`migration repair`, nunca outra migration junto). Confirmado por leitura após
+cada aplicação: grants, RLS, policies e contagens de dados reais inalteradas
+fora do esperado.
+
+### 20.4 Caso real da Arielle — RESOLVIDO E APROVADO
+
+Intake `2f948b89-d562-4e8e-984a-5d857a0257af`, STI3 23706. Sequência completa,
+toda pela interface (nunca por SQL direto em dado real):
+
+1. **Diagnóstico**: `sale_total = 33497` (bug de parse), `BLOCKED` em rua
+   (prefixo "Rua") e complemento ("Entre as ruas 7 e 9" × "ENTRE RUA 7 E RUA
+   9" — na época, uma diferença real para a regra ainda sem a normalização
+   conservadora).
+2. **EDITAR DADOS**: só o campo `Valor da venda`, `33497` → `334,97`, motivo
+   `SALE_TYPO`. Efeito colateral esperado (CAIXA ALTA no bloco da cliente
+   inteiro, mesmo sem mudança de conteúdo) foi o que motivou o fix da seção
+   20.2 — mas a edição da Arielle em si **não foi reescrita**.
+3. **Reenvio do XML real** (mesmo arquivo, 12.839 bytes, duas vezes): a
+   primeira vez (antes do fix de complemento) deu `🟡 REVISAR`, só
+   complemento; a segunda vez (depois do fix de complemento, mesmo XML, sem
+   editar nada) deu **`🟢 TUDO CERTO` — tentativa 5**.
+4. **CONFIRMAR CONFERÊNCIA**: aprovado pela interface.
+
+**Estado final, confirmado por leitura:**
+- `fulfillment_intakes.status = APPROVED`, `approved_record_id =
+  75fd4c8b-55de-4eb1-afe7-2e30c749231f`.
+- Novo `fulfillment_records`: id `75fd4c8b-55de-4eb1-afe7-2e30c749231f`,
+  `record_source = 'XML_UPLOAD'`, `xml_file_path` preenchido,
+  `danfe_file_path = null`, `label_file_path = null`, `delivery_status =
+  'PENDING'`, `status = 'CONFIRMED'`, `carrier = 'J&T Express'`,
+  `tracking_code = null`, `nfe_number = '1215'`, `sale_total = 334.97`.
+- `fulfillment_audit_logs`: exatamente 1 linha, `action = 'CREATED'`,
+  `details = {"source":"FULFILLMENT_INTAKE"}` — sem PII.
+- 3 follow-ups criados `OPEN`: `SHIPPING_NOTICE`, `DELIVERY_CONFIRMATION`,
+  `GOOGLE_REVIEW`.
+- Tela mostra `RASTREAMENTO PENDENTE` (transportadora pré-selecionada J&T,
+  aguardando código).
+- **Nada de rastreamento foi informado, nenhum status virou `IN_TRANSIT`,
+  nenhuma mensagem de WhatsApp foi aberta ou copiada.**
+
+### 20.5 Estado real do banco (confirmado por leitura, fim da rodada)
+
+- `fulfillment_records = 6` — **a Arielle agora é um registro real**, não
+  sintético. **Não apagar, não tratar como dado de teste.**
+- `fulfillment_intakes = 7` (inalterado em quantidade; a da Arielle mudou de
+  status para `APPROVED`).
+- Os outros 5 registros reais anteriores (Neusa, Rosiane e os 3 das rodadas
+  de pós-venda/rastreamento) seguem intactos.
+- `fulfillment_intake_edit_history`: 1 linha (a edição da Arielle).
+
+### 20.6 Pendências para a próxima conversa
+
+1. **Redesign visual do Pré-faturamento**: cards melhor separados, ícones,
+   cores por etapa, melhor hierarquia visual. Mapeamento dos componentes já
+   foi feito numa auditoria anterior (ver histórico da conversa); layout em
+   si ainda **não começou**.
+2. **Cadastro de Produtos — código manual → identificador interno
+   automático**: auditoria já entregue numa rodada anterior (relatório A-I:
+   estado, dependências, risco, arquitetura recomendada, backfill,
+   próximos inserts, interface, site público, migration só descrita).
+   Ainda **não implementado**. Precisa: remover código manual da interface,
+   criar sequência/identity `00000001...` (nunca `MAX()+1` no frontend),
+   preservar produtos/variantes/cores existentes, resolver o caso de vários
+   produtos com o mesmo código comercial (~200 blusas com a mesma
+   referência). Áreas protegidas (não mexer sem pedido explícito):
+   variantes, cores, `product_groups`, tamanhos, preços, promoções,
+   parcelamento, upload múltiplo, galeria, slug history, redirects,
+   agrupamento público, swatches, favoritos, busca, fluxo guiado — e
+   **especialmente `save_product_with_variants`**.
+3. **Rastreamento da Arielle**: a venda está aprovada e `PENDING`, mas ainda
+   **sem código de rastreio**. Isso é esperado (operação informa depois) —
+   não é um bug nem uma pendência técnica, só um lembrete de fluxo.
+
+### 20.7 Commit e estado da branch
+
+Ver fim deste arquivo / mensagem do commit para hash exato, lista de arquivos
+e confirmação de `tsc`/`eslint`/`npm test`/`next build` limpos no momento do
+commit. Branch `fix/confere-geral-xml-valor-endereco`, **push feito, merge
+NÃO feito**.
+
+### Regra para a próxima sessão
+- A branch está pronta para revisão de merge, mas **só mergear com pedido
+  explícito**.
+- A venda da Arielle é dado real: nunca apagar, nunca usar como fixture de
+  teste, nunca reverter sem pedido explícito.
+- Antes de iniciar o redesign do Pré-faturamento ou o trabalho de Produtos
+  (pendências 20.6), audite o estado atual de novo — este arquivo pode ter
+  envelhecido.
