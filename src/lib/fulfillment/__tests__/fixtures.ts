@@ -2,6 +2,93 @@
 // Simplificado / etiqueta J&T) mas com dados inventados — nunca commitar
 // PDFs ou textos reais de clientes.
 
+/**
+ * XML nfeProc SINTÉTICO, com a mesma estrutura técnica do caso real que motivou a
+ * revisão do fluxo (NF-e 1215, série 1, autorizada, vNF 334.97, transportadora J&T) —
+ * mas identidade, CPF, chave de acesso e endereço inventados (reaproveita a mesma
+ * cliente fictícia "MARIA DA SILVA EXEMPLO" / CPF 111.444.777-35 do resto deste arquivo).
+ * Chave de 44 dígitos: sintética, sem validar dígito verificador (só o formato importa
+ * para o parser) — igual nos dois lugares em que aparece (infNFe/@Id e protNFe/infProt/chNFe).
+ */
+export const NFE_KEY_1215 = "35261012345678000199550010000012151123456780";
+export const NFE_XML_1215 = `<?xml version="1.0" encoding="UTF-8"?>
+<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">
+  <NFe xmlns="http://www.portalfiscal.inf.br/nfe">
+    <infNFe Id="NFe${NFE_KEY_1215}" versao="4.00">
+      <ide>
+        <cUF>35</cUF>
+        <natOp>Venda de mercadoria</natOp>
+        <mod>55</mod>
+        <serie>1</serie>
+        <nNF>1215</nNF>
+        <dhEmi>2026-10-10T14:00:00-04:00</dhEmi>
+        <tpNF>1</tpNF>
+        <idDest>1</idDest>
+        <tpImp>4</tpImp>
+        <tpEmis>1</tpEmis>
+        <cDV>0</cDV>
+        <tpAmb>1</tpAmb>
+        <finNFe>1</finNFe>
+        <indFinal>1</indFinal>
+        <indPres>2</indPres>
+        <procEmi>0</procEmi>
+        <verProc>LojaExemplo 1.0</verProc>
+      </ide>
+      <dest>
+        <CPF>11144477735</CPF>
+        <xNome>MARIA DA SILVA EXEMPLO</xNome>
+        <enderDest>
+          <xLgr>Avenida Brasil</xLgr>
+          <nro>1500</nro>
+          <xCpl>APTO 12 B</xCpl>
+          <xBairro>Jardim das Palmeiras</xBairro>
+          <cMun>3550308</cMun>
+          <xMun>Sao Paulo</xMun>
+          <UF>SP</UF>
+          <CEP>01310100</CEP>
+          <cPais>1058</cPais>
+          <xPais>Brasil</xPais>
+        </enderDest>
+        <indIEDest>9</indIEDest>
+      </dest>
+      <transp>
+        <modFrete>1</modFrete>
+        <transporta>
+          <xNome>J&amp;T EXPRESS LOGISTICA LTDA</xNome>
+        </transporta>
+      </transp>
+      <total>
+        <ICMSTot>
+          <vBC>0.00</vBC>
+          <vICMS>0.00</vICMS>
+          <vProd>334.97</vProd>
+          <vFrete>0.00</vFrete>
+          <vSeg>0.00</vSeg>
+          <vDesc>0.00</vDesc>
+          <vII>0.00</vII>
+          <vIPI>0.00</vIPI>
+          <vPIS>0.00</vPIS>
+          <vCOFINS>0.00</vCOFINS>
+          <vOutro>0.00</vOutro>
+          <vNF>334.97</vNF>
+        </ICMSTot>
+      </total>
+    </infNFe>
+  </NFe>
+  <protNFe versao="4.00">
+    <infProt>
+      <tpAmb>1</tpAmb>
+      <verAplic>SP_NFE_PL010</verAplic>
+      <chNFe>${NFE_KEY_1215}</chNFe>
+      <dhRecbto>2026-10-10T14:01:00-04:00</dhRecbto>
+      <nProt>135260000000001</nProt>
+      <digVal>ZmFrZURpZ2VzdFZhbHVlRXhlbXBsbw==</digVal>
+      <cStat>100</cStat>
+      <xMotivo>Autorizado o uso da NF-e</xMotivo>
+    </infProt>
+  </protNFe>
+</nfeProc>`;
+
 export const DANFE_TEXT = `DANFE Simplificado - Etiqueta
 LOJA EXEMPLO LTDA
 CNPJ:11.222.333/0001-81 IE:11.111.111-1

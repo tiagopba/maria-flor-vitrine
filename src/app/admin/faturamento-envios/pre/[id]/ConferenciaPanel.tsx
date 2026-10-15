@@ -24,14 +24,15 @@ const BADGE: Record<AttemptView["verdict"], { dot: string; title: string }> = {
   BLOCKED: { dot: "🔴", title: "DIVERGÊNCIA — BLOQUEIO REAL" },
 };
 
+// Só campos do XML (identificação fiscal + valor + transportadora, se houver). Nada
+// derivado de etiqueta: serviço e rastreio não existem mais nesta etapa — ver
+// RASTREAMENTO PENDENTE depois da aprovação.
 const EXTRACTED_LABELS: [string, string][] = [
   ["nfe_number", "NF-e"],
   ["nfe_series", "Série"],
   ["nfe_key", "Chave de acesso"],
   ["invoice_total", "Valor da NF-e"],
   ["carrier", "Transportadora"],
-  ["shipping_service", "Serviço"],
-  ["tracking_code", "Rastreio"],
 ];
 
 export function ConferenciaPanel({
@@ -93,9 +94,9 @@ export function ConferenciaPanel({
         <div className="rounded-2xl border border-red-300 bg-red-50 p-5 text-red-900">
           <p className="font-semibold">🔴 CONFERÊNCIA BLOQUEADA</p>
           <p className="mt-2 text-sm">
-            Encontramos informações importantes que não correspondem. Revise os dados, a NF-e e a etiqueta antes de continuar.
+            Encontramos informações importantes que não correspondem. Revise os dados da cliente e o XML antes de continuar.
           </p>
-          <p className="mt-3 text-xs">Não há como liberar esta tentativa. Recomece com os documentos corretos ou corrija os dados da cliente (abaixo).</p>
+          <p className="mt-3 text-xs">Não há como liberar esta tentativa. Recomece com o XML correto ou corrija os dados da cliente (abaixo).</p>
         </div>
       )}
 
@@ -165,17 +166,13 @@ export function ConferenciaPanel({
 
       {canUpload && (
         <form ref={formRef} onSubmit={upload} className="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-5">
-          <p className="text-sm font-medium text-text">{latest ? "REVISAR E RECOMEÇAR CONFERÊNCIA / SUBSTITUIR DANFE E ETIQUETA" : "INICIAR CONFERÊNCIA"}</p>
+          <p className="text-sm font-medium text-text">{latest ? "REVISAR E RECOMEÇAR CONFERÊNCIA" : "INICIAR CONFERÊNCIA"}</p>
           <p className="text-xs text-text-muted">
-            Envie a DANFE Simplificada e a etiqueta em PDF (até 2MB cada). A conferência é recalculada do zero e a tentativa anterior fica no histórico.
+            Envie o XML autorizado da NF-e (.xml, até 2MB). A conferência é recalculada do zero e a tentativa anterior fica no histórico.
           </p>
           <label className="flex flex-col gap-1.5 text-sm">
-            DANFE (PDF)
-            <input name="danfe" type="file" accept="application/pdf" className="text-sm" />
-          </label>
-          <label className="flex flex-col gap-1.5 text-sm">
-            Etiqueta (PDF)
-            <input name="label" type="file" accept="application/pdf" className="text-sm" />
+            XML da NF-e
+            <input name="xml" type="file" accept=".xml,application/xml,text/xml" className="text-sm" />
           </label>
           <Button type="submit" variant="secondary" disabled={pending}>
             {latest ? "REVISAR E RECOMEÇAR CONFERÊNCIA" : "INICIAR CONFERÊNCIA"}

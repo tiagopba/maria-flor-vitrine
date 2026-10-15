@@ -166,13 +166,20 @@ export async function listAttempts(intakeId: string): Promise<AttemptRow[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("fulfillment_verification_attempts")
-    .select("id, intake_id, attempt_no, verdict, blocking_fields, review_fields, reviewed_fields, comparison, danfe_file_path, label_file_path, actor_id, created_at")
+    .select(
+      "id, intake_id, attempt_no, verdict, blocking_fields, review_fields, reviewed_fields, comparison, danfe_file_path, label_file_path, xml_file_path, actor_id, created_at"
+    )
     .eq("intake_id", intakeId)
     .order("attempt_no", { ascending: false });
   if (error) throw new Error(error.message);
   return data ?? [];
 }
 
+/**
+ * Uma tentativa tem OU os dois PDFs (danfePath + labelPath, fluxo antigo) OU o XML
+ * (xmlPath, fluxo novo) — nunca os dois conjuntos, nunca nenhum (constraint no banco
+ * garante isso também). Quem decide qual conjunto vem é o chamador.
+ */
 export async function insertAttempt(input: {
   intakeId: string;
   attemptNo: number;
@@ -180,8 +187,9 @@ export async function insertAttempt(input: {
   blockingFields: string[];
   reviewFields: string[];
   comparison: Record<string, unknown>;
-  danfePath: string;
-  labelPath: string;
+  danfePath?: string;
+  labelPath?: string;
+  xmlPath?: string;
   actorId: string;
 }): Promise<AttemptRow> {
   const supabase = await createClient();
@@ -195,8 +203,9 @@ export async function insertAttempt(input: {
       review_fields: input.reviewFields,
       reviewed_fields: [],
       comparison: input.comparison,
-      danfe_file_path: input.danfePath,
-      label_file_path: input.labelPath,
+      danfe_file_path: input.danfePath ?? null,
+      label_file_path: input.labelPath ?? null,
+      xml_file_path: input.xmlPath ?? null,
       actor_id: input.actorId,
     })
     .select("*")

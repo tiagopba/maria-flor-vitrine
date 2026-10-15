@@ -461,7 +461,9 @@ export interface Database {
           // NULL só em registro HISTORICAL_IMPORT (planilha antiga, sem PDFs).
           danfe_file_path: string | null;
           label_file_path: string | null;
-          record_source: "PDF_UPLOAD" | "HISTORICAL_IMPORT";
+          // XML da NF-e aprovado (fluxo XML-only). NULL em todo registro anterior a essa migration.
+          xml_file_path: string | null;
+          record_source: "PDF_UPLOAD" | "HISTORICAL_IMPORT" | "XML_UPLOAD";
           import_batch: string | null;
           import_ref: string | null;
           status: "CONFIRMED";
@@ -485,7 +487,8 @@ export interface Database {
             | "DELIVERY_CONFIRMATION_WHATSAPP_OPENED"
             | "DELIVERY_CONFIRMATION_CONFIRMED"
             | "GOOGLE_REVIEW_WHATSAPP_OPENED"
-            | "GOOGLE_REVIEW_CONFIRMED";
+            | "GOOGLE_REVIEW_CONFIRMED"
+            | "TRACKING_CODE_SAVED";
           actor_id: string | null;
           details: Record<string, unknown>;
           created_at: string;
@@ -571,12 +574,14 @@ export interface Database {
           review_fields: string[];
           reviewed_fields: string[];
           comparison: Record<string, unknown>;
-          danfe_file_path: string;
-          label_file_path: string;
+          // Uma tentativa tem os dois PDFs OU o xml_file_path (nunca nenhum — constraint no banco).
+          danfe_file_path: string | null;
+          label_file_path: string | null;
+          xml_file_path: string | null;
           actor_id: string | null;
           created_at: string;
         },
-        "intake_id" | "attempt_no" | "verdict" | "danfe_file_path" | "label_file_path"
+        "intake_id" | "attempt_no" | "verdict"
       >;
       fulfillment_followups: Table<
         {

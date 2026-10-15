@@ -106,7 +106,8 @@ export default async function PreFaturamentoDetailPage({ params }: { params: Pro
 
       {received && !cancelled && (
         <section className="rounded-2xl border border-border bg-surface p-5">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-text-muted">Conferência (DANFE + etiqueta)</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted">CONFERÊNCIA — XML DA NF-e</h2>
+          <p className="mb-4 mt-1 text-xs text-text-muted">Dados conferidos com o XML autorizado da NF-e.</p>
           <ConferenciaPanel intakeId={row.id} attempts={attempts} canUpload={canUploadDocuments(status)} />
         </section>
       )}

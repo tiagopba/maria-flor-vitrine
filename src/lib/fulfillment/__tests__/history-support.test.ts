@@ -114,12 +114,17 @@ describe("UNKNOWN ('Situação não informada') só para histórico", () => {
 });
 
 describe("histórico sem PDFs", () => {
-  const historical = { danfe_file_path: null, label_file_path: null };
-  const normal = { danfe_file_path: "a/danfe.pdf", label_file_path: "a/label.pdf" };
+  const historical = { record_source: "HISTORICAL_IMPORT" as const, danfe_file_path: null, label_file_path: null, xml_file_path: null };
+  const normal = {
+    record_source: "PDF_UPLOAD" as const,
+    danfe_file_path: "a/danfe.pdf",
+    label_file_path: "a/label.pdf",
+    xml_file_path: null,
+  };
 
   it("registro histórico: nenhum botão de documento e mensagem própria", () => {
-    assert.deepEqual(documentAvailability(historical), { danfe: false, label: false, any: false });
-    assert.deepEqual(documentAvailability(normal), { danfe: true, label: true, any: true });
+    assert.deepEqual(documentAvailability(historical), { danfe: false, label: false, xml: false, any: false });
+    assert.deepEqual(documentAvailability(normal), { danfe: true, label: true, xml: false, any: true });
     assert.equal(HISTORICAL_NO_DOCUMENTS_MESSAGE, "Registro histórico — documentos não disponíveis");
     const view = read("src/app/admin/faturamento-envios/[id]/RecordDetailView.tsx");
     assert.match(view, /documents\.any \? \(/);

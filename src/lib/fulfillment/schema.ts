@@ -2,6 +2,7 @@ import { normalizeCustomerWhatsapp } from "./phone.ts";
 import { z } from "zod";
 import { DEFAULT_DELIVERY_STATUS, isDeliveryStatus, isFormDeliveryStatus, type DeliveryStatus } from "./delivery.ts";
 import { CORREIOS_TRACKING_PATTERN } from "./parse-label.ts";
+import { CARRIER_OPTIONS } from "./post-sale.ts";
 import { normalizeForCompare, onlyDigits, stripLeadingZeros } from "./text.ts";
 
 /** America/Campo_Grande não tem horário de verão — mesmo fuso fixo usado no Dashboard. */
@@ -103,6 +104,32 @@ function checkShippingAndDelivery(v: ShippingAndDelivery, ctx: z.RefinementCtx):
     });
   }
 }
+
+/**
+ * "SALVAR RASTREAMENTO": transportadora fechada (sem inferir pelo padrão do código,
+ * de propósito) + código obrigatório. Nunca toca em delivery_status nem em outro
+ * campo da venda — só os dois usados aqui.
+ */
+export const trackingInfoSchema = z
+  .object({
+    carrier: z.enum(CARRIER_OPTIONS, { error: "Selecione a transportadora." }),
+    trackingCode: z
+      .string()
+      .trim()
+      .transform((v) => v.replace(/\s+/g, "").toUpperCase())
+      .refine((v) => v.length > 0, "Informe o código de rastreamento.")
+      .refine((v) => /^[A-Z0-9-]{1,40}$/.test(v), "Código de rastreamento inválido."),
+  })
+  .superRefine((v, ctx) => {
+    if (v.carrier === "Correios" && !CORREIOS_TRACKING_PATTERN.test(v.trackingCode)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["trackingCode"],
+        message: "Rastreio dos Correios deve ter 2 letras + 9 dígitos + BR (ex: AB123456789BR).",
+      });
+    }
+  });
+export type TrackingInfoFields = z.infer<typeof trackingInfoSchema>;
 
 /**
  * Valida o formulário de revisão (tudo string, vem de FormData) e devolve já

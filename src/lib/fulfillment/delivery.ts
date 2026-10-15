@@ -19,7 +19,7 @@ export const ALL_DELIVERY_STATUSES = [...DELIVERY_STATUSES, "UNKNOWN"] as const;
 
 export type DeliveryStatus = (typeof ALL_DELIVERY_STATUSES)[number];
 
-export type RecordSource = "PDF_UPLOAD" | "HISTORICAL_IMPORT";
+export type RecordSource = "PDF_UPLOAD" | "HISTORICAL_IMPORT" | "XML_UPLOAD";
 
 /** Status que um registro daquela origem pode escolher na tela (UNKNOWN só no histórico). */
 export function statusesForSource(source: RecordSource): readonly DeliveryStatus[] {
@@ -46,6 +46,24 @@ export function isDeliveryStatus(value: unknown): value is DeliveryStatus {
 /** Status permitidos num cadastro NORMAL (por PDF): nunca UNKNOWN. */
 export function isFormDeliveryStatus(value: unknown): value is (typeof DELIVERY_STATUSES)[number] {
   return typeof value === "string" && (DELIVERY_STATUSES as readonly string[]).includes(value);
+}
+
+/**
+ * Status "operacionalmente encerrados": a venda não vai mais precisar de rastreio
+ * novo, então um registro nesses status nunca bloqueia Nova Venda mesmo sem
+ * tracking_code. DELIVERED: já chegou, o que aconteceu já aconteceu. REFUNDED:
+ * venda estornada, não há mais envio a rastrear. UNKNOWN: só existe em
+ * HISTORICAL_IMPORT, fora do fluxo operacional ativo que esta regra protege.
+ */
+const TRACKING_NOT_REQUIRED_STATUSES: readonly DeliveryStatus[] = ["DELIVERED", "REFUNDED", "UNKNOWN"];
+
+export function requiresTrackingInfo(status: DeliveryStatus): boolean {
+  return !TRACKING_NOT_REQUIRED_STATUSES.includes(status);
+}
+
+/** Rastreamento pendente: status ainda ativo e sem código de rastreio (nulo ou só espaço). */
+export function isPendingTracking(trackingCode: string | null, deliveryStatus: DeliveryStatus): boolean {
+  return requiresTrackingInfo(deliveryStatus) && !trackingCode?.trim();
 }
 
 export const UNKNOWN_SELLER_LABEL = "Vendedora não informada";

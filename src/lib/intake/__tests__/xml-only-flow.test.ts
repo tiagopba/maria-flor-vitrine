@@ -1,0 +1,52 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, it } from "node:test";
+
+const ROOT = process.cwd();
+const read = (p: string) => readFileSync(join(ROOT, p), "utf8").split("\r\n").join("\n");
+
+const CONF = "src/app/admin/faturamento-envios/pre/[id]/conferencia-actions.ts";
+const PANEL = "src/app/admin/faturamento-envios/pre/[id]/ConferenciaPanel.tsx";
+
+describe("XML-only: nova intake não exige mais DANFE nem etiqueta em PDF", () => {
+  it("a action de iniciar conferência não lê mais 'danfe' nem 'label' do formulário", () => {
+    const src = read(CONF);
+    assert.doesNotMatch(src, /formData\.get\("danfe"\)/);
+    assert.doesNotMatch(src, /formData\.get\("label"\)/);
+    assert.match(src, /formData\.get\("xml"\)/);
+  });
+
+  it("não usa mais os parsers de PDF (DANFE/etiqueta) nem extração de texto de PDF", () => {
+    const src = read(CONF);
+    assert.doesNotMatch(src, /parseDanfeSimplificado|parseShippingLabel|extractPdfText/);
+  });
+
+  it("o upload do XML é um único arquivo .xml, não dois PDFs", () => {
+    const src = read(CONF);
+    assert.match(src, /\.name\.toLowerCase\(\)\.endsWith\(\"\.xml\"\)/);
+  });
+
+  it("o formulário mostra só o campo de XML — nada de DANFE/etiqueta em PDF", () => {
+    const src = read(PANEL);
+    assert.doesNotMatch(src, /name="danfe"|name="label"/);
+    assert.match(src, /name="xml"/);
+    assert.match(src, /CONFERÊNCIA/i);
+  });
+});
+
+describe("XML-only: fluxo histórico (DANFE + etiqueta) continua válido e intocado", () => {
+  it("conferir.ts, parse-danfe.ts e parse-label.ts (usados pelo Cadastro manual) não foram removidos nem alterados", () => {
+    // Cadastro manual (src/app/admin/faturamento-envios/novo) continua no fluxo PDF —
+    // fora do escopo desta mudança, que é só sobre a intake (Nova Venda).
+    assert.doesNotThrow(() => read("src/lib/intake/conferir.ts"));
+    assert.doesNotThrow(() => read("src/lib/fulfillment/parse-danfe.ts"));
+    assert.doesNotThrow(() => read("src/lib/fulfillment/parse-label.ts"));
+  });
+
+  it("Cadastro manual (fulfillment.ts/createFulfillmentRecord) continua exigindo os dois PDFs, sem XML", () => {
+    const src = read("src/lib/db/fulfillment.ts");
+    assert.match(src, /danfe: Uint8Array;/);
+    assert.match(src, /label: Uint8Array;/);
+  });
+});

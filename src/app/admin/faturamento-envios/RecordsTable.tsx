@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import type { FulfillmentListItem } from "@/lib/db/fulfillment";
-import { DELIVERY_STATUS_LABELS, describeSellerOrigin, type DeliveryStatus } from "@/lib/fulfillment/delivery";
+import { DELIVERY_STATUS_LABELS, describeSellerOrigin, isPendingTracking, type DeliveryStatus } from "@/lib/fulfillment/delivery";
 import { formatCarrier, formatIsoDate } from "@/lib/fulfillment/format";
 import { maskCpfCnpj } from "@/lib/fulfillment/text";
 
@@ -93,6 +93,13 @@ export function RecordsTable({
                   {record.delivery_status === "DELIVERED" && record.delivered_at && (
                     <div className="mt-1 whitespace-nowrap text-xs text-text-muted">
                       Entregue em {formatIsoDate(record.delivered_at)}
+                    </div>
+                  )}
+                  {isPendingTracking(record.tracking_code, record.delivery_status) && (
+                    <div className="mt-1">
+                      <Badge tone="warning" className="bg-amber-50 text-amber-800">
+                        RASTREAMENTO PENDENTE
+                      </Badge>
                     </div>
                   )}
                 </td>
