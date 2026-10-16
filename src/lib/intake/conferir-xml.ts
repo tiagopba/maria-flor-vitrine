@@ -2,7 +2,7 @@
 // da NF-e. Nunca compara contra etiqueta (não existe mais nesse fluxo) nem DANFE em PDF.
 import type { NfeXmlData } from "../fulfillment/parse-nfe-xml.ts";
 import { trackingCarrier } from "../fulfillment/post-sale.ts";
-import { normalizeText, compareAddress, compareMoneyCents, toCents, type AddressInput, type FieldResult } from "./address.ts";
+import { normalizePersonName, compareAddress, compareMoneyCents, toCents, type AddressInput, type FieldResult } from "./address.ts";
 import type { ExpectedData } from "./conferir.ts";
 import { decideVerdict, type ConfereResult } from "./confere.ts";
 
@@ -42,7 +42,7 @@ export function conferirXml(input: ConfereXmlInput): ConfereXmlOutcome {
 
   // Destinatário × cliente (ou pessoa informada)
   if (!xml.recipientName) results.push({ field: "destinatario", verdict: "REVIEW", reason: "Destinatário não encontrado no XML." });
-  else if (normalizeText(xml.recipientName) !== normalizeText(expected.recipientName)) {
+  else if (normalizePersonName(xml.recipientName) !== normalizePersonName(expected.recipientName)) {
     results.push({ field: "destinatario", verdict: "BLOCKED", reason: "Destinatário do XML incompatível." });
   } else results.push({ field: "destinatario", verdict: "OK", reason: "" });
 
