@@ -3,6 +3,7 @@ import { filtersToSearchParams, type FulfillmentListFilters, type QuickSituation
 const CHIPS: { situacao: QuickSituation | ""; label: string }[] = [
   { situacao: "", label: "Todas" },
   { situacao: "ATRASADO", label: "Entrega atrasada" },
+  { situacao: "POS_VENDA_PENDENTE", label: "Pós-venda pendente" },
   { situacao: "EM_TRANSITO", label: "Em trânsito" },
   { situacao: "AGUARDANDO_ENVIO", label: "Aguardando envio" },
   { situacao: "ENTREGUE", label: "Entregues" },
@@ -16,9 +17,11 @@ function hrefFor(filters: FulfillmentListFilters, patch: Partial<FulfillmentList
 
 /**
  * Chips de situação (grupo calculado, nunca delivery_status bruto) + toggle
- * "Mostrar entregues". Tudo GET/links, igual ao formulário de filtros
- * avançados — nenhum JS extra. Selecionar um chip sempre limpa `status`
- * (dropdown avançado); os dois são mutuamente exclusivos (ver filters.ts).
+ * "Mostrar entregues concluídas" (só afeta DELIVERED sem follow-up em
+ * aberto — Pós-venda pendente nunca é escondido). Tudo GET/links, igual ao
+ * formulário de filtros avançados — nenhum JS extra. Selecionar um chip
+ * sempre limpa `status` (dropdown avançado); os dois são mutuamente
+ * exclusivos (ver filters.ts).
  */
 export function QuickFilters({ filters }: { filters: FulfillmentListFilters }) {
   // Entregues (chip ou status=DELIVERED no avançado) sempre mostra entregues,
@@ -63,7 +66,7 @@ export function QuickFilters({ filters }: { filters: FulfillmentListFilters }) {
             (filters.mostrarEntregues && !forcedDelivered ? "border-primary bg-primary" : "border-text-muted/40")
           }
         />
-        Mostrar entregues
+        Mostrar entregues concluídas
       </a>
     </div>
   );

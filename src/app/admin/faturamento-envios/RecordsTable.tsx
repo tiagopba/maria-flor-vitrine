@@ -22,7 +22,7 @@ const STATUS_BADGE: Record<DeliveryStatus, { tone: "neutral" | "primary" | "warn
 export function DeliveryStatusBadge({ status }: { status: DeliveryStatus }) {
   const { tone, className } = STATUS_BADGE[status];
   return (
-    <Badge tone={tone} className={className}>
+    <Badge tone={tone} className={`whitespace-nowrap ${className ?? ""}`}>
       {DELIVERY_STATUS_LABELS[status]}
     </Badge>
   );
@@ -35,13 +35,30 @@ export function DeliveryStatusBadge({ status }: { status: DeliveryStatus }) {
  * (bg-red-50) pra ficar claramente mais destacada, como pedido.
  */
 function OverdueBadge() {
-  return <Badge tone="danger" className="bg-red-100 font-semibold text-red-800">⏰ Entrega atrasada</Badge>;
+  return <Badge tone="danger" className="whitespace-nowrap bg-red-100 font-semibold text-red-800">⏰ Entrega atrasada</Badge>;
+}
+
+/**
+ * Grupo POST_SALE_PENDING (DELIVERED com follow-up OPEN — nunca escondido
+ * pelo toggle "Mostrar entregues concluídas"): mostrado JUNTO do badge verde
+ * "Entregue" (DeliveryStatusBadge), nunca no lugar dele.
+ */
+function PostSalePendingBadge({ openCount }: { openCount: number }) {
+  return (
+    <Badge tone="warning" className="whitespace-nowrap bg-amber-100 font-semibold text-amber-900">
+      ● {openCount} follow-up{openCount === 1 ? "" : "s"} em aberto
+    </Badge>
+  );
 }
 
 function FollowupBadge({ openCount }: { openCount: number | undefined }) {
   // undefined = tabela de follow-ups ainda não existe neste banco (migration não aplicada).
   if (openCount === undefined) return <span className="text-xs text-text-muted">—</span>;
-  return openCount === 0 ? <Badge tone="success">✓ Concluídos</Badge> : <Badge tone="warning">● {openCount} em aberto</Badge>;
+  return openCount === 0 ? (
+    <Badge tone="success" className="whitespace-nowrap">✓ Concluídos</Badge>
+  ) : (
+    <Badge tone="warning" className="whitespace-nowrap">● {openCount} em aberto</Badge>
+  );
 }
 
 export function RecordsTable({
@@ -67,7 +84,7 @@ export function RecordsTable({
             <th className="px-4 py-3 font-medium">Venda</th>
             <th className="px-4 py-3 font-medium">Cliente</th>
             <th className="px-4 py-3 font-medium">Vendedora/Origem</th>
-            <th className="px-4 py-3 font-medium">Transportadora/Serviço</th>
+            <th className="px-4 py-3 font-medium">Transporte</th>
             <th className="px-4 py-3 font-medium">Rastreio</th>
             <th className="px-4 py-3 font-medium">Previsão</th>
             <th className="px-4 py-3 font-medium">Status</th>
@@ -79,15 +96,17 @@ export function RecordsTable({
           {records.map((record) => {
             const sellerName = record.seller_id ? (sellerNames[record.seller_id] ?? null) : null;
             const sellerOrigin = describeSellerOrigin(sellerName, record.sales_origin);
-            const isOverdue = displayGroupFor(record, todayIso) === "EM_ATRASO";
+            const group = displayGroupFor(record, todayIso);
+            const isOverdue = group === "EM_ATRASO";
+            const isPostSalePending = group === "POST_SALE_PENDING";
             return (
               <tr key={record.id} className="border-b border-border/60 align-top last:border-0">
-                <td className="whitespace-nowrap px-4 py-3 text-text">{formatIsoDate(record.sale_date)}</td>
-                <td className="px-4 py-3">
+                <td className="whitespace-nowrap px-4 py-2 text-text">{formatIsoDate(record.sale_date)}</td>
+                <td className="px-4 py-2">
                   <div className="font-medium text-text">
                     {record.customer_name}
                     {record.record_source === "HISTORICAL_IMPORT" && (
-                      <span className="ml-2 rounded border border-border px-1.5 py-0.5 align-middle text-[10px] font-medium uppercase tracking-wide text-text-muted">
+                      <span className="ml-2 whitespace-nowrap rounded border border-border px-1.5 py-0.5 align-middle text-[10px] font-medium uppercase tracking-wide text-text-muted">
                         Histórico
                       </span>
                     )}
@@ -97,38 +116,39 @@ export function RecordsTable({
                     {record.nfe_number && <> · NF-e {record.nfe_number}</>}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-text">
+                <td className="px-4 py-2 text-text">
                   <div>{sellerOrigin.primary}</div>
-                  {sellerOrigin.secondary && <div className="mt-0.5 text-xs text-text-muted">{sellerOrigin.secondary}</div>}
+                  {sellerOrigin.secondary && <div className="text-xs text-text-muted">{sellerOrigin.secondary}</div>}
                 </td>
-                <td className="px-4 py-3 text-text">{formatCarrier(record.carrier, record.shipping_service)}</td>
-                <td className="px-4 py-3 font-mono text-text">{record.tracking_code ?? "—"}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-text-muted">
+                <td className="px-4 py-2 text-text">{formatCarrier(record.carrier, record.shipping_service)}</td>
+                <td className="px-4 py-2 font-mono text-text">{record.tracking_code ?? "—"}</td>
+                <td className="whitespace-nowrap px-4 py-2 text-text-muted">
                   {formatIsoDate(record.expected_delivery_date)}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-2">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <DeliveryStatusBadge status={record.delivery_status} />
                     {isOverdue && <OverdueBadge />}
+                    {isPostSalePending && <PostSalePendingBadge openCount={followupOpenCounts?.[record.id] ?? 0} />}
                   </div>
                   {record.delivery_status === "DELIVERED" && record.delivered_at && (
-                    <div className="mt-1 whitespace-nowrap text-xs text-text-muted">
+                    <div className="mt-0.5 whitespace-nowrap text-xs text-text-muted">
                       Entregue em {formatIsoDate(record.delivered_at)}
                     </div>
                   )}
                   {isPendingTracking(record.tracking_code, record.delivery_status) && (
-                    <div className="mt-1">
-                      <Badge tone="warning" className="bg-amber-50 text-amber-800">
+                    <div className="mt-0.5">
+                      <Badge tone="warning" className="whitespace-nowrap bg-amber-50 text-amber-800">
                         RASTREAMENTO PENDENTE
                       </Badge>
                     </div>
                   )}
                 </td>
-                <td className="px-4 py-3">
+                <td className="whitespace-nowrap px-4 py-2">
                   <FollowupBadge openCount={followupOpenCounts === null ? undefined : followupOpenCounts[record.id] ?? 0} />
                 </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex flex-wrap items-center justify-end gap-2">
+                <td className="px-4 py-2 text-right">
+                  <div className="flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
                     <QuickEditModal
                       record={record}
                       statuses={statusesForSource(record.record_source)}
