@@ -52,7 +52,7 @@ export default async function ProductsPage({
           type="search"
           name="q"
           defaultValue={search}
-          placeholder="Buscar por código ou nome..."
+          placeholder="Buscar por código, código interno ou nome..."
           className="h-10 flex-1 rounded-lg border border-border bg-surface px-3 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
         />
         <select

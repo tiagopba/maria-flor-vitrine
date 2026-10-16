@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const codePattern = /^[A-Za-z0-9-]+$/;
 
 // ARCHIVED nunca é permitido por este fluxo — arquivar continua sendo só a
 // ação separada (toggleArchiveProductAction), que sabe cuidar do
@@ -17,12 +16,12 @@ const variantImageSchema = z.object({
 
 const variantSchema = z.object({
   id: z.string().uuid().nullable(),
-  code: z
-    .string()
-    .trim()
-    .min(1, "Informe o código.")
-    .max(40, "Código muito longo.")
-    .regex(codePattern, "Use letras, números e hífen."),
+  // Chave opaca e estável gerada pelo client (hoje, a própria `key` React
+  // do bloco) — nunca usada pra autenticação nem lógica de negócio, só pra
+  // a RPC devolver "qual variante da resposta corresponde a qual bloco da
+  // tela", já que o identificador real (`code` legado/`internal_code`) não
+  // é mais algo que o client conhece antes de salvar uma variante nova.
+  client_key: z.string().trim().min(1, "client_key ausente.").max(100, "client_key muito longo."),
   color_id: z.string().uuid().nullable(),
   status: z.enum(NON_ARCHIVED_STATUS_VALUES, { error: "Selecione um status válido." }),
   featured: z.boolean(),

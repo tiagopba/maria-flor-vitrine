@@ -20,7 +20,7 @@ import { sizeOptionSchema } from "@/lib/validation/size";
 import { saveProductVariantsPayloadSchema } from "@/lib/validation/product-variants";
 
 export type SaveProductVariantsActionResult =
-  | { ok: true; productId: string; variants: { id: string; code: string; slug: string }[] }
+  | { ok: true; productId: string; variants: { id: string; clientKey: string; slug: string; internalCode: string }[] }
   | { error: string; fieldErrors?: Record<string, string> };
 
 /**

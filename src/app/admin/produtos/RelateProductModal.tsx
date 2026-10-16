@@ -73,8 +73,8 @@ export function RelateProductModal({
       <div className="flex flex-col gap-4">
         <Input
           id="relate-search"
-          label="Buscar por nome ou código"
-          placeholder="Ex: 7284, calça pantalona"
+          label="Buscar por nome, código ou código interno"
+          placeholder="Ex: 7284, 00000503, calça pantalona"
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
         />
@@ -93,7 +93,7 @@ export function RelateProductModal({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm text-text">{product.name}</p>
                 <p className="text-xs text-text-muted">
-                  Código: {product.code}
+                  Código: {product.code} • Código interno: {product.internalCode}
                   {product.colorName && ` • ${product.colorName}`}
                 </p>
               </div>

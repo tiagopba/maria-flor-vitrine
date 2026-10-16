@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { attachColorInfo } from "@/lib/db/colors";
+import { formatInternalCode, parseInternalCodeSearchTerm } from "@/lib/catalog/internal-code";
 import { publicImageUrl } from "@/lib/images/url";
 import { deleteImage } from "@/lib/images/provider";
 import type { Database } from "@/types/database";
@@ -95,7 +96,13 @@ export async function listProductsAdmin(
 
   if (filters.search) {
     const term = filters.search.trim();
-    query = query.or(`code.ilike.%${term}%,name.ilike.%${term}%`);
+    const orParts = [`code.ilike.%${term}%`, `name.ilike.%${term}%`];
+    // Admin também localiza pelo identificador interno (com ou sem zeros à
+    // esquerda) — produto legado continua achável pelo code antigo, e
+    // produto novo (sem code manual) passa a ser achável por aqui.
+    const internalCode = parseInternalCodeSearchTerm(term);
+    if (internalCode !== null) orParts.push(`internal_code.eq.${internalCode}`);
+    query = query.or(orParts.join(","));
   }
 
   const { data, error } = await query;
@@ -704,6 +711,7 @@ export interface ProductSearchResult {
   id: string;
   name: string;
   code: string;
+  internalCode: string;
   colorName: string | null;
   mainImageUrl: string | null;
 }
@@ -720,13 +728,16 @@ export async function searchProductsForRelate(query: string, excludeProductId: s
 
   const supabase = await createClient();
   const escaped = term.replace(/[%_]/g, "\\$&");
+  const orParts = [`code.ilike.%${escaped}%`, `name.ilike.%${escaped}%`];
+  const internalCode = parseInternalCodeSearchTerm(term);
+  if (internalCode !== null) orParts.push(`internal_code.eq.${internalCode}`);
 
   const { data: rows, error } = await supabase
     .from("products")
-    .select("id, name, code, color_id")
+    .select("id, name, code, internal_code, color_id")
     .neq("id", excludeProductId)
     .neq("status", "ARCHIVED")
-    .or(`code.ilike.%${escaped}%,name.ilike.%${escaped}%`)
+    .or(orParts.join(","))
     .limit(10);
 
   if (error) throw new Error(error.message);
@@ -751,6 +762,7 @@ export async function searchProductsForRelate(query: string, excludeProductId: s
     id: r.id,
     name: r.name,
     code: r.code,
+    internalCode: formatInternalCode(r.internal_code),
     colorName: r.color_id ? (colorNameById.get(r.color_id) ?? null) : null,
     mainImageUrl: imageByProduct.get(r.id) ?? null,
   }));
