@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { FulfillmentRecord } from "@/lib/db/fulfillment";
-import { UNKNOWN_SELLER_LABEL, formatOriginLabel, isPendingTracking, statusesForSource } from "@/lib/fulfillment/delivery";
+import { UNKNOWN_SELLER_LABEL, formatOriginLabel, isPendingTracking } from "@/lib/fulfillment/delivery";
 import {
   HISTORICAL_NO_DOCUMENTS_MESSAGE,
   XML_DOCUMENT_AVAILABLE_MESSAGE,
@@ -12,11 +12,9 @@ import { formatCpfCnpj, formatPostalCode } from "@/lib/fulfillment/text";
 import { formatPayment } from "@/lib/intake/payment";
 import { DeliveryStatusBadge } from "../RecordsTable";
 import { CopyButton } from "./CopyButton";
-import { updateDeliveryAction } from "./actions";
 import { CustomerWhatsappPanel } from "./CustomerWhatsappPanel";
 import { PostSalePanel, type PostSaleItem } from "./PostSalePanel";
 import { TrackingPendingPanel } from "./TrackingPendingPanel";
-import { UpdateSituationPanel } from "./UpdateSituationPanel";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -127,24 +125,6 @@ export function RecordDetailView({
 
       <div className="mb-5">
         <PostSalePanel recordId={record.id} items={postSale} />
-      </div>
-
-      <div className="mb-5">
-        <UpdateSituationPanel
-          action={updateDeliveryAction}
-          statuses={statusesForSource(record.record_source)}
-          key={`${record.delivery_status}-${record.updated_at}`}
-          record={{
-            id: record.id,
-            delivery_status: record.delivery_status,
-            expected_delivery_date: record.expected_delivery_date,
-            delivered_at: record.delivered_at,
-            notes: record.notes,
-            carrier: record.carrier,
-            shipping_service: record.shipping_service,
-            tracking_code: record.tracking_code,
-          }}
-        />
       </div>
 
       <div className="flex flex-col gap-5">

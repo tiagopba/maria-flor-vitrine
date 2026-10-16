@@ -2,6 +2,27 @@ import type { DeliveryStatus, RecordSource } from "./delivery.ts";
 import { formatIsoDate } from "./format.ts";
 import type { DeliveryUpdateInput } from "./schema.ts";
 
+/**
+ * Ao salvar transportadora + rastreio (fluxo de rastreamento pendente E
+ * edição rápida da listagem): só sobe de PENDING pra IN_TRANSIT
+ * automaticamente — nunca sobrescreve um status que já é outra coisa
+ * (IN_TRANSIT, DELIVERY_ISSUE, RESENT, DELIVERED, REFUNDED). O chamador
+ * decide o status final; esta função só diz "faria sentido subir aqui".
+ */
+export function shouldAutoSetInTransit(currentStatus: DeliveryStatus): boolean {
+  return currentStatus === "PENDING";
+}
+
+/** true só quando transportadora + rastreio passam de incompletos (algum vazio) pra completos (os dois). */
+export function gainedTrackingInfo(
+  before: { carrier: string | null; trackingCode: string | null },
+  after: { carrier: string | null; trackingCode: string | null }
+): boolean {
+  const had = Boolean(before.carrier?.trim() && before.trackingCode?.trim());
+  const has = Boolean(after.carrier?.trim() && after.trackingCode?.trim());
+  return !had && has;
+}
+
 /** Os únicos campos que "Atualizar situação" pode mexer (nomes de coluna — também o que vai para a auditoria). */
 export const DELIVERY_UPDATE_TRACKED_FIELDS = [
   "delivery_status",

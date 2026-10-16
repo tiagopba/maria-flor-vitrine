@@ -11,7 +11,7 @@ import {
   isFormDeliveryStatus,
   statusesForSource,
 } from "../delivery.ts";
-import { FILTER_NONE, filtersToSearchParams, parseListFilters } from "../filters.ts";
+import { FILTER_NONE, filtersToSearchParams, parseListFilters, shouldIncludeGroup } from "../filters.ts";
 
 describe("delivery status", () => {
   it("tem os 6 valores e rótulos em português", () => {
@@ -87,6 +87,8 @@ describe("parseListFilters", () => {
       origin: "ONLINE",
       carrier: "Correios",
       status: "DELIVERED",
+      situacao: "",
+      mostrarEntregues: false,
       state: "MS",
       followup: "",
       page: 3,
@@ -124,5 +126,52 @@ describe("parseListFilters", () => {
     const filters = parseListFilters({ status: "IN_TRANSIT", uf: "SP", origem: "ONLINE" });
     assert.equal(filtersToSearchParams(filters, 2).toString(), "origem=ONLINE&status=IN_TRANSIT&uf=SP&pagina=2");
     assert.equal(filtersToSearchParams(parseListFilters({}), 1).toString(), "");
+  });
+
+  it("situacao (chip) e status (avançado) são mutuamente exclusivos — status vence se os dois vierem na URL", () => {
+    assert.equal(parseListFilters({ situacao: "ATRASADO" }).situacao, "ATRASADO");
+    assert.equal(parseListFilters({ status: "DELIVERED", situacao: "ATRASADO" }).situacao, "");
+    assert.equal(parseListFilters({ status: "DELIVERED", situacao: "ATRASADO" }).status, "DELIVERED");
+    assert.equal(parseListFilters({ situacao: "nao-existe" }).situacao, "");
+  });
+
+  it("mostrarEntregues só fica true com mostrarEntregues=1 explícito", () => {
+    assert.equal(parseListFilters({}).mostrarEntregues, false);
+    assert.equal(parseListFilters({ mostrarEntregues: "1" }).mostrarEntregues, true);
+    assert.equal(parseListFilters({ mostrarEntregues: "true" }).mostrarEntregues, false);
+  });
+});
+
+describe("shouldIncludeGroup — precedência dos filtros de entregues (aprovada pelo usuário)", () => {
+  const base = { situacao: "" as const, status: "" as const, mostrarEntregues: false };
+
+  it("padrão da tela (sem chip, sem status, toggle desligado): esconde DELIVERED, mostra o resto", () => {
+    assert.equal(shouldIncludeGroup("DELIVERED", base), false);
+    assert.equal(shouldIncludeGroup("EM_ATRASO", base), true);
+    assert.equal(shouldIncludeGroup("REFUNDED", base), true);
+  });
+
+  it("toggle 'Mostrar entregues' ligado (sem chip, sem status): mostra DELIVERED também", () => {
+    assert.equal(shouldIncludeGroup("DELIVERED", { ...base, mostrarEntregues: true }), true);
+  });
+
+  it("chip Entregues força mostrar DELIVERED mesmo com o toggle desligado — nunca lista vazia", () => {
+    assert.equal(shouldIncludeGroup("DELIVERED", { ...base, situacao: "ENTREGUE" }), true);
+    assert.equal(shouldIncludeGroup("PENDING", { ...base, situacao: "ENTREGUE" }), false);
+  });
+
+  it("status=DELIVERED (avançado) força mostrar DELIVERED mesmo com o toggle desligado", () => {
+    assert.equal(shouldIncludeGroup("DELIVERED", { ...base, status: "DELIVERED" }), true);
+  });
+
+  it("outro chip (ex.: Em atraso) só mostra aquele grupo, independente do toggle", () => {
+    assert.equal(shouldIncludeGroup("EM_ATRASO", { ...base, situacao: "ATRASADO" }), true);
+    assert.equal(shouldIncludeGroup("IN_TRANSIT", { ...base, situacao: "ATRASADO" }), false);
+    assert.equal(shouldIncludeGroup("DELIVERED", { ...base, situacao: "ATRASADO" }), false);
+  });
+
+  it("chip Todas (situacao vazio) volta à regra do toggle", () => {
+    assert.equal(shouldIncludeGroup("DELIVERED", { ...base, situacao: "" }), false);
+    assert.equal(shouldIncludeGroup("DELIVERED", { ...base, situacao: "", mostrarEntregues: true }), true);
   });
 });

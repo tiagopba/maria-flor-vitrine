@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { planDeliveryUpdate, type DeliveryState } from "../delivery-update.ts";
+import { gainedTrackingInfo, planDeliveryUpdate, shouldAutoSetInTransit, type DeliveryState } from "../delivery-update.ts";
+import type { DeliveryStatus } from "../delivery.ts";
 import { deliveryUpdateSchema } from "../schema.ts";
 
 const current: DeliveryState = {
@@ -104,4 +105,68 @@ describe("planDeliveryUpdate", () => {
     assert.equal(result.ok, true);
     if (result.ok) assert.deepEqual(result.changedFields, ["delivered_at"]);
   });
+});
+
+describe("shouldAutoSetInTransit — só sobe PENDING, nunca sobrescreve outro status", () => {
+  const cases: [DeliveryStatus, boolean][] = [
+    ["PENDING", true],
+    ["IN_TRANSIT", false],
+    ["DELIVERY_ISSUE", false],
+    ["RESENT", false],
+    ["DELIVERED", false],
+    ["REFUNDED", false],
+    ["UNKNOWN", false],
+  ];
+  for (const [status, expected] of cases) {
+    it(`${status} → ${expected}`, () => assert.equal(shouldAutoSetInTransit(status), expected));
+  }
+});
+
+describe("gainedTrackingInfo — só true quando vai de incompleto pra completo", () => {
+  it("PENDING sem rastreio → ganha transportadora + rastreio: true", () => {
+    assert.equal(
+      gainedTrackingInfo({ carrier: null, trackingCode: null }, { carrier: "J&T Express", trackingCode: "ABC123" }),
+      true
+    );
+  });
+
+  it("transportadora já existia, só o rastreio chega agora: true", () => {
+    assert.equal(
+      gainedTrackingInfo({ carrier: "J&T Express", trackingCode: null }, { carrier: "J&T Express", trackingCode: "ABC123" }),
+      true
+    );
+  });
+
+  it("já tinha os dois antes: false (editar um rastreio existente não é 'ganhar')", () => {
+    assert.equal(
+      gainedTrackingInfo({ carrier: "J&T Express", trackingCode: "OLD123" }, { carrier: "J&T Express", trackingCode: "NEW456" }),
+      false
+    );
+  });
+
+  it("continua sem nenhum dos dois: false", () => {
+    assert.equal(gainedTrackingInfo({ carrier: null, trackingCode: null }, { carrier: null, trackingCode: "" }), false);
+  });
+});
+
+describe("auto IN_TRANSIT ao salvar transportadora + rastreio — matriz pedida pelo usuário", () => {
+  const auto = (status: DeliveryStatus, had: boolean) =>
+    shouldAutoSetInTransit(status) &&
+    gainedTrackingInfo({ carrier: had ? "X" : null, trackingCode: had ? "X" : null }, { carrier: "J&T Express", trackingCode: "ABC123" });
+
+  it("PENDING sem rastreio → salva J&T + rastreio → vira IN_TRANSIT", () => {
+    assert.equal(auto("PENDING", false), true);
+  });
+  it("PENDING com transportadora já existente e novo rastreio → vira IN_TRANSIT", () => {
+    assert.equal(
+      shouldAutoSetInTransit("PENDING") &&
+        gainedTrackingInfo({ carrier: "J&T Express", trackingCode: null }, { carrier: "J&T Express", trackingCode: "ABC123" }),
+      true
+    );
+  });
+  it("IN_TRANSIT → continua IN_TRANSIT (não reaplica)", () => assert.equal(auto("IN_TRANSIT", false), false));
+  it("DELIVERY_ISSUE → não muda", () => assert.equal(auto("DELIVERY_ISSUE", false), false));
+  it("RESENT → não muda", () => assert.equal(auto("RESENT", false), false));
+  it("DELIVERED → não muda", () => assert.equal(auto("DELIVERED", false), false));
+  it("REFUNDED → não muda", () => assert.equal(auto("REFUNDED", false), false));
 });

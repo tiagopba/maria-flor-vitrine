@@ -1,7 +1,8 @@
 import "server-only";
 import type { DeliveryState } from "@/lib/fulfillment/delivery-update";
-import { isPendingTracking } from "@/lib/fulfillment/delivery";
-import { FILTER_NONE, type FulfillmentListFilters } from "@/lib/fulfillment/filters";
+import { isPendingTracking, type DeliveryStatus } from "@/lib/fulfillment/delivery";
+import { displayGroupFor, sortRecordsForListing, todayIsoInStoreTimeZone } from "@/lib/fulfillment/delivery-priority";
+import { FILTER_NONE, shouldIncludeGroup, type FulfillmentListFilters } from "@/lib/fulfillment/filters";
 import { buildSearchFilter } from "@/lib/fulfillment/search";
 import { collectFilterOptions, fetchAllPages } from "@/lib/fulfillment/paginate";
 import { listSellersAdmin } from "@/lib/db/sellers";
@@ -37,10 +38,11 @@ export type FulfillmentListItem = Pick<
   | "delivered_at"
   | "delivery_status"
   | "record_source"
+  | "notes"
 >;
 
 const LIST_COLUMNS =
-  "id, customer_name, customer_cpf, nfe_number, invoice_total, carrier, shipping_service, tracking_code, created_at, sale_date, seller_id, sales_origin, expected_delivery_date, delivered_at, delivery_status, record_source";
+  "id, customer_name, customer_cpf, nfe_number, invoice_total, carrier, shipping_service, tracking_code, created_at, sale_date, seller_id, sales_origin, expected_delivery_date, delivered_at, delivery_status, record_source, notes";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -64,58 +66,66 @@ export type ListFulfillmentResult =
 export async function listFulfillmentRecords(filters: FulfillmentListFilters): Promise<ListFulfillmentResult> {
   const supabase = await createClient();
   const page = Math.max(1, filters.page);
-  const from = (page - 1) * FULFILLMENT_PAGE_SIZE;
-
-  let query = supabase
-    .from("fulfillment_records")
-    .select(LIST_COLUMNS)
-    // Mais recente VENDA primeiro (importar hoje uma venda antiga não a joga para o topo);
-    // `id` desempata para a paginação nunca repetir nem pular linha.
-    .order("sale_date", { ascending: false })
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: true })
-    // +1 só para saber se existe próxima página, sem count exato.
-    .range(from, from + FULFILLMENT_PAGE_SIZE);
 
   const searchFilter = filters.query ? buildSearchFilter(filters.query) : null;
-  if (searchFilter) query = query.or(searchFilter);
-
-  // Os valores abaixo já vêm sanitizados por parseListFilters; o builder do
-  // supabase-js codifica cada um na URL, então não há injeção de filtro.
-  if (filters.saleFrom) query = query.gte("sale_date", filters.saleFrom);
-  if (filters.saleTo) query = query.lte("sale_date", filters.saleTo);
-  if (filters.carrier) query = query.eq("carrier", filters.carrier);
-  if (filters.status) query = query.eq("delivery_status", filters.status);
-  if (filters.state) query = query.eq("state", filters.state);
-
-  // Vendedora e origem são filtros independentes.
-  if (filters.seller === FILTER_NONE) query = query.is("seller_id", null);
-  else if (filters.seller) query = query.eq("seller_id", filters.seller);
-
-  if (filters.origin === FILTER_NONE) query = query.is("sales_origin", null);
-  else if (filters.origin) query = query.eq("sales_origin", filters.origin);
 
   // Pendência de follow-up: calculada numa tabela pequena (3 linhas por registro), não
-  // nos filtros já paginados em blocos de 1000 — o volume de pedidos não chega lá.
+  // na busca principal — o volume de pedidos não chega lá.
+  let followupIdFilter: string[] | null = null;
   if (filters.followup === "pending" || filters.followup === "completed") {
     const pendingIds = [...(await listRecordIdsWithOpenFollowups())];
     if (filters.followup === "pending") {
       if (pendingIds.length === 0) return { status: "ok", records: [], hasMore: false };
-      query = query.in("id", pendingIds);
-    } else if (pendingIds.length > 0) {
-      query = query.not("id", "in", `(${pendingIds.join(",")})`);
+      followupIdFilter = pendingIds;
     }
   }
 
-  const { data, error } = await query;
-  if (isMissingTableError(error)) return { status: "unavailable" };
-  if (error) throw new Error(error.message);
+  // Busca o conjunto inteiro que bate com os filtros de banco (teto de
+  // fetchAllPages: 1000 páginas de 1000 = 1 milhão de linhas, muito além do
+  // volume real) — a ordenação por urgência (EM_ATRASO primeiro etc.) e a
+  // paginação acontecem em memória logo abaixo, porque dependem de "hoje" e
+  // não só de colunas do banco.
+  let rows: FulfillmentListItem[];
+  try {
+    rows = await fetchAllPages<FulfillmentListItem>(async (from, to) => {
+      let query = supabase.from("fulfillment_records").select(LIST_COLUMNS).order("id").range(from, to);
+      if (searchFilter) query = query.or(searchFilter);
+      if (filters.saleFrom) query = query.gte("sale_date", filters.saleFrom);
+      if (filters.saleTo) query = query.lte("sale_date", filters.saleTo);
+      if (filters.carrier) query = query.eq("carrier", filters.carrier);
+      if (filters.status) query = query.eq("delivery_status", filters.status);
+      if (filters.state) query = query.eq("state", filters.state);
+      if (filters.seller === FILTER_NONE) query = query.is("seller_id", null);
+      else if (filters.seller) query = query.eq("seller_id", filters.seller);
+      if (filters.origin === FILTER_NONE) query = query.is("sales_origin", null);
+      else if (filters.origin) query = query.eq("sales_origin", filters.origin);
+      if (filters.followup === "pending" && followupIdFilter) query = query.in("id", followupIdFilter);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    });
+  } catch (error) {
+    if (isMissingTableError(error as { code?: string })) return { status: "unavailable" };
+    throw error instanceof Error ? error : new Error(String(error));
+  }
 
-  const rows = data ?? [];
+  if (filters.followup === "completed") {
+    const pendingIds = await listRecordIdsWithOpenFollowups();
+    rows = rows.filter((r) => !pendingIds.has(r.id));
+  }
+
+  // Precedência dos filtros de entregues (shouldIncludeGroup, pura e testada
+  // em delivery-filters.test.ts): chip Entregues e status=DELIVERED sempre
+  // mostram DELIVERED, nunca uma lista vazia por causa do toggle.
+  const todayIso = todayIsoInStoreTimeZone();
+  const filteredRows = rows.filter((r) => shouldIncludeGroup(displayGroupFor(r, todayIso), filters));
+  const sorted = sortRecordsForListing(filteredRows, todayIso);
+
+  const from = (page - 1) * FULFILLMENT_PAGE_SIZE;
   return {
     status: "ok",
-    records: rows.slice(0, FULFILLMENT_PAGE_SIZE),
-    hasMore: rows.length > FULFILLMENT_PAGE_SIZE,
+    records: sorted.slice(from, from + FULFILLMENT_PAGE_SIZE),
+    hasMore: sorted.length > from + FULFILLMENT_PAGE_SIZE,
   };
 }
 
@@ -348,18 +358,23 @@ export async function updateFulfillmentDelivery(id: string, update: DeliveryStat
 }
 
 /**
- * SALVAR RASTREAMENTO: grava só `tracking_code` + `carrier`. Nunca toca em
- * `delivery_status` nem em qualquer outro dado da venda — ver decisão do produto
- * (preencher o rastreio não significa que a transportadora já coletou).
+ * SALVAR RASTREAMENTO: grava `tracking_code` + `carrier` e, só quando
+ * `deliveryStatus` vier informado (decisão de `shouldAutoSetInTransit`, em
+ * `saveTrackingAction`), também `delivery_status` — tudo na mesma operação.
+ * Fora isso, nunca toca em mais nada da venda (preencher o rastreio não
+ * significa por padrão que a transportadora já coletou).
  */
-export async function saveTrackingInfo(id: string, input: { trackingCode: string; carrier: string }): Promise<void> {
+export async function saveTrackingInfo(
+  id: string,
+  input: { trackingCode: string; carrier: string; deliveryStatus?: DeliveryStatus }
+): Promise<void> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("fulfillment_records")
-    .update({ tracking_code: input.trackingCode, carrier: input.carrier })
-    .eq("id", id)
-    .select("id")
-    .maybeSingle();
+  const update: { tracking_code: string; carrier: string; delivery_status?: DeliveryStatus } = {
+    tracking_code: input.trackingCode,
+    carrier: input.carrier,
+  };
+  if (input.deliveryStatus) update.delivery_status = input.deliveryStatus;
+  const { data, error } = await supabase.from("fulfillment_records").update(update).eq("id", id).select("id").maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Não foi possível salvar o rastreamento.");
 }
