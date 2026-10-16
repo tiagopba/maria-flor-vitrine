@@ -14,6 +14,17 @@ import { formatCpfCnpj, formatPostalCode } from "@/lib/fulfillment/text";
 import { ReopenPanel } from "./ReopenPanel";
 import { CancelIntakePanel } from "./CancelIntakePanel";
 import { ConferenciaPanel, type AttemptView } from "./ConferenciaPanel";
+import { NfeDataSection } from "./NfeDataSection";
+
+/**
+ * CAIXA ALTA só pra exibição/cópia (nunca grava nada — ver NfeDataSection).
+ * Cobre dados antigos que foram gravados antes da normalização existir no
+ * formulário público (ex.: "Tatiane Chabariberi" → "TATIANE CHABARIBERI"),
+ * sem nenhum UPDATE retroativo no banco.
+ */
+function upper(value: string | null): string | null {
+  return value ? value.toUpperCase() : value;
+}
 
 export const metadata: Metadata = { title: "Solicitação de pré-faturamento — Faturamento e Envios" };
 
@@ -68,7 +79,7 @@ export default async function PreFaturamentoDetailPage({ params }: { params: Pro
         </p>
       </div>
 
-      <section className="rounded-2xl border border-border bg-surface p-5">
+      <section className="rounded-2xl border border-admin-border bg-white p-5">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-text-muted">Venda</h2>
         <dl className="grid gap-4 sm:grid-cols-2">
           <Field label="Data da venda" value={formatIsoDate(row.sale_date)} />
@@ -77,42 +88,42 @@ export default async function PreFaturamentoDetailPage({ params }: { params: Pro
           <Field label="Pagamento" value={formatPayment(row.payment_method)} />
           <Field label="WhatsApp" value={formatCustomerWhatsapp(row.customer_whatsapp) ?? "Não cadastrado"} />
         </dl>
-        {row.internal_notes && <p className="mt-4 rounded-xl bg-muted p-3 text-sm text-text">{row.internal_notes}</p>}
+        {row.internal_notes && <p className="mt-4 rounded-xl bg-admin-surface-muted p-3 text-sm text-text">{row.internal_notes}</p>}
       </section>
 
-      <section className="rounded-2xl border border-border bg-surface p-5">
-        <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-text-muted">Dados recebidos da cliente</h2>
-        {!received ? (
+      {!received ? (
+        <section className="rounded-2xl border border-admin-border bg-white p-5">
+          <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-text-muted">Dados para emissão da NF-e</h2>
           <p className="text-sm text-text-muted">Ainda não recebidos.</p>
-        ) : (
-          <>
-            <p className="mb-4 text-xs text-text-muted">Recebidos em {formatStoreDateTime(row.submitted_at)}. Dados pessoais: só Admin/Master.</p>
-            <dl className="grid gap-4 sm:grid-cols-2">
-              <Field label="Nome completo" value={row.submitted_name} />
-              <Field label="CPF" value={formatCpfCnpj(row.submitted_cpf)} />
-              <Field label="E-mail" value={row.submitted_email} />
-              <Field label="WhatsApp" value={formatCustomerWhatsapp(row.submitted_whatsapp)} />
-              <Field label="Entrega para" value={row.submitted_delivery_to_customer ? "A própria cliente" : row.submitted_recipient_name} />
-              <Field label="CEP" value={formatPostalCode(row.submitted_postal_code)} />
-              <Field label="Rua" value={row.submitted_address_line} />
-              <Field label="Número" value={row.submitted_address_number} />
-              <Field label="Complemento" value={row.submitted_address_complement} />
-              <Field label="Bairro" value={row.submitted_neighborhood} />
-              <Field label="Cidade / UF" value={row.submitted_city && row.submitted_state ? `${row.submitted_city} / ${row.submitted_state}` : null} />
-            </dl>
-          </>
-        )}
-      </section>
+        </section>
+      ) : (
+        <NfeDataSection
+          fields={{
+            name: upper(row.submitted_name),
+            cpf: formatCpfCnpj(row.submitted_cpf) || row.submitted_cpf,
+            email: row.submitted_email,
+            whatsapp: formatCustomerWhatsapp(row.submitted_whatsapp),
+            postalCode: formatPostalCode(row.submitted_postal_code) || row.submitted_postal_code,
+            addressLine: upper(row.submitted_address_line),
+            addressNumber: row.submitted_address_number,
+            addressComplement: upper(row.submitted_address_complement),
+            neighborhood: upper(row.submitted_neighborhood),
+            city: upper(row.submitted_city),
+            state: upper(row.submitted_state),
+            recipientName: row.submitted_delivery_to_customer ? null : upper(row.submitted_recipient_name),
+          }}
+        />
+      )}
 
       {received && !cancelled && (
-        <section className="rounded-2xl border border-border bg-surface p-5">
+        <section className="rounded-2xl border border-admin-border bg-white p-5">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted">CONFERÊNCIA — XML DA NF-e</h2>
           <p className="mb-4 mt-1 text-xs text-text-muted">Dados conferidos com o XML autorizado da NF-e.</p>
           <ConferenciaPanel intakeId={row.id} attempts={attempts} canUpload={canUploadDocuments(status)} />
         </section>
       )}
 
-      <section className="rounded-2xl border border-border bg-surface p-5">
+      <section className="rounded-2xl border border-admin-border bg-white p-5">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Link para a cliente</h2>
         {cancelled ? (
           <p className="text-sm text-text-muted">Venda cancelada: o link foi invalidado e não pode ser reaberto.</p>
@@ -128,7 +139,7 @@ export default async function PreFaturamentoDetailPage({ params }: { params: Pro
         )}
       </section>
 
-      <section className="rounded-2xl border border-border bg-surface p-5">
+      <section className="rounded-2xl border border-admin-border bg-white p-5">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Cancelamento</h2>
         {cancelled ? (
           <dl className="grid gap-4 sm:grid-cols-2">

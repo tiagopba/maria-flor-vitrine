@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { NFE_XML_1215 } from "../../fulfillment/__tests__/fixtures.ts";
+import {
+  NFE_XML_1215,
+  NFE_XML_1217_FABIANE,
+  NFE_XML_1218_BEATRIZ,
+  NFE_XML_1219_DANIELA,
+  NFE_XML_1220_TATIANE,
+} from "../../fulfillment/__tests__/fixtures.ts";
 import { parseNfeXml } from "../../fulfillment/parse-nfe-xml.ts";
 import { conferirXml } from "../conferir-xml.ts";
 import type { ExpectedData } from "../conferir.ts";
 
-function parsedXml() {
-  const result = parseNfeXml(NFE_XML_1215);
+function parsedXml(xml: string = NFE_XML_1215) {
+  const result = parseNfeXml(xml);
   assert.equal(result.ok, true);
   if (!result.ok) throw new Error("fixture inválida");
   return result.data;
@@ -159,5 +165,122 @@ describe("conferirXml: transportadora", () => {
     const xml = { ...parsedXml(), carrierNameRaw: "TRANSPORTADORA XYZ" };
     const outcome = conferirXml({ expected: MATCHING_EXPECTED, xml });
     assert.equal(outcome.extracted.carrier, null);
+  });
+});
+
+describe("conferirXml: override de frete legado (legacyFreightOverrideActive)", () => {
+  it("sem override (padrão): vNF diferente continua BLOCKED, igual sempre foi", () => {
+    const xml = { ...parsedXml(), invoiceTotal: 334.98 };
+    const outcome = conferirXml({ expected: MATCHING_EXPECTED, xml });
+    assert.equal(outcome.verdict, "BLOCKED");
+    assert.ok(outcome.blocking.some((r) => r.field === "valor"));
+  });
+
+  it("com override ativo: a mesma diferença de valor deixa de bloquear, vira OK com overrideCode — nunca em blocking nem em review", () => {
+    const xml = { ...parsedXml(), invoiceTotal: 334.98 };
+    const outcome = conferirXml({ expected: { ...MATCHING_EXPECTED, legacyFreightOverrideActive: true }, xml });
+    const valorResult = outcome.results.find((r) => r.field === "valor");
+    assert.equal(valorResult?.verdict, "OK");
+    assert.equal(valorResult?.overrideCode, "LEGACY_FREIGHT_NOT_INCLUDED_IN_NFE");
+    assert.match(valorResult?.reason ?? "", /frete legado/i);
+    assert.ok(!outcome.blocking.some((r) => r.field === "valor"));
+    assert.ok(!outcome.review.some((r) => r.field === "valor"));
+    assert.ok(!outcome.reviewFields.includes("valor"));
+  });
+
+  it("com override ativo e nenhuma outra divergência: veredito geral vira GREEN (o override não precisa de revisão humana)", () => {
+    const xml = { ...parsedXml(), invoiceTotal: 334.98 };
+    const outcome = conferirXml({ expected: { ...MATCHING_EXPECTED, legacyFreightOverrideActive: true }, xml });
+    assert.equal(outcome.verdict, "GREEN");
+  });
+
+  it("com override ativo mas OUTRA divergência real (bairro): o override só perdoa valor — veredito continua REVIEW pelo bairro", () => {
+    const xml = { ...parsedXml(), invoiceTotal: 334.98, neighborhood: "Outro Bairro" };
+    const outcome = conferirXml({ expected: { ...MATCHING_EXPECTED, legacyFreightOverrideActive: true }, xml });
+    assert.equal(outcome.verdict, "REVIEW");
+    assert.ok(outcome.review.some((r) => r.field === "bairro"));
+    assert.ok(!outcome.blocking.some((r) => r.field === "valor"));
+  });
+
+  it("com override ativo mas CPF divergente: o override não perdoa nada além de valor — continua BLOCKED", () => {
+    const xml = { ...parsedXml(), invoiceTotal: 334.98 };
+    const outcome = conferirXml({
+      expected: { ...MATCHING_EXPECTED, legacyFreightOverrideActive: true, cpf: "99988877766" },
+      xml,
+    });
+    assert.equal(outcome.verdict, "BLOCKED");
+    assert.ok(outcome.blocking.some((r) => r.field === "cpf"));
+  });
+
+  it("override ativo mas valor BATE: nenhum overrideCode aparece (o override só age quando há diferença de verdade)", () => {
+    const outcome = conferirXml({ expected: { ...MATCHING_EXPECTED, legacyFreightOverrideActive: true }, xml: parsedXml() });
+    const valorResult = outcome.results.find((r) => r.field === "valor");
+    assert.equal(valorResult?.verdict, "OK");
+    assert.equal(valorResult?.overrideCode, undefined);
+  });
+});
+
+describe("conferirXml: os 4 casos reais da rodada de frete legado (fixtures sintéticas, conferência manual confirmada)", () => {
+  it("Fabiane (NF-e 1217, R$529,94 = venda): valor bate, sem override, sem bloqueio de valor", () => {
+    const outcome = conferirXml({
+      expected: { ...MATCHING_EXPECTED, saleTotal: 529.94 },
+      xml: parsedXml(NFE_XML_1217_FABIANE),
+    });
+    assert.ok(!outcome.blocking.some((r) => r.field === "valor"));
+    assert.equal(outcome.results.find((r) => r.field === "valor")?.verdict, "OK");
+  });
+
+  it("Beatriz (NF-e 1218, R$192,98 = venda): valor bate, sem override, sem bloqueio de valor", () => {
+    const outcome = conferirXml({
+      expected: { ...MATCHING_EXPECTED, saleTotal: 192.98 },
+      xml: parsedXml(NFE_XML_1218_BEATRIZ),
+    });
+    assert.ok(!outcome.blocking.some((r) => r.field === "valor"));
+    assert.equal(outcome.results.find((r) => r.field === "valor")?.verdict, "OK");
+  });
+
+  it("Daniela (NF-e 1219, R$169,97 = venda): valor bate, sem override, sem bloqueio de valor", () => {
+    const outcome = conferirXml({
+      expected: { ...MATCHING_EXPECTED, saleTotal: 169.97 },
+      xml: parsedXml(NFE_XML_1219_DANIELA),
+    });
+    assert.ok(!outcome.blocking.some((r) => r.field === "valor"));
+    assert.equal(outcome.results.find((r) => r.field === "valor")?.verdict, "OK");
+  });
+
+  it("Tatiane SEM override (NF-e 1220 R$139,99 × venda R$173,99): BLOCKED por valor, igual à tentativa 1 real", () => {
+    const outcome = conferirXml({
+      expected: { ...MATCHING_EXPECTED, saleTotal: 173.99 },
+      xml: parsedXml(NFE_XML_1220_TATIANE),
+    });
+    assert.equal(outcome.verdict, "BLOCKED");
+    assert.ok(outcome.blocking.some((r) => r.field === "valor"));
+  });
+
+  it("Tatiane COM override: valor não bloqueia mais (vira Frete legado), bairro continua REVIEW se divergir, nenhum outro campo é beneficiado", () => {
+    const outcome = conferirXml({
+      expected: { ...MATCHING_EXPECTED, saleTotal: 173.99, legacyFreightOverrideActive: true, address: { ...MATCHING_EXPECTED.address, neighborhood: "Bairro Diferente Da Cliente" } },
+      xml: parsedXml(NFE_XML_1220_TATIANE),
+    });
+    assert.equal(outcome.verdict, "REVIEW");
+    assert.ok(!outcome.blocking.some((r) => r.field === "valor"));
+    assert.ok(outcome.review.some((r) => r.field === "bairro"));
+    const valorResult = outcome.results.find((r) => r.field === "valor");
+    assert.equal(valorResult?.overrideCode, "LEGACY_FREIGHT_NOT_INCLUDED_IN_NFE");
+    // CPF, rua, número, CEP, cidade, UF, complemento e destinatário continuam
+    // batendo (mesma identidade sintética) — o override não "vazou" pra eles.
+    for (const field of ["cpf", "destinatario", "rua", "numero", "cep", "cidade", "uf", "complemento"]) {
+      const r = outcome.results.find((x) => x.field === field);
+      assert.equal(r?.verdict, "OK", `${field} deveria continuar OK`);
+      assert.equal(r?.overrideCode, undefined, `${field} nunca deveria ganhar overrideCode`);
+    }
+  });
+
+  it("Tatiane COM override e SEM nenhuma outra divergência: veredito vira GREEN", () => {
+    const outcome = conferirXml({
+      expected: { ...MATCHING_EXPECTED, saleTotal: 173.99, legacyFreightOverrideActive: true },
+      xml: parsedXml(NFE_XML_1220_TATIANE),
+    });
+    assert.equal(outcome.verdict, "GREEN");
   });
 });

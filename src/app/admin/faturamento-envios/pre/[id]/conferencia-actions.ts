@@ -7,6 +7,7 @@ import { FULFILLMENT_BUCKET, isUuid } from "@/lib/db/fulfillment";
 import {
   approveIntakeRpc,
   getIntakeRow,
+  hasActiveLegacyFreightOverride,
   insertAttempt,
   insertIntakeAudit,
   listAttempts,
@@ -59,6 +60,11 @@ export async function startConferenciaAction(intakeId: string, formData: FormDat
   const parsed = parseNfeXml(xmlFile.text);
   if (!parsed.ok) return { ok: false, error: parsed.error };
 
+  // Só true quando este intake específico tem um override de frete legado
+  // ativo e auditado (fulfillment_intake_legacy_overrides) — nunca um
+  // padrão por data ou por qualquer outra regra implícita.
+  const legacyFreightOverrideActive = await hasActiveLegacyFreightOverride(intakeId);
+
   const outcome: ConfereXmlOutcome = conferirXml({
     expected: {
       customerName: row.submitted_name,
@@ -74,6 +80,7 @@ export async function startConferenciaAction(intakeId: string, formData: FormDat
       },
       recipientName: row.submitted_delivery_to_customer ? row.submitted_name : (row.submitted_recipient_name ?? ""),
       saleTotal: Number(row.sale_total),
+      legacyFreightOverrideActive,
     },
     xml: parsed.data,
   });

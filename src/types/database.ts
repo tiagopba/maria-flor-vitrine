@@ -562,12 +562,31 @@ export interface Database {
             | "INTAKE_REVIEW_COMPLETED"
             | "INTAKE_APPROVED"
             | "FULFILLMENT_CREATED"
-            | "INTAKE_CANCELLED";
+            | "INTAKE_CANCELLED"
+            // Já existe na constraint real de Production (migration de outra
+            // branch, ainda não mergeada neste repositório, mas já aplicada
+            // no banco) — corrigido aqui só por precisão de tipo, nenhuma
+            // tela/RPC desta feature foi tocada.
+            | "INTAKE_EDITED"
+            | "LEGACY_FREIGHT_OVERRIDE_APPLIED";
           actor_id: string | null;
           details: Record<string, unknown>;
           created_at: string;
         },
         "intake_id" | "action"
+      >;
+      fulfillment_intake_legacy_overrides: Table<
+        {
+          id: string;
+          intake_id: string;
+          override_type: "LEGACY_FREIGHT_VALUE_OVERRIDE";
+          reason_code: "LEGACY_FREIGHT_NOT_INCLUDED_IN_NFE";
+          actor_id: string;
+          created_at: string;
+          revoked_at: string | null;
+          revoked_by: string | null;
+        },
+        "intake_id" | "override_type" | "reason_code" | "actor_id"
       >;
       fulfillment_verification_attempts: Table<
         {
@@ -612,6 +631,10 @@ export interface Database {
       cancel_fulfillment_intake: {
         Args: { p_intake: string; p_reason: string; p_note: string | null };
         Returns: undefined;
+      };
+      apply_legacy_freight_override: {
+        Args: { p_intake: string; p_actor: string };
+        Returns: string;
       };
       try_claim_email_otp_send: {
         Args: {
