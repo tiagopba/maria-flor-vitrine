@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import type { FulfillmentListItem } from "@/lib/db/fulfillment";
-import { DELIVERY_STATUS_LABELS, describeSellerOrigin, isPendingTracking, type DeliveryStatus } from "@/lib/fulfillment/delivery";
+import { DELIVERY_STATUS_LABELS, describeSellerOrigin, isPendingTracking, statusesForSource, type DeliveryStatus } from "@/lib/fulfillment/delivery";
+import { displayGroupFor, todayIsoInStoreTimeZone } from "@/lib/fulfillment/delivery-priority";
 import { formatCarrier, formatIsoDate } from "@/lib/fulfillment/format";
 import { maskCpfCnpj } from "@/lib/fulfillment/text";
+import { QuickEditModal } from "./QuickEditModal";
+import type { QuickUpdateDeliveryResult } from "./quick-edit-actions";
 
 const STATUS_BADGE: Record<DeliveryStatus, { tone: "neutral" | "primary" | "warning" | "success"; className?: string }> = {
   PENDING: { tone: "neutral" },
@@ -25,6 +28,16 @@ export function DeliveryStatusBadge({ status }: { status: DeliveryStatus }) {
   );
 }
 
+/**
+ * EM_ATRASO é calculado (ver delivery-priority.ts), nunca um delivery_status
+ * — por isso é uma badge própria, mostrada JUNTO da badge de status real
+ * (IN_TRANSIT), não no lugar dela. Vermelho mais forte que DELIVERY_ISSUE
+ * (bg-red-50) pra ficar claramente mais destacada, como pedido.
+ */
+function OverdueBadge() {
+  return <Badge tone="danger" className="bg-red-100 font-semibold text-red-800">⏰ EM ATRASO</Badge>;
+}
+
 function FollowupBadge({ openCount }: { openCount: number | undefined }) {
   // undefined = tabela de follow-ups ainda não existe neste banco (migration não aplicada).
   if (openCount === undefined) return <span className="text-xs text-text-muted">—</span>;
@@ -35,13 +48,17 @@ export function RecordsTable({
   records,
   sellerNames,
   followupOpenCounts,
+  quickUpdateAction,
 }: {
   records: FulfillmentListItem[];
   /** id da vendedora → nome (só as vendedoras cadastradas em public.sellers). */
   sellerNames: Record<string, string>;
   /** id do registro → quantos follow-ups ainda estão OPEN (0 = os 3 enviados). `null` = migration ainda não aplicada. */
   followupOpenCounts: Record<string, number> | null;
+  /** Edição rápida por linha — já com `returnTo` (a própria listagem) curried. */
+  quickUpdateAction: (id: string, formData: FormData) => Promise<QuickUpdateDeliveryResult>;
 }) {
+  const todayIso = todayIsoInStoreTimeZone();
   return (
     <div className="overflow-x-auto rounded-2xl border border-border bg-surface">
       <table className="w-full min-w-[64rem] text-left text-sm">
@@ -62,6 +79,7 @@ export function RecordsTable({
           {records.map((record) => {
             const sellerName = record.seller_id ? (sellerNames[record.seller_id] ?? null) : null;
             const sellerOrigin = describeSellerOrigin(sellerName, record.sales_origin);
+            const isOverdue = displayGroupFor(record, todayIso) === "EM_ATRASO";
             return (
               <tr key={record.id} className="border-b border-border/60 align-top last:border-0">
                 <td className="whitespace-nowrap px-4 py-3 text-text">{formatIsoDate(record.sale_date)}</td>
@@ -89,7 +107,10 @@ export function RecordsTable({
                   {formatIsoDate(record.expected_delivery_date)}
                 </td>
                 <td className="px-4 py-3">
-                  <DeliveryStatusBadge status={record.delivery_status} />
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <DeliveryStatusBadge status={record.delivery_status} />
+                    {isOverdue && <OverdueBadge />}
+                  </div>
                   {record.delivery_status === "DELIVERED" && record.delivered_at && (
                     <div className="mt-1 whitespace-nowrap text-xs text-text-muted">
                       Entregue em {formatIsoDate(record.delivered_at)}
@@ -107,12 +128,19 @@ export function RecordsTable({
                   <FollowupBadge openCount={followupOpenCounts === null ? undefined : followupOpenCounts[record.id] ?? 0} />
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <Link
-                    href={`/admin/faturamento-envios/${record.id}`}
-                    className="whitespace-nowrap rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-text hover:bg-muted"
-                  >
-                    VER DETALHES
-                  </Link>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <QuickEditModal
+                      record={record}
+                      statuses={statusesForSource(record.record_source)}
+                      action={quickUpdateAction}
+                    />
+                    <Link
+                      href={`/admin/faturamento-envios/${record.id}`}
+                      className="whitespace-nowrap rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-text hover:bg-muted"
+                    >
+                      VER DETALHES
+                    </Link>
+                  </div>
                 </td>
               </tr>
             );

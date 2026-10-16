@@ -151,10 +151,10 @@ describe("histórico sem PDFs", () => {
     assert.match(table, /UNKNOWN:/);
   });
 
-  it("listagem ordena por sale_date DESC, depois created_at DESC, com id para desempate", () => {
+  it("listagem busca por id (paginação determinística) e ordena por urgência via sortRecordsForListing (ver delivery-priority.test.ts)", () => {
     const source = read("src/lib/db/fulfillment.ts");
-    const order = source.match(/\.order\("sale_date"[\s\S]*?\.range\(from, from \+ FULFILLMENT_PAGE_SIZE\)/)?.[0] ?? "";
-    assert.match(order, /\.order\("sale_date", \{ ascending: false \}\)\s*\.order\("created_at", \{ ascending: false \}\)\s*\.order\("id", \{ ascending: true \}\)/);
+    assert.match(source, /\.order\("id"\)\.range\(from, to\)/);
+    assert.match(source, /sortRecordsForListing\(/);
   });
 });
 

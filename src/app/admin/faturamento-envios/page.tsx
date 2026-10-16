@@ -12,6 +12,8 @@ import {
 } from "@/lib/fulfillment/delivery";
 import { BR_STATES, FILTER_NONE, filtersToSearchParams, parseListFilters } from "@/lib/fulfillment/filters";
 import { FulfillmentTabs } from "./FulfillmentTabs";
+import { quickUpdateDeliveryAction } from "./quick-edit-actions";
+import { QuickFilters } from "./QuickFilters";
 import { RecordsTable } from "./RecordsTable";
 
 export const metadata: Metadata = { title: "Faturamento e Envios" };
@@ -45,6 +47,7 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
       filters.state ||
       filters.followup
   );
+  const hasQuickFilters = Boolean(filters.situacao || filters.mostrarEntregues);
   const sellerNames = Object.fromEntries(options.sellers.map((s) => [s.id, s.name]));
   const followupCounts = result.status === "ok" ? await getFollowupOpenCounts(result.records.map((r) => r.id)) : null;
   // Mantém no select uma transportadora/origem filtrada mesmo que nenhum registro a use mais.
@@ -75,6 +78,8 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
           Cadastro manual
         </Link>
       </div>
+
+      <QuickFilters filters={filters} />
 
       <form method="get" autoComplete="off" className="mb-6 flex flex-col gap-3">
         <input
@@ -159,7 +164,7 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
           <Button type="submit" size="sm" className="h-10">
             Buscar
           </Button>
-          {hasFilters && (
+          {(hasFilters || hasQuickFilters) && (
             <Link
               href="/admin/faturamento-envios"
               className="flex h-10 items-center justify-center rounded-full px-4 text-sm text-text-muted hover:bg-muted"
@@ -181,7 +186,12 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
         </div>
       ) : (
         <>
-          <RecordsTable records={result.records} sellerNames={sellerNames} followupOpenCounts={followupCounts} />
+          <RecordsTable
+            records={result.records}
+            sellerNames={sellerNames}
+            followupOpenCounts={followupCounts}
+            quickUpdateAction={quickUpdateDeliveryAction.bind(null, pageHref(filters.page))}
+          />
 
           {(filters.page > 1 || result.hasMore) && (
             <div className="mt-4 flex items-center justify-between text-sm">
