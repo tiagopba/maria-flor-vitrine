@@ -1304,3 +1304,73 @@ clientes foi commitado.**
   código (`src/lib/`), nenhuma tabela/constraint/RPC nova.
 - Merge em `main` feito depois de `tsc`/`eslint`/testes/`next build`
   verdes e do teste real da Fabiane confirmado no Preview.
+
+---
+
+## 22. Faturamento e Envios — agilidade operacional (EM_ATRASO, filtros rápidos, edição rápida) (🟢 PRODUCTION)
+
+Pedido: tornar a listagem `/admin/faturamento-envios` operacional — esconder
+entregues por padrão, destacar atraso real, reordenar por urgência e
+permitir atualizar a situação sem abrir o detalhe de cada registro.
+
+- **`EM_ATRASO` é só um estado derivado de apresentação — nunca um valor
+  novo de `delivery_status`, nunca persistido.** Regra exata (fechada,
+  decidida pelo usuário, não usa `requiresTrackingInfo()`):
+  `delivery_status === "IN_TRANSIT" && tracking_code não vazio &&
+  expected_delivery_date existe && expected_delivery_date < hoje`. `PENDING`
+  com previsão vencida continua "Aguardando envio" (ainda nem saiu);
+  `RESENT` e `DELIVERY_ISSUE` têm grupo próprio e nunca entram aqui.
+  Visualmente mostrado como **"Entrega atrasada"** (badge vermelha,
+  distinta de `DELIVERY_ISSUE`/"Problema na entrega" — são situações
+  diferentes, uma é ocorrência real, outra é só previsão vencida em
+  trânsito). Toda a lógica está em
+  [delivery-priority.ts](src/lib/fulfillment/delivery-priority.ts)
+  (`isOverdue`, `displayGroupFor`, `compareForListing`,
+  `sortRecordsForListing`), coberta por matriz de testes em
+  [delivery-priority.test.ts](src/lib/fulfillment/__tests__/delivery-priority.test.ts).
+- **Ordenação padrão em 8 grupos**: `DELIVERY_ISSUE` → `EM_ATRASO` →
+  `RESENT` → `IN_TRANSIT` → `PENDING` → `DELIVERED` (oculto por padrão) →
+  `REFUNDED` → `UNKNOWN`. Nos dois primeiros grupos, previsão mais antiga
+  primeiro (mais atrasado primeiro); nos demais ativos, previsão mais
+  próxima primeiro; sem previsão sempre por último dentro do grupo;
+  desempate final por `id`. Com só 11 registros reais em Production (bem
+  abaixo do teto de `fetchAllPages`, já usado em outros filtros da mesma
+  tela), a busca, o agrupamento e a ordenação acontecem em memória — sem
+  nenhuma migration/view nova.
+- **Chips de situação** (Todas/Em atraso/Em trânsito/Aguardando
+  envio/Entregues) + **toggle "Mostrar entregues"**, com precedência
+  explícita e testada
+  ([shouldIncludeGroup](src/lib/fulfillment/filters.ts),
+  [testes](src/lib/fulfillment/__tests__/delivery-filters.test.ts)): chip
+  Entregues e `status=DELIVERED` (filtro avançado) sempre mostram
+  entregues, **nunca** uma lista vazia por causa do toggle; o toggle só
+  vale pra visão padrão/Todas; `situacao` (chip) e `status` (avançado) são
+  mutuamente exclusivos.
+- **Edição rápida por linha** (`QuickEditModal`, modal aberto na própria
+  listagem) — **mesma camada de negócio do detalhe**, nunca duplicada:
+  [applyDeliveryUpdate](src/app/admin/faturamento-envios/delivery-update-shared.ts)
+  concentra validação (`deliveryUpdateSchema`), `planDeliveryUpdate`,
+  gravação e auditoria; tanto a edição rápida
+  (`quick-edit-actions.ts`) quanto `updateDeliveryAction`
+  ([id]/actions.ts) só chamam esse helper e decidem o redirect. **O antigo
+  painel "ATUALIZAR SITUAÇÃO" do detalhe foi removido** (interface
+  duplicada) — a atualização operacional agora é só pela listagem; nenhuma
+  informação do detalhe foi tirada, continua tudo visível em "Venda e
+  entrega" (status/previsão/observações, só leitura).
+- **Transportadora + rastreio preenchidos num registro `PENDING` sobem
+  automaticamente pra `IN_TRANSIT`** na mesma operação — no fluxo de
+  rastreamento pendente (`saveTrackingAction`/`saveTrackingInfo`) e na
+  edição rápida da listagem. Nunca sobrescreve outro status
+  (`IN_TRANSIT`/`DELIVERY_ISSUE`/`RESENT`/`DELIVERED`/`REFUNDED` ficam como
+  estão). `shouldAutoSetInTransit`/`gainedTrackingInfo` em
+  [delivery-update.ts](src/lib/fulfillment/delivery-update.ts), matriz de
+  testes incluindo a confirmação de que isso nunca duplica follow-up (o
+  trigger que cria os 3 follow-ups só dispara em `INSERT`, nunca em
+  `UPDATE` de `delivery_status` — `fulfillment_create_followups`,
+  `20261007100000_fulfillment_followups.sql`).
+- **Compatibilidade**: `postSaleAvailability`/follow-ups continuam lendo
+  só `delivery_status` real, nunca `EM_ATRASO`. Nenhuma migration criada
+  ou aplicada em nenhuma rodada desta frente.
+- Validado com teste real no Preview (smoke visual aprovado pelo usuário)
+  antes do merge; merge em `main` feito depois de `tsc`/`eslint`/663
+  testes/`next build` verdes.
