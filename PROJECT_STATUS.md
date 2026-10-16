@@ -946,3 +946,209 @@ cliente era o único link (sem ação "Ver detalhes" separada).
 - `lib/intake/groups.ts`, `lib/intake/status.ts` e `lib/db/intakes.ts`
   continuam a única fonte de verdade da lógica — qualquer mudança de
   regra de negócio do Pré-faturamento é uma tarefa separada desta.
+
+---
+
+## 21. Confere Geral — redesign do card de XML + override de frete legado + CAIXA ALTA (HANDOFF — NÃO APLICADO)
+
+> **Handoff de contexto (91%), antes de qualquer aplicação em Production.**
+> Tudo abaixo está implementado, testado e commitado **só nesta branch**.
+> Nenhuma migration foi aplicada, nenhum override foi executado, nenhum
+> merge foi feito. Leia esta seção inteira antes de continuar.
+
+**Branch:** `feature/confere-geral-redesign-legado-frete` (a partir de
+`main`, `7d9d3ae`). **Commit atual:** `6ac2bff` (implementação) +
+este commit de handoff. **Preview:** READY no commit `6ac2bff`
+(`maria-flor-vitrine-j5juy8tu7-tiagopba.vercel.app`).
+
+### 21.1 Redesign visual do card de XML (`ConferenciaPanel.tsx`)
+- Substituiu o `<input type="file">` cru por dropzone clicável: ícone
+  `FileText` no título ("XML DA NF-e"), ícone `UploadCloud` dentro da
+  dropzone, texto "Clique para selecionar o XML" / "Arquivo .xml · máximo
+  2 MB". Arquivo escolhido vira um chip com nome do arquivo, "✓ Pronto para
+  conferência" e um `X` pra remover/trocar.
+- Botão principal: "INICIAR CONFERÊNCIA" (primeira tentativa) /
+  "REFAZER CONFERÊNCIA" (já existe tentativa anterior) — nunca mais
+  "REVISAR E RECOMEÇAR CONFERÊNCIA".
+- **`CONFIRMAR CONFERÊNCIA` deixou de ser renderizado quando a tentativa
+  mais recente é `BLOCKED`** (antes só ficava `disabled` com opacidade
+  50%, visualmente ambíguo no rosa do Admin — motivou uma auditoria de
+  segurança explícita, ver 21.2). Continua renderizado e `disabled` nos
+  outros casos sem `canConfirm` (ex.: REVIEW com aviso pendente).
+- Cards da página (`[id]/page.tsx`) passaram de `border-border bg-surface`
+  (token antigo) para `border-admin-border bg-white` (padrão novo do
+  Admin), consistente com o redesign do Pré-faturamento (seção 20).
+
+### 21.2 Auditoria de segurança do botão CONFIRMAR CONFERÊNCIA em BLOCKED — resultado: NÃO É BUG
+Antes de mexer no visual, confirmamos que não existe brecha real, em 3
+camadas independentes:
+1. Cliente: `canConfirm` é `false` pra `BLOCKED` — `disabled` de verdade
+   (testado ao vivo via DevTools: `disabled: true`, `opacity: 0.5`,
+   `pointer-events: none`).
+2. Server Action (`approveConferenciaAction` → `canApprove()` em
+   `lib/intake/confere.ts`): recusa `BLOCKED` explicitamente, nunca chega
+   a escrever nada.
+3. Banco: a própria RPC `approve_fulfillment_intake` (`SECURITY DEFINER`)
+   verifica `if v_att.verdict = 'BLOCKED' then raise exception`.
+O botão agora nem aparece em BLOCKED — mudança só de clareza visual, a
+proteção de verdade já existia nas 3 camadas e continua intacta.
+
+### 21.3 Card "DADOS PARA EMISSÃO DA NF-e" (`NfeDataSection.tsx`, novo)
+- Substitui a antiga seção somente-leitura "Dados recebidos da cliente".
+- Cada campo (Nome, CPF, E-mail, WhatsApp, CEP, Rua, Número, Complemento,
+  Bairro, Cidade, UF, Destinatário se houver) numa linha própria, com
+  ícone de copiar (`Copy`) à direita.
+- Clique copia **só aquele valor** (`navigator.clipboard.writeText`, sem
+  chamada ao servidor — nunca gera audit log, nunca faz UPDATE); o ícone
+  vira `Check` verde e aparece "Copiado" discreto por 1,5s, depois volta
+  ao normal. **Não existe "Copiar todos".**
+- Visual: `rounded-2xl`, `border-admin-border`, fundo branco, título com
+  ícone (`IdCard`) no mesmo padrão do `DashboardCard`, linhas com divisor
+  sutil (`border-admin-border/60`), botão de copiar `h-10 w-10` alinhado à
+  direita — testado em desktop/375px/430px, nada cortado, ícone sempre
+  acessível no mobile.
+
+### 21.4 CAIXA ALTA — recuperada de uma rodada anterior não mergeada, não duplicada
+- **Achado antes de implementar:** essa normalização e esse card já
+  tinham sido desenhados e implementados numa rodada anterior, na branch
+  `fix/confere-geral-xml-valor-endereco` (ainda não mergeada neste
+  repositório). Em vez de reimplementar do zero, portamos só as partes
+  pedidas (CAIXA ALTA + `NfeDataSection`) — **não** trouxemos o resto
+  daquela branch (edição administrativa da intake, fix de rua/valor,
+  etc.), que segue como pendência separada.
+- `upperText` (novo helper em `lib/intake/schema.ts`, só pro formulário
+  público) aplica `.toUpperCase()` preservando acento (`"Goiânia" →
+  "GOIÂNIA"`) em: nome, rua, complemento, bairro, cidade, destinatário.
+- **E-mail nunca vira maiúsculo** (confirmado por teste). CPF/CEP/WhatsApp
+  continuam com a normalização própria deles (só dígitos), inalterada.
+- **Nenhuma atualização retroativa**: a normalização no `schema.ts` só
+  vale pra dados **novos**, enviados pelo formulário público a partir de
+  agora — nenhum UPDATE em massa foi cogitado nem feito nos dados já
+  gravados.
+- Pra cobrir dados **já gravados** antes dessa regra existir (ex.: a
+  intake real da Tatiane, cujo nome/rua estavam em `Tatiane Chabariberi`/
+  `Rua Dom Thomas De Noronha`, caixa mista), `[id]/page.tsx` aplica
+  `.toUpperCase()` só na **exibição** do card `NfeDataSection` (função
+  `upper()`, local, sem gravar nada) — confirmado ao vivo: a tela mostra
+  "TATIANE CHABARIBERI" / "RUA DOM THOMAS DE NORONHA" / "JARDIM RECANTO"
+  sem nenhum UPDATE no banco (o registro dela no banco continua com o
+  texto original em caixa mista).
+
+### 21.5 Override `LEGACY_FREIGHT_VALUE_OVERRIDE` — exceção pontual e auditável
+**Problema:** a regra operacional de frete mudou; vendas antigas podem
+divergir em `valor da NF-e × valor da venda` só por causa de como o frete
+era tratado antes. Decisão: **nunca** afrouxar a regra geral — só uma
+exceção explícita, auditável, por intake, nunca por data.
+
+- **Candidata real única:** Tatiane, STI3 `23771`, intake
+  `e3eefc98-46d0-4e6a-b261-d48f47dac11f`. NF-e R$139,99 × venda R$173,99 =
+  diferença de R$34,00, compatível com frete legado não incluído na NF-e.
+  `blocking_fields: ["valor"]`, `review_fields: ["bairro"]` (achado real,
+  confirmado por leitura em Production nesta rodada).
+- **Fabiane (STI3 23716), Beatriz (STI3 23739) e Daniela (STI3 23751) NÃO
+  recebem override** — os 3 XMLs reais já foram conferidos manualmente e
+  batem exatamente com a venda (529,94=529,94 · 192,98=192,98 ·
+  169,97=169,97). O script de regularização (21.7) recusa qualquer id que
+  não seja o da Tatiane.
+- **A tentativa 1 (histórica) da Tatiane, já registrada como `BLOCKED`,
+  nunca é alterada nem reescrita** — o override só vale a partir da
+  **próxima** conferência dela (precisa reenviar o XML, "REFAZER
+  CONFERÊNCIA"). O histórico de tentativas antigas é imutável neste
+  projeto desde sempre; isso não muda.
+- **O que o override perdoa, e só isso:** quando ativo pra um intake e a
+  comparação de valor divergir, o resultado do campo `"valor"` deixa de
+  ser `BLOCKED` e vira `verdict: "OK"` com `overrideCode:
+  "LEGACY_FREIGHT_NOT_INCLUDED_IN_NFE"` e o texto "Frete legado —
+  Diferença de valor aceita para esta venda anterior à nova regra de
+  emissão." Verdict `"OK"` quer dizer: **não entra em `blocking_fields`
+  nem em `review_fields`, não exige checkbox, não impede aprovação** —
+  mas também nunca aprova sozinho (a admin ainda confirma manualmente).
+  **Bairro e qualquer outra divergência real continuam exatamente iguais
+  a hoje** (REVIEW/BLOCKED conforme a regra de sempre) — testado
+  explicitamente: com override ativo e bairro divergente, veredito geral
+  = REVIEW (nunca GREEN só por causa do override); CPF divergente com
+  override ativo continua BLOCKED.
+
+### 21.6 Migration e RPC (NÃO aplicadas)
+`supabase/migrations/20261018120000_fulfillment_intake_legacy_freight_override.sql`:
+- Tabela `fulfillment_intake_legacy_overrides` (mesmo padrão de
+  `fulfillment_intake_edit_history`: `intake_id`, `override_type` fixo
+  `'LEGACY_FREIGHT_VALUE_OVERRIDE'`, `reason_code` fixo
+  `'LEGACY_FREIGHT_NOT_INCLUDED_IN_NFE'`, `actor_id uuid not null
+  references profiles(id)`, `created_at`, `revoked_at`, `revoked_by`).
+  Índice único parcial (`intake_id, override_type` onde `revoked_at is
+  null`) — duplicidade de override ativo é impossível no banco, não só na
+  aplicação. RLS: só `is_admin()` lê.
+- **A constraint de `fulfillment_intake_audit_logs.action` foi
+  reconstruída a partir dos 12 valores REAIS confirmados por leitura em
+  Production** (`INTAKE_CREATED`, `INTAKE_LINK_OPENED`,
+  `INTAKE_DATA_RECEIVED`, `INTAKE_LINK_REOPENED`, `INTAKE_CHECK_STARTED`,
+  `INTAKE_BLOCKED`, `INTAKE_CHECK_RESTARTED`, `INTAKE_REVIEW_COMPLETED`,
+  `INTAKE_APPROVED`, `FULFILLMENT_CREATED`, `INTAKE_CANCELLED`,
+  `INTAKE_EDITED`) **+ o 13º valor novo** (`LEGACY_FREIGHT_OVERRIDE_APPLIED`).
+  `INTAKE_EDITED` já está em Production (migration de outra branch não
+  mergeada, mas já aplicada no banco real) e **não** estava no
+  `database.ts` desta branch (tipo desatualizado, corrigido só por
+  precisão, sem mexer em nenhuma tela/RPC daquela feature). **Importante
+  pra quem for aplicar:** nunca recriar essa constraint a partir dos
+  tipos TypeScript antigos — sempre reconferir o valor real no banco
+  primeiro (`pg_get_constraintdef`), senão um `drop/add constraint` mais
+  descuidado apagaria `INTAKE_EDITED` silenciosamente.
+- RPC `apply_legacy_freight_override(p_intake uuid, p_actor uuid)`,
+  `SECURITY DEFINER`, uma transação (override + audit log, os dois ou
+  nenhum): com sessão (`auth.uid()` presente) exige `is_admin()` e usa
+  `auth.uid()` como ator (ignora `p_actor`); sem sessão (service role, o
+  script de 21.7) exige que `p_actor` seja um perfil `admin`/`master` de
+  verdade. Recusa se o intake já está `APPROVED`/`CANCELLED` ou já tem
+  override ativo. Audit log: `action = 'LEGACY_FREIGHT_OVERRIDE_APPLIED'`,
+  `details = {override_type, reason_code}` — sem PII.
+- **Confirmado por leitura agora: nem a tabela nem a função existem em
+  Production.** Migration escrita, revisada, testada em Postgres isolado
+  (pglite, 18/18 checks incluindo os dois caminhos de autorização e os 2
+  casos de recusa) — **não aplicada**.
+
+### 21.7 Script de regularização (dry-run por padrão, nunca `--apply` nesta rodada)
+`scripts/apply-legacy-freight-override.mts` — mesmo padrão do importador
+histórico (service role, dry-run padrão, `--apply --confirm <id> --actor
+<uuid>` só com aprovação explícita). **Restrito só ao intake da Tatiane**
+(`e3eefc98-46d0-4e6a-b261-d48f47dac11f`) — qualquer outro `--intake`
+é recusado antes de consultar o banco. Rodado agora contra Production
+(somente leitura): confirma status `BLOCKED`, divergência de R$34,00,
+elegível. **Nada foi gravado.**
+
+### 21.8 Checks e validação
+`tsc --noEmit`: limpo. `eslint src scripts`: limpo. `npm test`:
+**566/566** (17 testes novos: override liga/desliga, nunca em
+blocking/review, GREEN quando só valor divergia, REVIEW quando bairro
+também diverge, BLOCKED preservado se CPF divergir, os 4 casos reais via
+fixtures sintéticas, CAIXA ALTA com acento, e-mail nunca maiúsculo).
+`next build`: sucesso. Validação visual concluída em desktop, 375px e
+430px no Preview local, com dados reais (sem criar/editar/remover nenhuma
+venda real).
+
+### 21.9 Fixtures sintéticas dos 4 XMLs — sem dado pessoal real
+`src/lib/fulfillment/__tests__/fixtures.ts` ganhou 4 XMLs sintéticos
+(`NFE_XML_1217_FABIANE`...`1220_TATIANE`) com os mesmos valores dos casos
+reais (529,94 / 192,98 / 169,97 / 139,99), mas reaproveitando a mesma
+cliente fictícia "MARIA DA SILVA EXEMPLO" (CPF/endereço inventados) já
+usada no resto do arquivo. **Nenhum XML real, CPF ou endereço real das 4
+clientes foi commitado.**
+
+### 21.10 Estado real do banco (confirmado por leitura, fim desta rodada)
+- `fulfillment_intake_legacy_overrides`: não existe.
+- `apply_legacy_freight_override`: não existe.
+- Intake da Tatiane (`e3eefc98-...`): `status = BLOCKED`, igual a antes
+  desta rodada inteira — nenhuma escrita.
+
+### Regra para a próxima sessão
+1. Revisar a migration e a RPC de novo (seção 21.6) antes de aplicar —
+   especialmente a lista dos 12+1 valores da constraint do audit log.
+2. Só aplicar a migration com aprovação explícita.
+3. Só depois disso, com aprovação explícita separada, decidir se e quando
+   rodar `--apply` no script (seção 21.7) pra Tatiane.
+4. Fabiane/Beatriz/Daniela não entram nesta exceção — se aparecer
+   divergência de valor nelas no futuro, é um caso novo, não um
+   candidato automático a override.
+5. Pendência separada (fora desta branch): o resto da branch
+   `fix/confere-geral-xml-valor-endereco` (edição administrativa da
+   intake, fix de rua/valor da Arielle) continua sem merge.
