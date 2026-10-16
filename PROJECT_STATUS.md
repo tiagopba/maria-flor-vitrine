@@ -949,12 +949,15 @@ cliente era o único link (sem ação "Ver detalhes" separada).
 
 ---
 
-## 21. Confere Geral — redesign do card de XML + override de frete legado + CAIXA ALTA (HANDOFF — NÃO APLICADO)
+## 21. Confere Geral — redesign do card de XML + override de frete legado + CAIXA ALTA (🟢 PRODUCTION)
 
-> **Handoff de contexto (91%), antes de qualquer aplicação em Production.**
-> Tudo abaixo está implementado, testado e commitado **só nesta branch**.
-> Nenhuma migration foi aplicada, nenhum override foi executado, nenhum
-> merge foi feito. Leia esta seção inteira antes de continuar.
+> **Atualizado e já em `main`/Production — ver 21.11 para o estado final.**
+> As subseções 21.1 a 21.10 abaixo são o registro histórico de quando isto
+> ainda era só uma branch (migration não aplicada, nenhum override,
+> `BLOCKED` sem exceção). Ficaram como estavam, sem reescrever — algumas
+> frases nelas ("não aplicada", "nem a tabela nem a função existem em
+> Production") **já não são verdade**; é exatamente por isso que 21.11
+> existe. Para o estado real atual, vá direto a 21.11.
 
 **Branch:** `feature/confere-geral-redesign-legado-frete` (a partir de
 `main`, `7d9d3ae`). **Commit atual:** `6ac2bff` (implementação) +
@@ -1140,7 +1143,7 @@ clientes foi commitado.**
 - Intake da Tatiane (`e3eefc98-...`): `status = BLOCKED`, igual a antes
   desta rodada inteira — nenhuma escrita.
 
-### Regra para a próxima sessão
+### Regra para a próxima sessão (histórico — já executado, ver 21.11)
 1. Revisar a migration e a RPC de novo (seção 21.6) antes de aplicar —
    especialmente a lista dos 12+1 valores da constraint do audit log.
 2. Só aplicar a migration com aprovação explícita.
@@ -1152,3 +1155,75 @@ clientes foi commitado.**
 5. Pendência separada (fora desta branch): o resto da branch
    `fix/confere-geral-xml-valor-endereco` (edição administrativa da
    intake, fix de rua/valor da Arielle) continua sem merge.
+
+### 21.11 Estado final — migration aplicada, override real da Tatiane, bug do `overrideCode` corrigido, merge em `main`
+
+- **Migration `20261018120000_fulfillment_intake_legacy_freight_override.sql`
+  JÁ ESTÁ APLICADA EM PRODUCTION** (via `supabase db query --linked --file`,
+  nunca `db push`/`migration repair`, e nada em
+  `supabase_migrations.schema_migrations` foi tocado). Tabela
+  `fulfillment_intake_legacy_overrides`, índice único parcial, RLS, RPC
+  `apply_legacy_freight_override` e a 13ª ação de audit
+  (`LEGACY_FREIGHT_OVERRIDE_APPLIED`) confirmadas por leitura direta do
+  catálogo do Postgres (não só por inferência).
+- **Existe exatamente 1 override real em todo o sistema**, da Tatiane
+  (intake `e3eefc98-46d0-4e6a-b261-d48f47dac11f`, STI3 `23771`): override
+  `40365343-91ea-418e-9079-3f28e3af01db`, `override_type =
+  LEGACY_FREIGHT_VALUE_OVERRIDE`, `reason_code =
+  LEGACY_FREIGHT_NOT_INCLUDED_IN_NFE`, ator = perfil `master`. Fabiane
+  (23716), Beatriz (23739) e Daniela (23751) continuam sem override, como
+  decidido na seção 21.5.
+- **A Tatiane já foi `APPROVED`** (ação explícita do Admin — ver auditoria
+  abaixo, não houve nenhum caminho automático) e tem o fulfillment
+  **`f1c034be-4825-4891-a359-39f119eda50e`** (NF-e 1220, origem
+  `xml_file_path`, `delivery_status: PENDING`, os 3 follow-ups padrão
+  criados). **Este registro é definitivo — não reabrir, não editar, não
+  apagar.**
+- **A tentativa #2 histórica da Tatiane foi persistida ANTES do fix do
+  `overrideCode`** (ver próximo item) — o `comparison.results` gravado
+  para ela tem o campo `valor` com `verdict: "OK"` e a `reason` de "Frete
+  legado", mas **sem a chave `overrideCode`** (o bug só afetou a
+  persistência, nunca o veredito/aprovação, que já estavam corretos).
+  Como toda tentativa histórica neste projeto, **ela nunca é reescrita**
+  — mesmo sabendo do bug, a tentativa #2 fica exatamente como foi gravada.
+  Isso significa que, se alguém abrir essa tentativa específica no Admin,
+  o bloco visual "Frete legado" **não aparece** nela (só a partir da
+  próxima tentativa que usar o override, por qualquer outro intake
+  futuro) — comportamento esperado, não um bug remanescente.
+- **Commit `1174199c2c1b0de7b4c065a195ce99e665330fd0` corrige o bug**: a
+  causa era uma linha só em `startConferenciaAction`
+  ([conferencia-actions.ts](src/app/admin/faturamento-envios/pre/[id]/conferencia-actions.ts))
+  que reconstruía `FieldResult` campo a campo (`.map(({field, verdict,
+  reason}) => ...)`) e descartava `overrideCode` antes de gravar.
+  Corrigido para gravar `outcome.results` direto. A partir deste commit,
+  **qualquer tentativa nova com override ativo preserva `overrideCode`**
+  — coberto por teste automatizado sintético (sem Tatiane real) em
+  [override-persistence-pipeline.test.ts](src/lib/intake/__tests__/override-persistence-pipeline.test.ts)
+  e por um teste de guarda por regex em
+  [conferencia-flow.test.ts](src/lib/intake/__tests__/conferencia-flow.test.ts)
+  contra a regressão exata.
+- **CAIXA ALTA, card de NF-e e cópia individual campo a campo** (seção
+  21.3/21.4) continuam no ar sem alteração nesta rodada: nome, rua,
+  complemento, bairro, cidade, UF e destinatário em maiúsculas só na
+  exibição (`upper()` em
+  [page.tsx](src/app/admin/faturamento-envios/pre/[id]/page.tsx)), e-mail
+  nunca maiúsculo, `NfeDataSection` com um ícone `Copy`/`Check` por campo
+  (nunca "copiar todos", nunca grava nada).
+- **`CONFIRMAR CONFERÊNCIA` continua sem aparecer em tentativa `BLOCKED`**
+  (seção 21.1/21.2) — `{!isBlocked && (...)}` em `ConferenciaPanel.tsx`,
+  inalterado por esta rodada.
+- **Auditoria de quem aprovou a Tatiane**: todas as ações da tentativa #2
+  em diante (`INTAKE_CHECK_RESTARTED`, `INTAKE_CHECK_STARTED`,
+  `INTAKE_REVIEW_COMPLETED`, `INTAKE_APPROVED`, `FULFILLMENT_CREATED`)
+  foram do mesmo ator (`75be9f81-...`, perfil `admin`), em timestamps
+  consistentes com cliques humanos reais (segundos de intervalo, nunca
+  instantâneo). Confirmado por inspeção de código: `startConferenciaAction`,
+  `markReviewedAction` e `approveConferenciaAction` exigem sessão real
+  (`requireAdmin`) e só disparam por `onSubmit`/`onClick` explícitos —
+  **nenhum caminho de autoaprovação existe.**
+- **Merge em `main` feito nesta rodada**, depois de `tsc`/`eslint`/testes/
+  `next build` verdes e Preview aprovado. Produção e Preview continuam no
+  mesmo projeto Supabase (seção 3 de `docs/deployment.md`) — a migration e
+  o override da Tatiane já valiam para os dois antes mesmo do merge de
+  código; o merge só leva o fix do `overrideCode` e o redesign visual
+  para `main`.
