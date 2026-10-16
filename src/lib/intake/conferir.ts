@@ -2,7 +2,7 @@
 // (campos já extraídos pelos parsers existentes; nada é inventado).
 import type { DanfeData, ShippingLabelData } from "../fulfillment/types.ts";
 import { trackingCarrier } from "../fulfillment/post-sale.ts";
-import { normalizeText, compareAddress, compareMoneyCents, toCents, type AddressInput, type FieldResult } from "./address.ts";
+import { normalizePersonName, compareAddress, compareMoneyCents, toCents, type AddressInput, type FieldResult } from "./address.ts";
 import { decideVerdict, type ConfereResult } from "./confere.ts";
 
 export interface ExpectedData {
@@ -75,7 +75,7 @@ export function conferir(input: ConfereInput): ConfereOutcome {
 
   // Nome × DANFE: avaliação humana (nunca bloqueio automático)
   if (!danfe?.customerName) results.push({ field: "nome", verdict: "REVIEW", reason: "Nome não encontrado na DANFE." });
-  else if (normalizeText(danfe.customerName) !== normalizeText(expected.customerName)) {
+  else if (normalizePersonName(danfe.customerName) !== normalizePersonName(expected.customerName)) {
     results.push({ field: "nome", verdict: "REVIEW", reason: "Nome diferente do informado: revisar." });
   } else results.push({ field: "nome", verdict: "OK", reason: "" });
 
@@ -97,7 +97,7 @@ export function conferir(input: ConfereInput): ConfereOutcome {
   // Destinatário e endereço da etiqueta × cliente
   const labelRecipient = label?.recipientName ?? null;
   if (!labelRecipient) results.push({ field: "etiqueta_destinatario", verdict: "REVIEW", reason: "Destinatário não encontrado na etiqueta." });
-  else if (normalizeText(labelRecipient) !== normalizeText(expected.recipientName)) {
+  else if (normalizePersonName(labelRecipient) !== normalizePersonName(expected.recipientName)) {
     results.push({ field: "etiqueta_destinatario", verdict: "BLOCKED", reason: "Destinatário da etiqueta incompatível." });
   } else results.push({ field: "etiqueta_destinatario", verdict: "OK", reason: "" });
 

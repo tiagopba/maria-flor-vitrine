@@ -19,22 +19,15 @@ export interface FieldResult {
   overrideCode?: string;
 }
 
-/** Abreviações comuns → forma completa. Lista fechada, por decisão do usuário. */
-const STREET_ABBREVIATIONS: Record<string, string> = {
-  r: "rua",
-  av: "avenida",
-  rod: "rodovia",
-  trav: "travessa",
-  al: "alameda",
-  est: "estrada",
-  pc: "praca",
-  praca: "praca",
-  pca: "praca",
-};
-
 const DIACRITICS = /[̀-ͯ]/g;
 
-/** Caixa, acentos, pontuação e espaços saem; abreviações da lista viram a forma completa. */
+/**
+ * Base de todo normalizador de comparação: caixa, acentos, pontuação e
+ * espaços saem. NUNCA usada para alterar o que é gravado ou exibido — só
+ * para decidir se dois valores "são a mesma informação escrita diferente".
+ * Já cobre sozinha os campos que não precisam de regra própria (cidade,
+ * nome/destinatário — ver normalizeCity/normalizePersonName abaixo).
+ */
 export function normalizeText(value: string | null | undefined): string {
   if (!value) return "";
   return value
@@ -45,18 +38,145 @@ export function normalizeText(value: string | null | undefined): string {
     .trim();
 }
 
+/**
+ * RUA/LOGRADOURO — causa real do falso bloqueio "ALAGOAS" (cadastro) ×
+ * "RUA ALAGOAS" (XML): a normalização antiga só CANONICALIZAVA abreviação
+ * pra forma completa (ex.: "r" → "rua"), nunca REMOVIA o tipo quando só um
+ * dos dois lados tinha prefixo — "alagoas" nunca virava igual a "rua
+ * alagoas". Correção: remove o tipo de logradouro SÓ quando é a primeira
+ * palavra (nunca no meio/fim — "JOSE ALAGOAS" não vira "ALAGOAS", "ALAGOAS
+ * II" não vira "ALAGOAS"). Lista fechada por decisão do usuário; "ESTR"
+ * (variante de estrada) não entrou — auditoria em Production (leitura, ver
+ * handoff) não achou nenhum endereço real usando essa forma.
+ */
+const STREET_TYPE_PREFIXES = new Set([
+  "r",
+  "rua",
+  "av",
+  "avenida",
+  "trav",
+  "tv",
+  "travessa",
+  "al",
+  "alameda",
+  "rod",
+  "rodovia",
+  "est",
+  "estrada",
+]);
+
+/** Fora do tipo de logradouro (nunca removido, só canonicalizado) — comportamento já existente, preservado. */
+const STREET_WORD_CANONICAL: Record<string, string> = {
+  pc: "praca",
+  pca: "praca",
+  praca: "praca",
+};
+
 export function normalizeStreet(value: string | null | undefined): string {
-  return normalizeText(value)
+  const tokens = normalizeText(value).split(" ").filter(Boolean);
+  // tokens.length > 1 evita reduzir "RUA" sozinha (dado incompleto) a "".
+  if (tokens.length > 1 && STREET_TYPE_PREFIXES.has(tokens[0])) tokens.shift();
+  return tokens.map((token) => STREET_WORD_CANONICAL[token] ?? token).join(" ");
+}
+
+/**
+ * BAIRRO — só canonicaliza abreviação de TIPO quando é a primeira palavra;
+ * nunca remove ("JARDIM ALVORADA" continua diferente de "ALVORADA" — só o
+ * tipo, nunca o nome, vira igual). Lista fechada e pequena por decisão do
+ * usuário: antes de adicionar outra (ex.: "CJ" de conjunto habitacional),
+ * auditar uso real.
+ */
+const NEIGHBORHOOD_TYPE_CANONICAL: Record<string, string> = {
+  jd: "jardim",
+  vl: "vila",
+  res: "residencial",
+  pq: "parque",
+};
+
+export function normalizeNeighborhood(value: string | null | undefined): string {
+  const tokens = normalizeText(value).split(" ").filter(Boolean);
+  if (tokens.length > 0 && NEIGHBORHOOD_TYPE_CANONICAL[tokens[0]]) {
+    tokens[0] = NEIGHBORHOOD_TYPE_CANONICAL[tokens[0]];
+  }
+  return tokens.join(" ");
+}
+
+/**
+ * COMPLEMENTO — texto livre, por isso cada abreviação de TIPO (não só a
+ * primeira palavra: "APTO 225 BLOCO B" tem dois tipos na mesma string) vira
+ * a forma completa; números e letras de bloco/apartamento nunca são
+ * removidos ("AP 225" continua diferente de "AP 226"). Lista fechada por
+ * decisão do usuário.
+ */
+const COMPLEMENT_TYPE_CANONICAL: Record<string, string> = {
+  ap: "apartamento",
+  apto: "apartamento",
+  bl: "bloco",
+  sl: "sala",
+  cj: "conjunto",
+  conj: "conjunto",
+};
+
+/**
+ * "ENTRE AS RUAS 7 E 9" × "ENTRE RUA 7 E RUA 9" (e variações) — estrutura
+ * ÚNICA e fechada, não fuzzy: só casa quando a string INTEIRA (^...$) é
+ * exatamente "entre [as|a ]rua[s] X e [rua ]Y", com X e Y dígitos.
+ * Canonicaliza pra "entre rua X e Y", preservando X/Y e a ordem — nunca
+ * troca os dois lados, nunca inventa equivalência entre números diferentes.
+ * "CASA ENTRE RUA 7 E 9" não casa (não começa com "entre") e fica como
+ * está, token a token, sem nenhuma transformação estrutural.
+ */
+const ENTRE_RUAS_PATTERN = /^entre (?:as |a )?ruas? (\d+) e (?:ruas? )?(\d+)$/;
+
+export function normalizeComplement(value: string | null | undefined): string {
+  const base = normalizeText(value);
+  const entreRuas = base.match(ENTRE_RUAS_PATTERN);
+  const structural = entreRuas ? `entre rua ${entreRuas[1]} e ${entreRuas[2]}` : base;
+  return structural
     .split(" ")
     .filter(Boolean)
-    .map((token) => STREET_ABBREVIATIONS[token] ?? token)
+    .map((token) => COMPLEMENT_TYPE_CANONICAL[token] ?? token)
     .join(" ");
 }
 
-export function normalizeNumber(value: string | null | undefined): string {
+/**
+ * CIDADE — normalizeText sozinha já cobre tudo que a regra pede (caixa,
+ * acento, pontuação/espaços) sem nenhuma aproximação entre cidades
+ * diferentes ("SANTO ANTONIO" nunca vira igual a "SANTO ANTONIO DE
+ * JESUS" — são tokens diferentes). Alias só por clareza de leitura no
+ * call site, comportamento idêntico a antes.
+ */
+export const normalizeCity = normalizeText;
+
+/**
+ * NOME/DESTINATÁRIO — mesma base de normalizeText (caixa/acento/espaço),
+ * nunca remove sobrenome nem aproxima nomes parecidos. Alias só por
+ * clareza, comportamento idêntico a antes.
+ */
+export const normalizePersonName = normalizeText;
+
+/**
+ * UF — estrita por natureza (só 2 letras): normalizeText já cobre
+ * caixa/espaço sem nenhuma aproximação ("SP" nunca vira igual a "MS").
+ * Alias só por clareza, comportamento idêntico a antes.
+ */
+export const normalizeUf = normalizeText;
+
+/**
+ * NÚMERO — trim/caixa/pontuação via normalizeText. Auditoria em Production
+ * (leitura) não achou nenhum endereço real com zero à esquerda nem com
+ * "S/N"/"SN"/"S N" — por isso nenhuma das duas regras condicionais do
+ * pedido foi adicionada; número realmente diferente continua divergência
+ * ("145" ≠ "154").
+ */
+export function normalizeAddressNumber(value: string | null | undefined): string {
   return normalizeText(value).replace(/\s+/g, "");
 }
 
+/**
+ * CEP — só dígitos, comparação exata (já era assim; nenhuma mudança, só
+ * documentado aqui junto dos outros por completude do mapa de regras).
+ */
 export function normalizeCep(value: string | null | undefined): string {
   return (value ?? "").replace(/\D/g, "");
 }
@@ -88,7 +208,7 @@ export function compareAddress(expected: AddressInput, actual: AddressInput): Fi
     results.push({ field: "rua", verdict: "OK", reason: "" });
   }
 
-  const number = (a: AddressInput) => normalizeNumber(a.number);
+  const number = (a: AddressInput) => normalizeAddressNumber(a.number);
   if (!number(actual)) {
     results.push({ field: "numero", verdict: "REVIEW", reason: "Número não encontrado no documento." });
   } else if (number(expected) !== number(actual)) {
@@ -106,7 +226,7 @@ export function compareAddress(expected: AddressInput, actual: AddressInput): Fi
     results.push({ field: "cep", verdict: "OK", reason: "" });
   }
 
-  const city = (a: AddressInput) => normalizeText(a.city);
+  const city = (a: AddressInput) => normalizeCity(a.city);
   if (!city(actual)) {
     results.push({ field: "cidade", verdict: "REVIEW", reason: "Cidade não encontrada no documento." });
   } else if (city(expected) !== city(actual)) {
@@ -115,7 +235,7 @@ export function compareAddress(expected: AddressInput, actual: AddressInput): Fi
     results.push({ field: "cidade", verdict: "OK", reason: "" });
   }
 
-  const uf = (a: AddressInput) => normalizeText(a.state);
+  const uf = (a: AddressInput) => normalizeUf(a.state);
   if (!uf(actual)) {
     results.push({ field: "uf", verdict: "REVIEW", reason: "UF não encontrada no documento." });
   } else if (uf(expected) !== uf(actual)) {
@@ -124,9 +244,9 @@ export function compareAddress(expected: AddressInput, actual: AddressInput): Fi
     results.push({ field: "uf", verdict: "OK", reason: "" });
   }
 
-  const soft = (field: string, a: string | null, b: string | null) => {
-    const na = normalizeText(a);
-    const nb = normalizeText(b);
+  const soft = (field: string, normalize: (v: string | null) => string, a: string | null, b: string | null) => {
+    const na = normalize(a);
+    const nb = normalize(b);
     // Cliente e documento sem o campo (ex.: "Não possui complemento") = nada a comparar
     if (!na && !nb) return { field, verdict: "OK" as const, reason: "" };
     if (!nb) return { field, verdict: "REVIEW" as const, reason: `${field} ausente no documento.` };
@@ -134,8 +254,8 @@ export function compareAddress(expected: AddressInput, actual: AddressInput): Fi
     if (na !== nb) return { field, verdict: "REVIEW" as const, reason: `${field} diferente: revisar.` };
     return { field, verdict: "OK" as const, reason: "" };
   };
-  results.push(soft("complemento", expected.complement, actual.complement));
-  results.push(soft("bairro", expected.neighborhood, actual.neighborhood));
+  results.push(soft("complemento", normalizeComplement, expected.complement, actual.complement));
+  results.push(soft("bairro", normalizeNeighborhood, expected.neighborhood, actual.neighborhood));
 
   return results;
 }

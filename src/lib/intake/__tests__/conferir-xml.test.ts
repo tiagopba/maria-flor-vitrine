@@ -6,6 +6,7 @@ import {
   NFE_XML_1218_BEATRIZ,
   NFE_XML_1219_DANIELA,
   NFE_XML_1220_TATIANE,
+  NFE_XML_STREET_PREFIX_CASE,
 } from "../../fulfillment/__tests__/fixtures.ts";
 import { parseNfeXml } from "../../fulfillment/parse-nfe-xml.ts";
 import { conferirXml } from "../conferir-xml.ts";
@@ -283,4 +284,44 @@ describe("conferirXml: os 4 casos reais da rodada de frete legado (fixtures sint
     });
     assert.equal(outcome.verdict, "GREEN");
   });
+});
+
+describe("conferirXml: padrão do falso bloqueio real (prefixo de rua) — fixture fictícia, não é a venda real", () => {
+  it("cadastro 'ALAGOAS' × XML 'RUA ALAGOAS': rua deixa de divergir, veredito GREEN (nenhuma outra divergência)", () => {
+    const outcome = conferirXml({
+      expected: { ...MATCHING_EXPECTED, address: { ...MATCHING_EXPECTED.address, street: "ALAGOAS" }, saleTotal: 100 },
+      xml: parsedXml(NFE_XML_STREET_PREFIX_CASE),
+    });
+    assert.equal(outcome.results.find((r) => r.field === "rua")?.verdict, "OK");
+    assert.equal(outcome.verdict, "GREEN");
+  });
+
+  it("mesmo caso com CEP realmente diferente: rua não bloqueia mais, mas CEP continua BLOCKED (a correção não enfraquece outros campos)", () => {
+    const outcome = conferirXml({
+      expected: {
+        ...MATCHING_EXPECTED,
+        address: { ...MATCHING_EXPECTED.address, street: "ALAGOAS", postalCode: "99999999" },
+        saleTotal: 100,
+      },
+      xml: parsedXml(NFE_XML_STREET_PREFIX_CASE),
+    });
+    assert.equal(outcome.results.find((r) => r.field === "rua")?.verdict, "OK");
+    assert.equal(outcome.results.find((r) => r.field === "cep")?.verdict, "BLOCKED");
+    assert.equal(outcome.verdict, "BLOCKED");
+  });
+});
+
+describe("conferir-xml: Fabiane/Beatriz/Daniela — depois da normalização por campo, nenhuma divergência nova nem escondida", () => {
+  const CASES: [string, string, number][] = [
+    ["Fabiane", NFE_XML_1217_FABIANE, 529.94],
+    ["Beatriz", NFE_XML_1218_BEATRIZ, 192.98],
+    ["Daniela", NFE_XML_1219_DANIELA, 169.97],
+  ];
+  for (const [name, xml, saleTotal] of CASES) {
+    it(`${name}: endereço idêntico ao XML (Avenida Brasil) continua GREEN, nenhum campo bloqueado ou em revisão`, () => {
+      const outcome = conferirXml({ expected: { ...MATCHING_EXPECTED, saleTotal }, xml: parsedXml(xml) });
+      assert.equal(outcome.verdict, "GREEN");
+      for (const r of outcome.results) assert.equal(r.verdict, "OK", `${name}/${r.field} deveria ser OK`);
+    });
+  }
 });

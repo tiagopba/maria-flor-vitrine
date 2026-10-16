@@ -100,7 +100,7 @@ export const NFE_XML_1215 = `<?xml version="1.0" encoding="UTF-8"?>
  * contra venda de R$173,99 (diferença de R$34,00, compatível com frete
  * legado não incluído na NF-e).
  */
-function buildSyntheticNfeXml(nNF: string, vNF: string, keySuffix: string): string {
+function buildSyntheticNfeXml(nNF: string, vNF: string, keySuffix: string, street = "Avenida Brasil"): string {
   const key = `3526101234567800019955001${nNF.padStart(7, "0")}${keySuffix}`;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">
@@ -129,7 +129,7 @@ function buildSyntheticNfeXml(nNF: string, vNF: string, keySuffix: string): stri
         <CPF>11144477735</CPF>
         <xNome>MARIA DA SILVA EXEMPLO</xNome>
         <enderDest>
-          <xLgr>Avenida Brasil</xLgr>
+          <xLgr>${street}</xLgr>
           <nro>1500</nro>
           <xCpl>APTO 12 B</xCpl>
           <xBairro>Jardim das Palmeiras</xBairro>
@@ -189,6 +189,14 @@ export const NFE_XML_1218_BEATRIZ = buildSyntheticNfeXml("1218", "192.98", "1112
 export const NFE_XML_1219_DANIELA = buildSyntheticNfeXml("1219", "169.97", "111234567803");
 /** Tatiane — NF-e 1220, R$139,99 — venda real era R$173,99 (diferença de R$34,00 de frete legado). */
 export const NFE_XML_1220_TATIANE = buildSyntheticNfeXml("1220", "139.99", "111234567804");
+/**
+ * Fictício, só pra reproduzir o PADRÃO do falso bloqueio real achado numa
+ * venda desta leva (cadastro só com o nome da rua, XML com o tipo de
+ * logradouro na frente) — não é o endereço real de ninguém, mesma cliente
+ * fictícia "MARIA DA SILVA EXEMPLO" do resto do arquivo. XML tem o prefixo
+ * "RUA"; o teste usa um `expected.address.street` sem prefixo nenhum.
+ */
+export const NFE_XML_STREET_PREFIX_CASE = buildSyntheticNfeXml("1301", "100.00", "111234567805", "RUA ALAGOAS");
 
 export const DANFE_TEXT = `DANFE Simplificado - Etiqueta
 LOJA EXEMPLO LTDA
