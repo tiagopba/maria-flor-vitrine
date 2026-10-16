@@ -1,9 +1,8 @@
-import Image from "next/image";
-import { LogOut, Menu } from "lucide-react";
+import { Menu } from "lucide-react";
 import { getCurrentAdmin } from "@/lib/auth/permissions";
 import { countPendingSizeFitProductsLight } from "@/lib/db/product-size-fit";
-import { AdminNav } from "./AdminNav";
 import { logout } from "./login/actions";
+import { Sidebar } from "./Sidebar";
 
 /**
  * Sidebar clara + shell claro pro conteúdo — redesign visual (ver
@@ -39,40 +38,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
         </form>
       </header>
 
-      <aside className="flex flex-col border-admin-border bg-admin-surface sm:w-64 sm:shrink-0 sm:border-r">
-        <div className="hidden shrink-0 items-center gap-3 border-b border-admin-border px-5 py-5 sm:flex">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white p-1.5 shadow-sm">
-            <Image
-              src="/logo-maria-flor.png"
-              alt="Maria Flor"
-              width={288}
-              height={110}
-              className="h-auto w-full object-contain"
-            />
-          </div>
-          <div className="min-w-0">
-            <p className="truncate font-display text-base leading-tight text-admin-text">Maria Flor</p>
-            <p className="truncate text-[11px] uppercase tracking-wide text-admin-text-muted">Moda Feminina</p>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto py-2 sm:py-3">
-          <AdminNav role={admin.role} pendingSizeFitCount={pendingSizeFitCount} />
-        </div>
-
-        <div className="hidden shrink-0 border-t border-admin-border px-4 py-3 sm:block">
-          <p className="mb-2 truncate text-xs text-admin-text-muted">{admin.name}</p>
-          <form action={logout}>
-            <button
-              type="submit"
-              className="flex items-center gap-2 text-sm text-admin-text-muted transition-colors hover:text-admin-text"
-            >
-              <LogOut className="h-4 w-4" strokeWidth={1.75} />
-              Sair
-            </button>
-          </form>
-        </div>
-      </aside>
+      <Sidebar admin={{ name: admin.name, role: admin.role }} pendingSizeFitCount={pendingSizeFitCount} logoutAction={logout} />
 
       <main className="flex-1 px-4 py-6 sm:px-8 sm:py-8">{children}</main>
     </div>

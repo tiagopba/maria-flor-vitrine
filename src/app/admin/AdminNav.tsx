@@ -58,7 +58,19 @@ const NAV_ITEMS: NavItem[] = [
  * envolve). Mesma estrutura/mecanismo de navegação de antes (Link normal,
  * sem estado novo); só a pintura muda.
  */
-export function AdminNav({ role, pendingSizeFitCount }: { role: UserRole; pendingSizeFitCount: number }) {
+export function AdminNav({
+  role,
+  pendingSizeFitCount,
+  collapsed = false,
+}: {
+  role: UserRole;
+  pendingSizeFitCount: number;
+  /**
+   * Só tem efeito a partir de `sm:` (ver Sidebar.tsx) — mobile (abaixo de
+   * `sm:`) sempre mostra ícone + texto, mesmo com `collapsed=true`.
+   */
+  collapsed?: boolean;
+}) {
   const pathname = usePathname();
 
   // Rota mais específica que casa com o pathname atual vence — evita que
@@ -83,15 +95,22 @@ export function AdminNav({ role, pendingSizeFitCount }: { role: UserRole; pendin
             ? `${item.label} (${pendingSizeFitCount})`
             : item.label;
 
+        // Tooltip (title nativo) com o nome do item quando recolhido — só conta a
+        // partir de sm: na prática, já que abaixo disso `collapsed` não esconde nada.
+        const collapsedTitle = collapsed ? label : undefined;
+
         if (!item.available || locked) {
           return (
             <span
               key={item.href}
-              title={locked ? "Só administradoras" : "Em breve"}
-              className="flex shrink-0 items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm text-admin-text-muted/50 sm:whitespace-normal"
+              title={collapsedTitle ?? (locked ? "Só administradoras" : "Em breve")}
+              className={cn(
+                "flex shrink-0 items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm text-admin-text-muted/50 sm:whitespace-normal",
+                collapsed && "sm:justify-center sm:px-2.5"
+              )}
             >
               <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
-              {label}
+              <span className={collapsed ? "sm:hidden" : undefined}>{label}</span>
             </span>
           );
         }
@@ -100,15 +119,17 @@ export function AdminNav({ role, pendingSizeFitCount }: { role: UserRole; pendin
           <Link
             key={item.href}
             href={item.href}
+            title={collapsedTitle}
             className={cn(
               "flex shrink-0 items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition-colors sm:whitespace-normal",
               isActive
                 ? "bg-admin-primary-soft text-admin-primary"
-                : "text-admin-text-muted hover:bg-admin-surface-muted hover:text-admin-text"
+                : "text-admin-text-muted hover:bg-admin-surface-muted hover:text-admin-text",
+              collapsed && "sm:justify-center sm:px-2.5"
             )}
           >
             <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
-            {label}
+            <span className={collapsed ? "sm:hidden" : undefined}>{label}</span>
           </Link>
         );
       })}
