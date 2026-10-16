@@ -35,7 +35,7 @@ export function DeliveryStatusBadge({ status }: { status: DeliveryStatus }) {
  * (bg-red-50) pra ficar claramente mais destacada, como pedido.
  */
 function OverdueBadge() {
-  return <Badge tone="danger" className="bg-red-100 font-semibold text-red-800">⏰ EM ATRASO</Badge>;
+  return <Badge tone="danger" className="bg-red-100 font-semibold text-red-800">⏰ Entrega atrasada</Badge>;
 }
 
 function FollowupBadge({ openCount }: { openCount: number | undefined }) {

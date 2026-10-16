@@ -23,10 +23,10 @@ const SELECT_CLASS =
   "h-11 rounded-lg border border-border bg-surface px-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary";
 
 /**
- * Edição rápida da listagem — mesmos campos de UpdateSituationPanel
- * ([id]/UpdateSituationPanel.tsx), só que num modal aberto por linha, sem
- * sair da lista. A regra de negócio é a mesma (applyDeliveryUpdate, via
- * quickUpdateDeliveryAction); aqui só a apresentação muda.
+ * Edição rápida da listagem, num modal aberto por linha — única forma de
+ * atualizar a situação agora (o antigo painel "Atualizar situação" do
+ * detalhe foi removido; a regra de negócio é a mesma, applyDeliveryUpdate
+ * via quickUpdateDeliveryAction).
  */
 export function QuickEditModal({
   record,

@@ -2,7 +2,7 @@ import { filtersToSearchParams, type FulfillmentListFilters, type QuickSituation
 
 const CHIPS: { situacao: QuickSituation | ""; label: string }[] = [
   { situacao: "", label: "Todas" },
-  { situacao: "ATRASADO", label: "Em atraso" },
+  { situacao: "ATRASADO", label: "Entrega atrasada" },
   { situacao: "EM_TRANSITO", label: "Em trânsito" },
   { situacao: "AGUARDANDO_ENVIO", label: "Aguardando envio" },
   { situacao: "ENTREGUE", label: "Entregues" },
