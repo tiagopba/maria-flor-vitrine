@@ -69,6 +69,8 @@
   --admin-danger: #b42318;
   --admin-danger-soft: #fdecea;
   --admin-neutral-soft: #f1ece8;
+  --admin-info: #1d4ed8;
+  --admin-info-soft: #eff6ff;
 
   /* Os tokens semânticos usados pelos componentes passam a apontar para a paleta do Admin */
   --background: var(--admin-bg);

@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-type Tone = "neutral" | "primary" | "warning" | "success";
+type Tone = "neutral" | "primary" | "warning" | "success" | "danger" | "info";
 
 const toneClasses: Record<Tone, string> = {
   neutral: "bg-muted text-text-muted",
@@ -10,6 +10,11 @@ const toneClasses: Record<Tone, string> = {
    * verde suave, único uso hoje; tom novo e aditivo, os outros três
    * continuam exatamente iguais. */
   success: "bg-emerald-50 text-emerald-700",
+  /** Dois tons novos (redesign do Pré-faturamento) — mesma receita dos
+   * acima (cor Tailwind padrão, não os tokens --admin-*, porque este
+   * componente também é usado fora do Admin, ex. ProductCard/Price). */
+  danger: "bg-red-50 text-red-700",
+  info: "bg-blue-50 text-blue-700",
 };
 
 export function Badge({
