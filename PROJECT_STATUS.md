@@ -1227,3 +1227,80 @@ clientes foi commitado.**
   o override da Tatiane já valiam para os dois antes mesmo do merge de
   código; o merge só leva o fix do `overrideCode` e o redesign visual
   para `main`.
+
+### 21.12 Normalização conservadora de endereço — fim do falso bloqueio ALAGOAS × RUA ALAGOAS
+
+- **Bug real encontrado numa venda desta leva (Fabiane, STI3 23716):**
+  cadastro só com o nome da rua (`ALAGOAS`), XML da NF-e com o tipo de
+  logradouro na frente (`RUA ALAGOAS`) — `normalizeStreet` só
+  canonicalizava abreviação pra forma completa (`"r"` → `"rua"`), nunca
+  removia o tipo quando só um dos dois lados tinha prefixo, então os dois
+  nunca batiam e a rua ficava `BLOCKED` à toa.
+- **Normalização por campo em
+  [address.ts](src/lib/intake/address.ts)**, determinística
+  (`normalize(A) === normalize(B)`, sem Levenshtein/IA/similaridade),
+  cada campo com regra própria e lista fechada:
+  - **Rua/logradouro** (`normalizeStreet`, corrigida): remove o tipo de
+    logradouro só quando é a 1ª palavra (`r/rua`, `av/avenida`,
+    `trav/tv/travessa`, `al/alameda`, `rod/rodovia`, `est/estrada`) —
+    nunca no meio/fim (`JOSE ALAGOAS` ≠ `ALAGOAS`, `ALAGOAS II` ≠
+    `ALAGOAS`). `ESTR` (variante de estrada) ficou de fora — auditoria em
+    Production não achou nenhum endereço real usando essa forma.
+  - **Bairro** (`normalizeNeighborhood`, nova): só canonicaliza
+    abreviação de TIPO na 1ª palavra (`jd→jardim`, `vl→vila`,
+    `res→residencial`, `pq→parque`) — nunca remove (`JARDIM ALVORADA`
+    continua diferente de `ALVORADA`).
+  - **Complemento** (`normalizeComplement`, nova): canonicaliza tipo em
+    qualquer token, já que é texto livre e pode ter dois tipos na mesma
+    string (`ap/apto→apartamento`, `bl→bloco`, `sl→sala`,
+    `cj/conj→conjunto`) — números e letras de bloco/apartamento nunca são
+    removidos (`AP 225` ≠ `AP 226`). Inclui também a equivalência
+    estrutural fechada `ENTRE AS RUAS 7 E 9` = `ENTRE AS RUA 7 E 9` =
+    `ENTRE RUA 7 E RUA 9` = `ENTRE RUA 7 E 9` (regex único, ancorado na
+    string inteira, nunca reordena nem aproxima números diferentes —
+    `ENTRE RUA 7 E 9` continua diferente de `ENTRE RUA 7 E 10` ou de
+    `ENTRE RUA 9 E 7`; `CASA ENTRE RUA 7 E 9` não sofre nenhuma
+    transformação estrutural por não começar com "ENTRE").
+  - **Cidade** (`normalizeCity`), **nome/destinatário**
+    (`normalizePersonName`) e **UF** (`normalizeUf`): alias de
+    `normalizeText` (caixa/acento/pontuação), que já cobria essas regras
+    corretamente — sem nenhuma aproximação entre valores realmente
+    diferentes (`SANTO ANTONIO` continua diferente de `SANTO ANTONIO DE
+    JESUS`; `MARIA DA SILVA` continua diferente de `MARIA DA SILVA
+    SOUZA`; `SP` continua diferente de `MS`).
+  - **Número** (`normalizeAddressNumber`) e **CEP** (`normalizeCep`)
+    ficaram estritos como já eram — auditoria em Production não achou
+    zero à esquerda nem `S/N`/`SN`/`S N` em nenhum endereço real, então
+    nenhuma das duas regras condicionais foi adicionada.
+  - **CPF/CNPJ, valor e transportadora**: intocados, continuam com
+    comparação exata/estrita (a única exceção de valor continua sendo só
+    o override explícito de frete legado, seção 21.5).
+  - **E-mail e WhatsApp não participam da comparação do Confere Geral**
+    hoje — nada a mudar aí.
+- **Nada de fuzzy matching amplo**: cada equivalência é uma lista fechada
+  ou uma estrutura única e ancorada (nunca distância de edição,
+  similaridade percentual ou IA). `decideVerdict` e a máquina de estados
+  não mudaram — equivalência segura vira `OK`, divergência real continua
+  usando o mesmo veredito de antes (`REVIEW`/`BLOCKED`).
+- **Testes**: 42 novos (36 em
+  [address-normalize.test.ts](src/lib/intake/__tests__/address-normalize.test.ts),
+  matriz completa por campo incluindo o par exato do bug e os casos
+  negativos pedidos; +6 em
+  [conferir-xml.test.ts](src/lib/intake/__tests__/conferir-xml.test.ts),
+  reproduzindo o padrão via `conferirXml` completo com fixture fictícia
+  nova — `NFE_XML_STREET_PREFIX_CASE`, cliente fictícia "MARIA DA SILVA
+  EXEMPLO" — e confirmando Fabiane/Beatriz/Daniela GREEN sem nenhuma
+  divergência nova). **618/618 testes**, `tsc`/`eslint`/`next build`
+  verdes.
+- **Teste real confirmado no Preview**: a Fabiane (STI3 23716) refez a
+  conferência com o XML real — tentativa #1 (histórica, `BLOCKED` por
+  `rua`) permaneceu intacta; tentativa #2 veio `GREEN`, sem nenhum campo
+  bloqueado ou em revisão; a venda foi aprovada
+  (`approved_record_id = 5af24d5f-6c73-458d-9609-6955bc78c5ee`). Beatriz
+  (STI3 23739) e Daniela (STI3 23751) **não foram processadas** nesta
+  rodada — seguem `DATA_RECEIVED`, aguardando conferência manual
+  separada.
+- **Nenhuma migration criada nem aplicada** nesta rodada — mudança só em
+  código (`src/lib/`), nenhuma tabela/constraint/RPC nova.
+- Merge em `main` feito depois de `tsc`/`eslint`/testes/`next build`
+  verdes e do teste real da Fabiane confirmado no Preview.
