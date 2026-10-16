@@ -82,6 +82,14 @@ describe("registro aprovado: entra com PENDING e preserva pagamento", () => {
   });
 });
 
+describe("comparison.results gravado não reduz FieldResult campo a campo (bug real: overrideCode era descartado)", () => {
+  it("a action grava outcome.results direto, sem .map(({...}) => ...) manual que possa esquecer um campo novo", () => {
+    const src = code(CONF);
+    assert.match(src, /comparison:\s*\{\s*results:\s*outcome\.results,\s*extracted:\s*outcome\.extracted\s*\}/);
+    assert.doesNotMatch(src, /outcome\.results\.map\(\(\{[^}]*\}\)\s*=>/);
+  });
+});
+
 describe("auditoria da conferência: sem PII", () => {
   it("os eventos de conferência só carregam número da tentativa, veredito e nomes de campo", () => {
     const src = code(CONF);

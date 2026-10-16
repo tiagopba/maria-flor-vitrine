@@ -101,7 +101,10 @@ export async function startConferenciaAction(intakeId: string, formData: FormDat
     verdict: outcome.verdict,
     blockingFields: outcome.blocking.map((r) => r.field),
     reviewFields: outcome.reviewFields,
-    comparison: { results: outcome.results.map(({ field, verdict, reason }) => ({ field, verdict, reason })), extracted: outcome.extracted },
+    // results é gravado como veio de conferirXml — nunca reduzir campo a
+    // campo aqui: FieldResult (field/verdict/reason/overrideCode) não tem
+    // PII, e um mapeamento manual já perdeu overrideCode silenciosamente.
+    comparison: { results: outcome.results, extracted: outcome.extracted },
     xmlPath,
     actorId: admin.id,
   });
