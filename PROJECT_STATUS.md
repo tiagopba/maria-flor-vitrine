@@ -872,3 +872,77 @@ agrupamento público, swatches, favoritos, busca pública, fluxo guiado — e
 - Esta parte (Produtos/`internal_code`) está **fechada**. Próxima pauta:
   redesign visual do Pré-faturamento (ver pendência equivalente nas seções
   da branch `fix/confere-geral-xml-valor-endereco`, ainda não mergeada).
+
+---
+
+## 20. Redesign visual do Pré-faturamento (APROVADO, APLICADO E MERGEADO)
+
+**Branch:** `feature/pre-faturamento-redesign` (a partir de `main`, `94c10df`),
+commit `c5aa309` — **mergeada em `main` nesta rodada** (`--no-ff`). Tarefa
+exclusivamente de apresentação — **nenhuma lógica, query, status ou banco
+foi alterado** (`lib/intake/groups.ts`, `lib/intake/status.ts` e
+`lib/db/intakes.ts` intocados; nenhuma migration criada ou aplicada).
+
+### 20.1 Problema resolvido
+A listagem de `/admin/faturamento-envios/pre` era um único arquivo
+(`page.tsx`) com as 6 seções inline, cada uma um `<ul>`/`<li>` com
+`divide-y` — visualmente uma tabela disfarçada, sem ícone, sem cor por
+etapa, sem badge de status, STI3 visível só nas canceladas, e o nome da
+cliente era o único link (sem ação "Ver detalhes" separada).
+
+### 20.2 Componentes novos
+- `src/app/admin/faturamento-envios/pre/intake-section-presentation.ts` —
+  mapa puro `group.key → {ícone, tom do Badge, cor}`, chaveado pelo mesmo
+  `key` de `INTAKE_GROUPS` (`lib/intake/groups.ts`, não alterado).
+- `src/app/admin/faturamento-envios/pre/IntakeSectionCard.tsx` — card de
+  seção: círculo com ícone + cor suave, título, texto auxiliar, contador em
+  `Badge`, e empty state ilustrado (ícone 40% opacidade + "Nenhuma venda
+  nesta etapa no momento.") quando a seção está vazia.
+- `src/app/admin/faturamento-envios/pre/IntakeMiniCard.tsx` — card de cada
+  venda: nome + `Badge` de status na mesma linha, STI3 · data · valor
+  **sempre visível** (antes só aparecia nas canceladas), linha de rodapé
+  com o momento relevante (recebido em / link válido até / link expirado /
+  motivo + cancelada em) e ação **"Ver detalhes" separada do nome** (que
+  deixou de ser link).
+- `src/app/admin/faturamento-envios/pre/page.tsx` — ajustado pra montar os
+  dois componentes acima; **as 6 seções aparecem sempre**, mesmo vazias
+  (decisão do usuário: visão completa do funil o tempo todo).
+- `src/components/ui/Badge.tsx` — 2 tons novos, aditivos: `danger`
+  (`bg-red-50 text-red-700`) e `info` (`bg-blue-50 text-blue-700`) — cores
+  Tailwind padrão, não os tokens `--admin-*`, porque o `Badge` também é
+  usado fora do Admin (`ProductCard`, `Price`, seleção compartilhável).
+- `src/app/globals.css` — 2 variáveis novas em `.admin-scope`:
+  `--admin-info: #1d4ed8` / `--admin-info-soft: #eff6ff`. Os outros 9
+  tokens do Admin (`bg/surface/border/text/primary/success/warning/danger/
+  neutral-soft`) já existiam e foram só reaproveitados, nenhum valor mudou.
+
+### 20.3 Paleta e ícones por etapa (final)
+| Seção | Cor | Ícone (lucide-react) |
+|---|---|---|
+| Aguardando dados | azul suave (`--admin-info-soft`, único token novo) | `Clock` |
+| Dados recebidos | rosa suave (`--admin-primary-soft`, já existia) | `Inbox` |
+| Conferência bloqueada | vermelho suave (`--admin-danger-soft`, já existia) | `CircleAlert` |
+| Revisar | âmbar suave (`--admin-warning-soft`, já existia) | `SearchCheck` |
+| Prontos / conferidos | verde suave (`--admin-success-soft`, já existia) | `CircleCheck` |
+| Canceladas | cinza suave (`--admin-neutral-soft`, já existia) | `CircleX` |
+
+### 20.4 Validação visual (dados reais, somente leitura, `npm run dev` local contra o Supabase real)
+- **Desktop:** as 6 seções renderizando corretas, inclusive as vazias
+  (Aguardando dados / Conferência bloqueada / Revisar, com 0 no momento do
+  teste) com o empty state ilustrado. "Dados recebidos" (4), "Prontos/
+  conferidos" (2, incluindo a venda real da Arielle, hoje com `Badge` verde
+  "Conferência aprovada") e "Canceladas" (1, motivo preservado) com dados
+  reais.
+- **375px e 430px:** nome + badge empilham/alinham sem corte; STI3/data/
+  valor com `flex-wrap`; botão "Ver detalhes" com `h-11` (44px, área de
+  toque adequada) — full width na própria linha em 375px, lado a lado com
+  o texto do rodapé em 430px. Nenhum conteúdo cortado ou sobreposto nas
+  duas larguras.
+- Nenhuma venda real foi criada, editada ou removida durante a validação
+  (navegação somente leitura).
+
+### Regra para a próxima sessão
+- Não recriar os componentes/tokens acima — já existem e estão em `main`.
+- `lib/intake/groups.ts`, `lib/intake/status.ts` e `lib/db/intakes.ts`
+  continuam a única fonte de verdade da lógica — qualquer mudança de
+  regra de negócio do Pré-faturamento é uma tarefa separada desta.
