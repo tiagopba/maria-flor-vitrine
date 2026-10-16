@@ -58,8 +58,15 @@ export function conferirXml(input: ConfereXmlInput): ConfereXmlOutcome {
   };
   results.push(...compareAddress(expected.address, xmlAddress));
 
-  // Valor da venda × vNF, em centavos, sem tolerância
-  results.push(compareMoneyCents(toCents(expected.saleTotal), toCents(xml.invoiceTotal)));
+  // Valor da venda × vNF, em centavos, sem tolerância — exceto quando o
+  // intake tem override de frete legado ativo (ver
+  // fulfillment_intake_legacy_overrides); nunca um padrão, só quando o
+  // chamador (startConferenciaAction) confirmou que existe um ativo.
+  results.push(
+    compareMoneyCents(toCents(expected.saleTotal), toCents(xml.invoiceTotal), {
+      legacyFreightOverride: expected.legacyFreightOverrideActive === true,
+    })
+  );
 
   const verdict = decideVerdict(results);
   return {

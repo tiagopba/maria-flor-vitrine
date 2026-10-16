@@ -263,3 +263,37 @@ export async function cancelIntakeRpc(input: { id: string; reason: string; note:
   });
   if (error) throw new Error(error.message);
 }
+
+// ── Override de frete legado (exceção pontual e auditável, ver seção 21 do
+// PROJECT_STATUS) ───────────────────────────────────────────────────────────
+
+/** Existe override de frete legado ATIVO pra este intake? Sessão do Admin (RLS). */
+export async function hasActiveLegacyFreightOverride(intakeId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("fulfillment_intake_legacy_overrides")
+    .select("id")
+    .eq("intake_id", intakeId)
+    .eq("override_type", "LEGACY_FREIGHT_VALUE_OVERRIDE")
+    .is("revoked_at", null)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data !== null;
+}
+
+/**
+ * Aplica o override (grava a exceção + o audit log na mesma transação, ver
+ * apply_legacy_freight_override). Chamável com sessão de Admin/Master
+ * (is_admin() via auth.uid()) ou com a service role key (script de
+ * regularização, sem sessão — a RPC exige nesse caso que `actorId` seja um
+ * perfil admin/master de verdade).
+ */
+export async function applyLegacyFreightOverrideRpc(intakeId: string, actorId: string): Promise<string> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("apply_legacy_freight_override", {
+    p_intake: intakeId,
+    p_actor: actorId,
+  });
+  if (error || !data) throw new Error(error?.message ?? "Não foi possível aplicar o override.");
+  return data;
+}

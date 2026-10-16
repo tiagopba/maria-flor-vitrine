@@ -9,6 +9,14 @@ export interface FieldResult {
   field: string;
   verdict: FieldVerdict;
   reason: string;
+  /**
+   * Só presente quando um override explícito e auditável (ex.: frete legado,
+   * ver fulfillment_intake_legacy_overrides) mudou um veredito que por
+   * padrão seria BLOCKED — nunca setado numa comparação normal. A UI usa
+   * isto pra mostrar o aviso de forma informativa, nunca pra decidir nada
+   * sozinha (a decisão real já está no `verdict`).
+   */
+  overrideCode?: string;
 }
 
 /** Abreviações comuns → forma completa. Lista fechada, por decisão do usuário. */
@@ -132,11 +140,33 @@ export function compareAddress(expected: AddressInput, actual: AddressInput): Fi
   return results;
 }
 
-/** Valores em centavos, sem tolerância: qualquer diferença é BLOCKED. */
-export function compareMoneyCents(expectedCents: number | null, actualCents: number | null): FieldResult {
+/**
+ * Valores em centavos, sem tolerância: qualquer diferença é BLOCKED —
+ * EXCETO quando `legacyFreightOverride` vem `true` (só setado pelo chamador
+ * quando o intake específico tem um override ativo e auditado, nunca por
+ * padrão): aí a diferença vira informativa (`verdict: "OK"`, nunca entra em
+ * blocking/review, nunca exige checkbox, nunca impede aprovação sozinha),
+ * com `overrideCode` marcado pra UI mostrar "Frete legado" — a diferença
+ * nunca é escondida, só deixa de bloquear.
+ */
+export function compareMoneyCents(
+  expectedCents: number | null,
+  actualCents: number | null,
+  options?: { legacyFreightOverride?: boolean }
+): FieldResult {
   if (expectedCents === null) return { field: "valor", verdict: "REVIEW", reason: "Valor esperado não informado." };
   if (actualCents === null) return { field: "valor", verdict: "REVIEW", reason: "Valor da NF-e não encontrado." };
-  if (expectedCents !== actualCents) return { field: "valor", verdict: "BLOCKED", reason: "Valor da NF-e diferente do valor da venda." };
+  if (expectedCents !== actualCents) {
+    if (options?.legacyFreightOverride) {
+      return {
+        field: "valor",
+        verdict: "OK",
+        reason: "Frete legado: diferença de valor aceita para esta venda anterior à nova regra de emissão.",
+        overrideCode: "LEGACY_FREIGHT_NOT_INCLUDED_IN_NFE",
+      };
+    }
+    return { field: "valor", verdict: "BLOCKED", reason: "Valor da NF-e diferente do valor da venda." };
+  }
   return { field: "valor", verdict: "OK", reason: "" };
 }
 

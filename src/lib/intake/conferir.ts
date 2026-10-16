@@ -15,6 +15,13 @@ export interface ExpectedData {
   recipientName: string;
   /** Valor da venda em reais (sale_total). */
   saleTotal: number;
+  /**
+   * Só lido pelo fluxo XML (conferir-xml.ts) — conferir() (DANFE+etiqueta)
+   * nunca lê este campo, então seu comportamento não muda. `true` só quando
+   * o intake tem um override de frete legado ativo e auditado (ver
+   * fulfillment_intake_legacy_overrides) — nunca um padrão.
+   */
+  legacyFreightOverrideActive?: boolean;
 }
 
 export interface ConfereInput {

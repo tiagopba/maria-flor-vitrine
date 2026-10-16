@@ -114,6 +114,37 @@ describe("formulário público da cliente", () => {
     assert.equal(publicSubmitSchema.safeParse({ ...PUBLIC, deliveryToCustomer: false, recipientName: "" }).success, false);
     assert.ok(publicSubmitSchema.safeParse({ ...PUBLIC, deliveryToCustomer: false, recipientName: "João Silva" }).success);
   });
+
+  it("CAIXA ALTA preservando acentos: nome, rua, bairro e cidade saem em maiúsculas", () => {
+    const r = publicSubmitSchema.safeParse({ ...PUBLIC, fullName: "Tatiane Chabariberi", addressLine: "Rua Dom Thomas de Noronha", neighborhood: "Jardim Recanto", city: "São Paulo" });
+    assert.ok(r.success);
+    if (!r.success) return;
+    assert.equal(r.data.fullName, "TATIANE CHABARIBERI");
+    assert.equal(r.data.addressLine, "RUA DOM THOMAS DE NORONHA");
+    assert.equal(r.data.neighborhood, "JARDIM RECANTO");
+    assert.equal(r.data.city, "SÃO PAULO");
+  });
+
+  it("CAIXA ALTA no complemento e no destinatário (quando a entrega não é para a própria cliente)", () => {
+    const r = publicSubmitSchema.safeParse({
+      ...PUBLIC,
+      addressComplement: "apto 12 b",
+      noComplement: false,
+      deliveryToCustomer: false,
+      recipientName: "joão pereira",
+    });
+    assert.ok(r.success);
+    if (!r.success) return;
+    assert.equal(r.data.addressComplement, "APTO 12 B");
+    assert.equal(r.data.recipientName, "JOÃO PEREIRA");
+  });
+
+  it("e-mail NUNCA vira caixa alta", () => {
+    const r = publicSubmitSchema.safeParse({ ...PUBLIC, email: "Tatiane.Chabariberi@Example.com" });
+    assert.ok(r.success);
+    if (!r.success) return;
+    assert.equal(r.data.email, "Tatiane.Chabariberi@Example.com");
+  });
 });
 
 describe("mensagem do link", () => {
