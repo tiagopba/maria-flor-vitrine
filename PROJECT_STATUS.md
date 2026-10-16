@@ -1374,3 +1374,72 @@ permitir atualizar a situação sem abrir o detalhe de cada registro.
 - Validado com teste real no Preview (smoke visual aprovado pelo usuário)
   antes do merge; merge em `main` feito depois de `tsc`/`eslint`/663
   testes/`next build` verdes.
+
+### 22.1 Grupo "Pós-venda pendente" + refinamento visual da listagem (🟢 PRODUCTION)
+
+- **`DELIVERED` passou a se dividir em 2 grupos de apresentação** (ainda
+  nenhum `delivery_status` novo): **`POST_SALE_PENDING`** (tem follow-up
+  `OPEN` — nunca escondido pelo toggle) e **`DELIVERED`** concluído (todos
+  os follow-ups já enviados — esse sim oculto por padrão). A classificação
+  passou a considerar follow-ups reais
+  (`listRecordIdsWithOpenFollowups`), nunca só `delivery_status` —
+  [delivery-priority.ts](src/lib/fulfillment/delivery-priority.ts).
+- **Ordenação final (9 grupos)**: `DELIVERY_ISSUE` → `EM_ATRASO` →
+  **`POST_SALE_PENDING`** → `RESENT` → `IN_TRANSIT` → `PENDING` →
+  `DELIVERED` → `REFUNDED` → `UNKNOWN`.
+- Toggle renomeado para **"Mostrar entregues concluídas"** (só afeta o
+  grupo `DELIVERED` concluído); chip rápido novo **"Pós-venda pendente"**;
+  badge âmbar "`N` follow-up(s) em aberto" na linha, ao lado do badge
+  verde "Entregue".
+- **Refinamento visual da tabela** (`RecordsTable.tsx`, sem mexer em
+  lógica/filtros/ordenação/banco): cabeçalho "Transportadora/Serviço" →
+  "Transporte"; linhas mais compactas (`py-2`); `whitespace-nowrap` em
+  todas as badges; ações `ATUALIZAR`/`VER DETALHES` lado a lado no
+  desktop, podem empilhar no mobile.
+- Validado com smoke visual aprovado pelo usuário no Preview antes do
+  merge (duas rodadas: funcional e depois visual). Nenhuma migration,
+  nenhum dado real alterado.
+
+---
+
+## 23. Sidebar recolhível no Admin (🟢 PRODUCTION)
+
+Pedido: liberar mais largura horizontal pra telas operacionais (ex.:
+Faturamento e Envios) sem remover o menu lateral — e que valesse pra
+**todas** as telas do Admin, não só uma.
+
+- **[Sidebar.tsx](src/app/admin/Sidebar.tsx)** (novo, client component) —
+  substitui o `<aside>` que antes vivia inline em
+  [layout.tsx](src/app/admin/layout.tsx): dois estados (expandida/padrão,
+  `sm:w-64`; recolhida, `sm:w-[72px]`), botão `ChevronLeft`/`ChevronRight`
+  (Lucide) na borda da sidebar, com `title`/`aria-label` dinâmicos
+  ("Recolher menu"/"Expandir menu") e foco de teclado
+  (`focus-visible:ring`).
+- **Recolhida**: só ícones; cada item de
+  [AdminNav.tsx](src/app/admin/AdminNav.tsx) ganha `title` nativo
+  (tooltip) com o nome; item ativo continua com o mesmo destaque de fundo;
+  logo vira só a placa branca (nome/subtítulo somem, imagem não deforma).
+- **Persistência só visual, só no navegador**:
+  `localStorage["admin-sidebar-collapsed"]` — nunca coluna no banco, nunca
+  migration. Sem preferência salva, padrão é expandida (comportamento de
+  sempre). Lido uma vez no mount (client-side, já que `localStorage` não
+  existe no servidor); sem isso o SSR sempre renderizaria expandida.
+- **Mobile intocado por construção**: o controle de recolher e todo o
+  "esconder texto" de `AdminNav` usa classes `sm:` condicionais (nunca
+  incondicionais) — ou seja, mesmo que o estado interno seja
+  `collapsed=true` (persistido de uma sessão desktop anterior), abrir no
+  celular (abaixo do breakpoint `sm:`, onde o Admin já virava menu fixo
+  antes disso) mostra a sidebar exatamente como sempre foi, ícone + texto,
+  sem nenhuma mudança. O cabeçalho mobile com hambúrguer decorativo e
+  "Sair" (`sm:hidden`) não foi tocado.
+  **Mudado no componente/layout global do Admin** (`layout.tsx`/
+  `Sidebar.tsx`/`AdminNav.tsx`), não em Faturamento e Envios
+  especificamente — Dashboard, Produtos, Categorias, Vendedoras,
+  Configurações etc. ganham a mesma sidebar recolhível automaticamente,
+  por compartilharem o mesmo `AdminLayout`.
+- `<main>` continua `flex-1` no mesmo container flex do `<aside>` — a
+  largura liberada ao recolher é absorvida automaticamente pelo conteúdo,
+  sem nenhum JS adicional de layout.
+- Nenhuma rota, permissão ou navegação foi alterada — só chrome visual.
+- Validado com smoke visual aprovado pelo usuário no Preview antes do
+  merge. Nenhuma migration, nenhum dado real alterado.
