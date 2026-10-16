@@ -145,14 +145,26 @@ describe("parseListFilters", () => {
 describe("shouldIncludeGroup — precedência dos filtros de entregues (aprovada pelo usuário)", () => {
   const base = { situacao: "" as const, status: "" as const, mostrarEntregues: false };
 
-  it("padrão da tela (sem chip, sem status, toggle desligado): esconde DELIVERED, mostra o resto", () => {
+  it("padrão da tela (sem chip, sem status, toggle desligado): esconde só DELIVERED concluído, mostra o resto (incl. Pós-venda pendente)", () => {
     assert.equal(shouldIncludeGroup("DELIVERED", base), false);
+    assert.equal(shouldIncludeGroup("POST_SALE_PENDING", base), true);
     assert.equal(shouldIncludeGroup("EM_ATRASO", base), true);
     assert.equal(shouldIncludeGroup("REFUNDED", base), true);
   });
 
-  it("toggle 'Mostrar entregues' ligado (sem chip, sem status): mostra DELIVERED também", () => {
+  it("toggle 'Mostrar entregues concluídas' ligado (sem chip, sem status): mostra DELIVERED também", () => {
     assert.equal(shouldIncludeGroup("DELIVERED", { ...base, mostrarEntregues: true }), true);
+  });
+
+  it("Pós-venda pendente NUNCA é escondido pelo toggle, ligado ou desligado", () => {
+    assert.equal(shouldIncludeGroup("POST_SALE_PENDING", { ...base, mostrarEntregues: false }), true);
+    assert.equal(shouldIncludeGroup("POST_SALE_PENDING", { ...base, mostrarEntregues: true }), true);
+  });
+
+  it("chip Pós-venda pendente só mostra aquele grupo", () => {
+    assert.equal(shouldIncludeGroup("POST_SALE_PENDING", { ...base, situacao: "POS_VENDA_PENDENTE" }), true);
+    assert.equal(shouldIncludeGroup("DELIVERED", { ...base, situacao: "POS_VENDA_PENDENTE" }), false);
+    assert.equal(shouldIncludeGroup("IN_TRANSIT", { ...base, situacao: "POS_VENDA_PENDENTE" }), false);
   });
 
   it("chip Entregues força mostrar DELIVERED mesmo com o toggle desligado — nunca lista vazia", () => {

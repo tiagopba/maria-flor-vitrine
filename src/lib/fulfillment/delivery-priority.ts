@@ -15,6 +15,13 @@ export interface DeliveryPriorityInput {
   delivery_status: DeliveryStatus;
   tracking_code: string | null;
   expected_delivery_date: string | null;
+  /**
+   * true quando o registro tem pelo menos 1 follow-up ainda OPEN (dados
+   * reais de `fulfillment_followups`, nunca inferido só de `delivery_status`
+   * — decisão do usuário). `false` também quando a migration de follow-ups
+   * ainda não existe nesse banco (fallback seguro: trata como concluído).
+   */
+  hasOpenFollowup: boolean;
 }
 
 /**
@@ -35,6 +42,7 @@ export function isOverdue(record: DeliveryPriorityInput, todayIso: string): bool
 export const DISPLAY_GROUPS = [
   "DELIVERY_ISSUE",
   "EM_ATRASO",
+  "POST_SALE_PENDING",
   "RESENT",
   "IN_TRANSIT",
   "PENDING",
@@ -49,13 +57,19 @@ const GROUP_ORDER: Record<DisplayGroup, number> = Object.fromEntries(
   DISPLAY_GROUPS.map((group, index) => [group, index])
 ) as Record<DisplayGroup, number>;
 
+/**
+ * DELIVERED se divide em dois grupos (nunca um delivery_status novo — só
+ * apresentação): POST_SALE_PENDING quando ainda tem follow-up OPEN
+ * (nunca oculto pelo toggle "Mostrar entregues concluídas") e DELIVERED
+ * quando os 3 já foram concluídos (esse sim, oculto por padrão).
+ */
 export function displayGroupFor(record: DeliveryPriorityInput, todayIso: string): DisplayGroup {
   if (record.delivery_status === "DELIVERY_ISSUE") return "DELIVERY_ISSUE";
   if (isOverdue(record, todayIso)) return "EM_ATRASO";
+  if (record.delivery_status === "DELIVERED") return record.hasOpenFollowup ? "POST_SALE_PENDING" : "DELIVERED";
   if (record.delivery_status === "RESENT") return "RESENT";
   if (record.delivery_status === "IN_TRANSIT") return "IN_TRANSIT";
   if (record.delivery_status === "PENDING") return "PENDING";
-  if (record.delivery_status === "DELIVERED") return "DELIVERED";
   if (record.delivery_status === "REFUNDED") return "REFUNDED";
   return "UNKNOWN";
 }

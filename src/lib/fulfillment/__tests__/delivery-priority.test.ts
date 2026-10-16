@@ -18,6 +18,7 @@ function record(overrides: Partial<DeliveryPriorityInput> & { id: string }): Del
     delivery_status: "PENDING",
     tracking_code: null,
     expected_delivery_date: null,
+    hasOpenFollowup: false,
     ...overrides,
   };
 }
@@ -78,15 +79,35 @@ describe("isOverdue / EM_ATRASO — regra exata (não usa requiresTrackingInfo)"
   });
 });
 
-describe("ordenação da listagem — 8 grupos, previsão dentro do grupo, desempate por id", () => {
-  it("ordem dos grupos: DELIVERY_ISSUE, EM_ATRASO, RESENT, IN_TRANSIT, PENDING, DELIVERED, REFUNDED, UNKNOWN", () => {
+describe("DELIVERED × POST_SALE_PENDING — grupo depende de follow-up real, nunca só de delivery_status", () => {
+  it("DELIVERED com follow-up OPEN → grupo POST_SALE_PENDING", () => {
+    const r = record({ id: "1", delivery_status: "DELIVERED", hasOpenFollowup: true });
+    assert.equal(displayGroupFor(r, TODAY), "POST_SALE_PENDING");
+  });
+
+  it("DELIVERED sem follow-up OPEN (todos concluídos) → grupo DELIVERED", () => {
+    const r = record({ id: "2", delivery_status: "DELIVERED", hasOpenFollowup: false });
+    assert.equal(displayGroupFor(r, TODAY), "DELIVERED");
+  });
+
+  it("nenhum outro status vira POST_SALE_PENDING mesmo com hasOpenFollowup true (não existe follow-up fora de DELIVERED)", () => {
+    for (const status of ["PENDING", "IN_TRANSIT", "RESENT", "DELIVERY_ISSUE", "REFUNDED", "UNKNOWN"] as const) {
+      const r = record({ id: `s-${status}`, delivery_status: status, hasOpenFollowup: true });
+      assert.notEqual(displayGroupFor(r, TODAY), "POST_SALE_PENDING");
+    }
+  });
+});
+
+describe("ordenação da listagem — 9 grupos, previsão dentro do grupo, desempate por id", () => {
+  it("ordem dos grupos: DELIVERY_ISSUE, EM_ATRASO, POST_SALE_PENDING, RESENT, IN_TRANSIT, PENDING, DELIVERED, REFUNDED, UNKNOWN", () => {
     const records: DeliveryPriorityInput[] = [
       record({ id: "unknown", delivery_status: "UNKNOWN" }),
       record({ id: "refunded", delivery_status: "REFUNDED" }),
-      record({ id: "delivered", delivery_status: "DELIVERED" }),
+      record({ id: "delivered", delivery_status: "DELIVERED", hasOpenFollowup: false }),
       record({ id: "pending", delivery_status: "PENDING" }),
       record({ id: "in_transit", delivery_status: "IN_TRANSIT" }),
       record({ id: "resent", delivery_status: "RESENT" }),
+      record({ id: "post_sale_pending", delivery_status: "DELIVERED", hasOpenFollowup: true }),
       record({ id: "em_atraso", delivery_status: "IN_TRANSIT", tracking_code: "X", expected_delivery_date: YESTERDAY }),
       record({ id: "delivery_issue", delivery_status: "DELIVERY_ISSUE" }),
     ];
@@ -94,6 +115,7 @@ describe("ordenação da listagem — 8 grupos, previsão dentro do grupo, desem
     assert.deepEqual(sorted, [
       "delivery_issue",
       "em_atraso",
+      "post_sale_pending",
       "resent",
       "in_transit",
       "pending",

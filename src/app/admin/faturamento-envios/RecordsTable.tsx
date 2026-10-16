@@ -38,6 +38,19 @@ function OverdueBadge() {
   return <Badge tone="danger" className="bg-red-100 font-semibold text-red-800">⏰ Entrega atrasada</Badge>;
 }
 
+/**
+ * Grupo POST_SALE_PENDING (DELIVERED com follow-up OPEN — nunca escondido
+ * pelo toggle "Mostrar entregues concluídas"): mostrado JUNTO do badge verde
+ * "Entregue" (DeliveryStatusBadge), nunca no lugar dele.
+ */
+function PostSalePendingBadge({ openCount }: { openCount: number }) {
+  return (
+    <Badge tone="warning" className="bg-amber-100 font-semibold text-amber-900">
+      ● {openCount} follow-up{openCount === 1 ? "" : "s"} em aberto
+    </Badge>
+  );
+}
+
 function FollowupBadge({ openCount }: { openCount: number | undefined }) {
   // undefined = tabela de follow-ups ainda não existe neste banco (migration não aplicada).
   if (openCount === undefined) return <span className="text-xs text-text-muted">—</span>;
@@ -79,7 +92,9 @@ export function RecordsTable({
           {records.map((record) => {
             const sellerName = record.seller_id ? (sellerNames[record.seller_id] ?? null) : null;
             const sellerOrigin = describeSellerOrigin(sellerName, record.sales_origin);
-            const isOverdue = displayGroupFor(record, todayIso) === "EM_ATRASO";
+            const group = displayGroupFor(record, todayIso);
+            const isOverdue = group === "EM_ATRASO";
+            const isPostSalePending = group === "POST_SALE_PENDING";
             return (
               <tr key={record.id} className="border-b border-border/60 align-top last:border-0">
                 <td className="whitespace-nowrap px-4 py-3 text-text">{formatIsoDate(record.sale_date)}</td>
@@ -110,6 +125,7 @@ export function RecordsTable({
                   <div className="flex flex-wrap items-center gap-1.5">
                     <DeliveryStatusBadge status={record.delivery_status} />
                     {isOverdue && <OverdueBadge />}
+                    {isPostSalePending && <PostSalePendingBadge openCount={followupOpenCounts?.[record.id] ?? 0} />}
                   </div>
                   {record.delivery_status === "DELIVERED" && record.delivered_at && (
                     <div className="mt-1 whitespace-nowrap text-xs text-text-muted">

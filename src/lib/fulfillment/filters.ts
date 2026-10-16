@@ -8,7 +8,7 @@ const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 export const FILTER_NONE = "none";
 
 /** Chips rápidos da listagem — grupo calculado (ver delivery-priority.ts), nunca um delivery_status bruto. */
-export const QUICK_SITUATIONS = ["ATRASADO", "EM_TRANSITO", "AGUARDANDO_ENVIO", "ENTREGUE"] as const;
+export const QUICK_SITUATIONS = ["ATRASADO", "POS_VENDA_PENDENTE", "EM_TRANSITO", "AGUARDANDO_ENVIO", "ENTREGUE"] as const;
 export type QuickSituation = (typeof QUICK_SITUATIONS)[number];
 
 export interface FulfillmentListFilters {
@@ -28,9 +28,11 @@ export interface FulfillmentListFilters {
   /** Chip rápido da listagem — mutuamente exclusivo com `status` (setar um limpa o outro). */
   situacao: QuickSituation | "";
   /**
-   * Toggle "Mostrar entregues". Só vale pro chip Todas/sem filtro — o chip
-   * Entregues e `status=DELIVERED` sempre mostram entregues, independente
-   * deste valor (ver listFulfillmentRecords).
+   * Toggle "Mostrar entregues concluídas" — só afeta o grupo DELIVERED sem
+   * follow-up em aberto (grupo POST_SALE_PENDING nunca é escondido por
+   * isso). Só vale pro chip Todas/sem filtro — o chip Entregues e
+   * `status=DELIVERED` sempre mostram, independente deste valor (ver
+   * listFulfillmentRecords).
    */
   mostrarEntregues: boolean;
   page: number;
@@ -100,6 +102,7 @@ export function filtersToSearchParams(filters: FulfillmentListFilters, page: num
 /** Chip rápido → grupo calculado (delivery-priority.ts) que ele mostra. */
 export const SITUATION_TO_GROUP: Record<QuickSituation, DisplayGroup> = {
   ATRASADO: "EM_ATRASO",
+  POS_VENDA_PENDENTE: "POST_SALE_PENDING",
   EM_TRANSITO: "IN_TRANSIT",
   AGUARDANDO_ENVIO: "PENDING",
   ENTREGUE: "DELIVERED",
@@ -107,13 +110,17 @@ export const SITUATION_TO_GROUP: Record<QuickSituation, DisplayGroup> = {
 
 /**
  * Precedência dos filtros de entregues (decidida pelo usuário):
- * - chip Entregues (`situacao=ENTREGUE`) → só DELIVERED, sempre;
- * - `status=DELIVERED` no dropdown avançado → já só tem DELIVERED (filtrado
- *   no banco antes de chegar aqui) → sempre mostra;
- * - qualquer outro chip (`situacao` setado) → só aquele grupo, nunca esconde
- *   nada dele por causa do toggle;
- * - sem chip e sem status avançado → esconde DELIVERED, a menos que
- *   `mostrarEntregues` esteja ligado.
+ * - chip Entregues (`situacao=ENTREGUE`) → só DELIVERED concluído (sem
+ *   follow-up em aberto), sempre;
+ * - `status=DELIVERED` no dropdown avançado → já só tem delivery_status
+ *   DELIVERED (filtrado no banco), inclui os dois grupos de apresentação
+ *   (concluído e Pós-venda pendente) → sempre mostra;
+ * - qualquer outro chip (`situacao` setado, incl. Pós-venda pendente) → só
+ *   aquele grupo, nunca esconde nada dele por causa do toggle;
+ * - POST_SALE_PENDING NUNCA é escondido pelo toggle — só o DELIVERED
+ *   concluído (todos os follow-ups já enviados);
+ * - sem chip e sem status avançado → esconde DELIVERED concluído, a menos
+ *   que `mostrarEntregues` esteja ligado.
  * Nunca retorna lista vazia só porque mostrarEntregues=false enquanto o
  * usuário pediu DELIVERED explicitamente (chip ou status).
  */

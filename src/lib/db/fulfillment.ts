@@ -39,7 +39,10 @@ export type FulfillmentListItem = Pick<
   | "delivery_status"
   | "record_source"
   | "notes"
->;
+> & {
+  /** Pelo menos 1 follow-up OPEN — decide o grupo DELIVERED × POST_SALE_PENDING (delivery-priority.ts). */
+  hasOpenFollowup: boolean;
+};
 
 const LIST_COLUMNS =
   "id, customer_name, customer_cpf, nfe_number, invoice_total, carrier, shipping_service, tracking_code, created_at, sale_date, seller_id, sales_origin, expected_delivery_date, delivered_at, delivery_status, record_source, notes";
@@ -70,14 +73,16 @@ export async function listFulfillmentRecords(filters: FulfillmentListFilters): P
   const searchFilter = filters.query ? buildSearchFilter(filters.query) : null;
 
   // Pendência de follow-up: calculada numa tabela pequena (3 linhas por registro), não
-  // na busca principal — o volume de pedidos não chega lá.
+  // na busca principal — o volume de pedidos não chega lá. Sempre buscado (não só
+  // quando o filtro de follow-up está ativo): também decide o grupo de apresentação
+  // DELIVERED × POST_SALE_PENDING (ver delivery-priority.ts), então precisa valer
+  // pra toda a listagem, não só pro filtro "Com pendência".
+  const openFollowupIds = await listRecordIdsWithOpenFollowups();
   let followupIdFilter: string[] | null = null;
-  if (filters.followup === "pending" || filters.followup === "completed") {
-    const pendingIds = [...(await listRecordIdsWithOpenFollowups())];
-    if (filters.followup === "pending") {
-      if (pendingIds.length === 0) return { status: "ok", records: [], hasMore: false };
-      followupIdFilter = pendingIds;
-    }
+  if (filters.followup === "pending") {
+    const pendingIds = [...openFollowupIds];
+    if (pendingIds.length === 0) return { status: "ok", records: [], hasMore: false };
+    followupIdFilter = pendingIds;
   }
 
   // Busca o conjunto inteiro que bate com os filtros de banco (teto de
@@ -85,9 +90,9 @@ export async function listFulfillmentRecords(filters: FulfillmentListFilters): P
   // volume real) — a ordenação por urgência (EM_ATRASO primeiro etc.) e a
   // paginação acontecem em memória logo abaixo, porque dependem de "hoje" e
   // não só de colunas do banco.
-  let rows: FulfillmentListItem[];
+  let rows: Omit<FulfillmentListItem, "hasOpenFollowup">[];
   try {
-    rows = await fetchAllPages<FulfillmentListItem>(async (from, to) => {
+    rows = await fetchAllPages<Omit<FulfillmentListItem, "hasOpenFollowup">>(async (from, to) => {
       let query = supabase.from("fulfillment_records").select(LIST_COLUMNS).order("id").range(from, to);
       if (searchFilter) query = query.or(searchFilter);
       if (filters.saleFrom) query = query.gte("sale_date", filters.saleFrom);
@@ -110,15 +115,17 @@ export async function listFulfillmentRecords(filters: FulfillmentListFilters): P
   }
 
   if (filters.followup === "completed") {
-    const pendingIds = await listRecordIdsWithOpenFollowups();
-    rows = rows.filter((r) => !pendingIds.has(r.id));
+    rows = rows.filter((r) => !openFollowupIds.has(r.id));
   }
 
   // Precedência dos filtros de entregues (shouldIncludeGroup, pura e testada
   // em delivery-filters.test.ts): chip Entregues e status=DELIVERED sempre
-  // mostram DELIVERED, nunca uma lista vazia por causa do toggle.
+  // mostram DELIVERED, nunca uma lista vazia por causa do toggle. O grupo
+  // (DELIVERED × POST_SALE_PENDING) depende de follow-up real, nunca só de
+  // delivery_status.
   const todayIso = todayIsoInStoreTimeZone();
-  const filteredRows = rows.filter((r) => shouldIncludeGroup(displayGroupFor(r, todayIso), filters));
+  const withFollowupFlag = rows.map((r) => ({ ...r, hasOpenFollowup: openFollowupIds.has(r.id) }));
+  const filteredRows = withFollowupFlag.filter((r) => shouldIncludeGroup(displayGroupFor(r, todayIso), filters));
   const sorted = sortRecordsForListing(filteredRows, todayIso);
 
   const from = (page - 1) * FULFILLMENT_PAGE_SIZE;
