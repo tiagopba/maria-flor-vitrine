@@ -1510,3 +1510,101 @@ Tudo abaixo já está mergeado em `main` e no ar em `modamariaflor.com.br`:
   manual (admin digita transportadora + código); a API da J&T poderia
   alimentar isso automaticamente via callback, mas essa decisão de
   arquitetura ainda não foi tomada nesta rodada.
+
+### 24.3 Arquitetura revisada e CONGELADA — decisões finais de desenho (nenhuma implementação)
+
+> Fruto de 4 rodadas de revisão arquitetural (auditoria inicial + 3
+> addendums). Só desenho/documentação — nenhum código, migration ou
+> dado foi alterado em nenhuma dessas rodadas; nenhuma chamada à J&T foi
+> feita. Serve de base para quando a implementação for autorizada.
+
+**Callback e privilégios:**
+- Fluxo: `J&T → Route Handler server-side (app/api/**) → valida
+  apiAccount/timestamp/digest/schema → só então createAdminClient()
+  (service role)`. Reaproveita [src/lib/supabase/admin.ts](src/lib/supabase/admin.ts),
+  já `server-only`; nenhuma RPC `SECURITY DEFINER` exposta a
+  `anon`/`authenticated` — se uma função SQL existir, segue o padrão já
+  usado em `try_claim_email_otp_send`
+  ([20260830110000_leads_verification_fields.sql:128-131](supabase/migrations/20260830110000_leads_verification_fields.sql)):
+  `revoke execute ... from public/anon/authenticated` + `grant execute
+  ... to service_role` apenas.
+- `SUPABASE_SERVICE_ROLE_KEY`/futuras `JT_API_ACCOUNT`/`JT_PRIVATE_KEY`:
+  só dentro do Route Handler, nunca navegador, log ou banco.
+
+**Decisão de transição × persistência (TypeScript × SQL):**
+- A decisão continua em **TypeScript**, reaproveitando o
+  `planDeliveryUpdate` já existente ([delivery-update.ts](src/lib/fulfillment/delivery-update.ts))
+  — nenhuma segunda máquina de estados em PL/pgSQL.
+- A função SQL futura **só persiste**, atomicamente: evento de rastreio
+  (idempotente por `event_fingerprint`) + colunas-resumo + a transição
+  de status **já aprovada** pelo TypeScript + auditoria — nunca decide
+  nada por conta própria.
+
+**Concorrência otimista:**
+- Ordem obrigatória dentro da transação: `SELECT ... FOR UPDATE` →
+  capturar o estado travado em variáveis locais → comparar
+  imediatamente (antes de qualquer UPDATE desta função) → só então
+  gravar resumo/evento/status. Evita o bug identificado de a própria
+  função invalidar sua checagem ao escrever antes de comparar.
+- Token de comparação: **`delivery_status`, `delivered_at`, `carrier`,
+  `tracking_code`** — nunca `fulfillment_records.updated_at` (a trigger
+  `fulfillment_records_set_updated_at` dispara em todo UPDATE,
+  inclusive os de telemetria J&T como `carrier_last_synced_at`; usar o
+  campo global geraria falso conflito entre sincronizações J&T
+  concorrentes, sem ganho de segurança real). Confirmado por leitura:
+  `updated_at` de `fulfillment_records` não é usado em nenhuma decisão
+  de negócio em `src/lib/fulfillment/`ou `src/app/admin/faturamento-envios/`
+  hoje — pode continuar subindo livremente.
+- Evento sempre persiste (idempotente); se o estado capturado não bater
+  com o esperado, a transição de status é descartada com segurança
+  (nunca sobrescreve uma ação humana mais recente), retornando
+  `status_applied = false` + motivo.
+
+**Eventos fora de ordem / `details[]` com histórico:**
+- Evento cronologicamente antigo ainda entra no histórico
+  (`fulfillment_tracking_events`, idempotente) mesmo chegando atrasado.
+- `carrier_last_event_*` avança só se `event_at` do evento novo for
+  posterior ao já registrado — nunca por ordem de chegada do callback.
+  Empate exato de timestamp: desempate fica para quando houver payload
+  real (não decidido agora).
+- `carrier_last_synced_at` mede comunicação (callback ou Track Query),
+  avança mesmo sem evento novo — semântica distinta de
+  `carrier_last_event_at`.
+- `DELIVERED` é **terminal** para automação J&T: nenhum evento (atrasado
+  ou não) pode regredir `DELIVERED` para outro status automaticamente;
+  regressão só por ação humana manual.
+- Um callback com múltiplos itens em `details[]` é processado em lote:
+  valida/deduplica/persiste todos os inéditos, reconcilia
+  cronologicamente, recalcula o resumo uma vez e executa **no máximo
+  uma** transição final — nunca uma auditoria por evento histórico
+  intermediário.
+- Duplicata (fingerprint já existente): não cria linha, não cria audit,
+  não repete transição; callback continua respondendo sucesso.
+
+**Corpo da requisição e digest:**
+- Corpo deve ser lido como texto bruto (preservando bytes/ordem/encoding
+  originais) antes de qualquer parse, porque não se sabe ainda sobre
+  qual representação exata o digest é calculado — `JSON.parse` seguido
+  de `JSON.stringify` não é garantidamente equivalente ao original.
+- Limite de tamanho verificado **antes** do buffering irrestrito do
+  corpo (ex.: checar `Content-Length` antes de ler o stream completo).
+- Raw payload **não será armazenado** — só os campos normalizados em
+  `fulfillment_tracking_events` (decisão do usuário, mantida).
+- Fórmula definitiva do `event_fingerprint` continua **pendente** de
+  inspeção de payload real (candidato de trabalho: `carrier + billCode +
+  scanCode + scanTime + networkId`, sem fechar `txlogisticId`/`scanType`).
+
+**4 bloqueios externos (impedem início da implementação):**
+1. Fórmula oficial do `digest` + exemplos oficiais de geração (incluindo
+   sobre qual representação exata do corpo ela incide).
+2. Política oficial de retry/redelivery do Logistics Trajectory Return.
+3. Pelo menos 1 payload real (callback ou Track Query) — idealmente com
+   `details[]` contendo mais de um evento — para validar fingerprint,
+   timezone de `scanTime` e desempate de timestamp.
+4. Local exato onde se cadastra/configura a URL de retorno do callback
+   junto à J&T.
+
+**Nada disto foi implementado.** Nenhuma migration, nenhuma rota,
+nenhuma credencial, nenhuma chamada à J&T — só o desenho está congelado,
+pronto para quando os bloqueios acima forem resolvidos e o usuário
+autorizar a implementação.
