@@ -1443,3 +1443,70 @@ Faturamento e Envios) sem remover o menu lateral — e que valesse pra
 - Nenhuma rota, permissão ou navegação foi alterada — só chrome visual.
 - Validado com smoke visual aprovado pelo usuário no Preview antes do
   merge. Nenhuma migration, nenhum dado real alterado.
+
+---
+
+## 24. Handoff — estado atual de `main` e preparação da integração J&T (ainda NÃO iniciada)
+
+> Handoff de contexto (86%), sem nenhuma implementação de código nesta
+> entrada — só este registro. Leia antes de começar a integração J&T.
+
+### 24.1 Estado atual de `main` (🟢 PRODUCTION, commit `90f3cce67e0237e3b417fe797ca781e91968f409`)
+
+Tudo abaixo já está mergeado em `main` e no ar em `modamariaflor.com.br`:
+
+- **Faturamento e Envios — agilidade operacional** (seção 22): filtros
+  rápidos, ordenação por urgência, edição rápida por linha reaproveitando
+  a mesma camada de negócio do detalhe (`applyDeliveryUpdate`).
+- **Pós-venda pendente** (seção 22.1): `DELIVERED` se divide em
+  `POST_SALE_PENDING` (tem follow-up `OPEN`, nunca escondido) e
+  `DELIVERED` concluído (oculto por padrão) — classificação baseada em
+  follow-ups reais, nunca só `delivery_status`.
+- **"Entrega atrasada" (`EM_ATRASO`) é só estado DERIVADO de apresentação**
+  (seção 22): `delivery_status === "IN_TRANSIT" && tracking_code não
+  vazio && expected_delivery_date existe && expected_delivery_date <
+  hoje`. Nunca um valor novo de `delivery_status`, nunca persistido —
+  calculado na leitura, em
+  [delivery-priority.ts](src/lib/fulfillment/delivery-priority.ts).
+- **Rastreio salvo num registro `PENDING` sobe automaticamente pra
+  `IN_TRANSIT`** quando transportadora + `tracking_code` passam a existir
+  na mesma operação (`shouldAutoSetInTransit`/`gainedTrackingInfo`, seção
+  22) — tanto no fluxo de rastreamento pendente quanto na edição rápida da
+  listagem; nunca sobrescreve outro status.
+- **Sidebar recolhível** (seção 23): global no Admin, preferência só em
+  `localStorage`, mobile intocado.
+- Nenhuma migration pendente de aplicação no momento — todas as desta
+  leva (normalização de endereço, override de frete legado, etc.) já
+  foram aplicadas em rodadas anteriores (seções 21–23).
+
+### 24.2 Integração J&T — preparação, NADA implementado ainda
+
+- **Status: NÃO iniciada.** Nenhum código, nenhuma migration, nenhuma
+  credencial — esta entrada é só o registro de handoff antes de começar.
+- **Documentação já disponível** (do lado do usuário, fora deste
+  repositório) para quando a implementação começar:
+  - **Logistics Track Query** (consulta pontual de rastreio);
+  - **Logistics Track Subscription** (inscrição pra receber atualizações,
+    base do callback);
+  - **Logistics Trajectory Return** (retorno/callback da trajetória).
+  - Endpoints oficiais da J&T e os `scanCode`s conhecidos (valores de
+    status de rastreio da transportadora) já estão mapeados pelo usuário
+    — ainda não transcritos neste repositório nem usados em código.
+- **Callback ainda NÃO configurado** — nenhuma rota/endpoint deste projeto
+  recebe webhook da J&T hoje.
+- **Fórmula do `digest` (assinatura das requisições à API da J&T) ainda
+  PENDENTE** — não decidida/implementada nesta rodada.
+- **Nenhuma credencial J&T (chave, segredo, token) está salva em código
+  nem no banco** — quando a integração começar, precisa entrar como
+  variável de ambiente server-only (mesmo padrão de
+  `SUPABASE_SERVICE_ROLE_KEY`, nunca `NEXT_PUBLIC_*`), nunca commitada.
+- **Nenhuma migration da integração J&T foi criada** — qualquer coluna/
+  tabela nova (ex.: guardar o `scanCode` bruto da J&T, histórico de
+  trajetória) ainda precisa ser desenhada e revisada antes de aplicar,
+  seguindo o mesmo processo de aprovação explícita já usado neste projeto
+  (ver seção 4 de `docs/deployment.md`).
+- Quando a integração começar: provável ponto de entrada é o mesmo
+  `shouldAutoSetInTransit`/fluxo de rastreamento (seção 22) — hoje
+  manual (admin digita transportadora + código); a API da J&T poderia
+  alimentar isso automaticamente via callback, mas essa decisão de
+  arquitetura ainda não foi tomada nesta rodada.
