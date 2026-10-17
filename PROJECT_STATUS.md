@@ -1608,3 +1608,65 @@ Tudo abaixo já está mergeado em `main` e no ar em `modamariaflor.com.br`:
 nenhuma credencial, nenhuma chamada à J&T — só o desenho está congelado,
 pronto para quando os bloqueios acima forem resolvidos e o usuário
 autorizar a implementação.
+
+---
+
+## 25. Fix: slug único automático para produto novo (Duplicar / nome repetido)
+
+> Branch `fix/product-duplicate-slug-collision`. Corrige um bug real de
+> Production — não é uma feature nova.
+
+**Sintoma:** cadastrar um produto novo com o mesmo nome de outro já
+existente, ou usar **Duplicar produto**, mostrava sempre "Este endereço
+já está sendo usado por outra peça." e bloqueava o salvamento.
+
+**Causa raiz:** antes da migration do `internal_code` (seção 19), o slug
+de um produto novo era montado como nome + `code` (manual, único no
+banco) + cor — uma colisão de slug entre produtos de nomes iguais era
+"praticamente impossível por construção". A migration
+`20261018110000_save_product_with_variants_internal_code.sql` removeu
+`code` do payload de criação (o identificador nasce no banco, só depois
+do INSERT); `ProductForm.computeSlug` já previa isso e passou a montar o
+slug de um produto novo só com nome(+cor) — **sem nenhum componente que
+garantisse unicidade**. Dois produtos com o mesmo nome (ou Duplicar, que
+repete o nome do original por design — `admin/produtos/novo/page.tsx`,
+`?duplicar=<id>`, nunca copia `id`/`code`/`internal_code`/slug/histórico)
+passaram a colidir.
+
+**Correção** (`supabase/migrations/20261019090000_save_product_with_variants_unique_slug.sql`,
+função `save_product_with_variants`, único arquivo de lógica alterado):
+- Caminho de **UPDATE** (produto já existente, slug editado manualmente
+  pela admin): comportamento **idêntico** a antes — colisão continua
+  bloqueando com `slug_taken`/`slug_reserved`, porque é uma escolha
+  explícita da admin que ela precisa decidir.
+- Caminho de **INSERT** (produto novo — cadastro normal ou Duplicar):
+  colisão nunca bloqueia mais. A function pré-aloca o `internal_code`
+  real do produto (`nextval` da sequence verdadeira, nunca um contador
+  calculado fora do banco) e, só se o slug preferido colidir, aplica um
+  sufixo determinístico e globalmente único
+  (`vestido-tule` → `vestido-tule-00000002`). Checagem defensiva (nunca
+  silenciada) se até o sufixo colidir — vira erro `slug_suffix_collision`,
+  nunca um dado salvo errado.
+- **Nenhum produto existente foi alterado**; nenhum slug antigo muda;
+  nenhuma migration destrutiva; nenhum produto é renomeado
+  automaticamente.
+
+**Testes novos** (`src/lib/db/__tests__/save-product-with-variants-slug.test.ts`,
+10 cenários — nome inédito, nomes repetidos, Duplicar, slugs únicos,
+nomes idênticos permitidos, `internal_code` distinto por produto, UPDATE
+continua bloqueando colisão, UNIQUE do banco como proteção real):
+Postgres em WASM (`@electric-sql/pglite`, nova devDependency — já estava
+em `node_modules` de uma rodada anterior, nunca declarada; agora
+formalizada), executando o **arquivo da migration de verdade** (lido do
+disco), não uma cópia reescrita. Nenhum dado real tocado — banco em
+memória, descartado a cada execução. `npm test` passou a incluir
+`src/lib/db/__tests__/*.test.ts`.
+
+**Validação:**
+- `tsc --noEmit`, `eslint`, `npm test` (678/678), `next build`: verdes.
+- Preview `dpl_EYJq7NVemcZJtTwHUkGLxpLEVLyR` (commit `1e8716e`): aprovado
+  pelo usuário — duplicar produto mantendo o nome, cadastrar produto novo
+  com nome idêntico a outro existente, publicação concluída sem erro de
+  slug.
+- Merge `--no-ff` em `main` e deploy de Production registrados no commit
+  seguinte a esta entrada (handoff desta mesma rodada).

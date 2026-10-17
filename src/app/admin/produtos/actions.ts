@@ -32,6 +32,7 @@ export type SaveProductVariantsActionResult =
 const FRIENDLY_SAVE_ERRORS: Record<string, string> = {
   slug_taken: "Este endereço já está sendo usado por outra peça.",
   slug_reserved: "Este endereço pertence ao histórico de outra peça.",
+  slug_suffix_collision: "Não foi possível gerar um endereço único para esta peça. Tente salvar novamente.",
   duplicate_code: "Este código já está cadastrado.",
   duplicate_slug: "Este endereço já está sendo usado por outra peça.",
   duplicate_key: "Um dos dados já está cadastrado.",
