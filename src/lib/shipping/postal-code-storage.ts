@@ -3,10 +3,11 @@
 import { isValidPostalCode } from "./postal-code";
 
 /**
- * Guarda SÓ o CEP opcional informado no bloco de frete de /favoritos —
- * mesmo espírito de state-storage.ts (versionado, self-heal em leitura
+ * Guarda SÓ o CEP informado no bloco de frete de /favoritos — mesmo
+ * espírito de state-storage.ts (versionado, self-heal em leitura
  * inválida). Único uso: repassar à vendedora no texto da mensagem de
- * WhatsApp (ver buildFavoritesWhatsAppMessage); nunca consulta Correios.
+ * WhatsApp (ver buildFavoritesWhatsAppMessage) quando a consulta ViaCEP
+ * (viacep.ts) confirmou a cidade; nunca salvo em banco.
  */
 const STORAGE_KEY = "mariaflor:shipping-postal-code:v1";
 

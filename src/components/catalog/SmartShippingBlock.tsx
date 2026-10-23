@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatBRL } from "@/components/ui/Price";
 import { BRAZILIAN_STATES } from "@/lib/shipping/brazilian-states";
 import { getSavedShippingState, saveShippingState } from "@/lib/shipping/state-storage";
 import { formatPostalCodeInput } from "@/lib/shipping/postal-code";
 import { getSavedPostalCode, saveShippingPostalCode } from "@/lib/shipping/postal-code-storage";
+import { getSavedShippingCity, saveShippingCity, clearShippingCity } from "@/lib/shipping/city-storage";
+import { lookupCep } from "@/lib/shipping/viacep";
 
 interface PublicFreeShippingRule {
   stateCode: string;
@@ -42,6 +44,8 @@ function fetchRulesOnce(): Promise<PublicFreeShippingRule[]> {
   return rulesPromise;
 }
 
+const inputClass =
+  "h-10 w-40 rounded-lg border border-border bg-surface px-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40";
 const selectClass =
   "h-10 rounded-lg border border-border bg-surface px-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40";
 
@@ -66,18 +70,16 @@ function StateSelect({
   );
 }
 
+type CepStatus = "idle" | "loading" | "success" | "error";
+
 /**
- * Bloco inteligente de frete de /favoritos — calcula o benefício de frete
- * grátis com base no total Pix/à vista das peças DISPONÍVEIS atualmente
- * na seleção (nunca o preço do cartão) contra `free_shipping_rules`
- * (mesma regra PAC/SEDEX do Admin, via GET /api/frete-gratis).
- *
- * Reaproveita a UF salva em mariaflor:shipping-state:v1 (mesma chave do
- * antigo FreeShippingAccordion — que continua intocado, usado só na
- * página de produto) e o mesmo endpoint público, que devolve TODAS as
- * regras ativas de uma vez — por isso no máximo 1 GET por visita: a
- * primeira UF escolhida (ou já salva) dispara a única busca; trocar de UF
- * depois só refiltra a lista em memória, sem nova requisição.
+ * Bloco inteligente de frete de /favoritos. Fluxo principal: a cliente
+ * informa o CEP, a gente consulta o ViaCEP só pra descobrir UF + cidade, e
+ * essa UF alimenta EXATAMENTE a mesma regra de frete grátis de sempre
+ * (`free_shipping_rules` via GET /api/frete-gratis — nunca duplicada
+ * aqui). A consulta de CEP é só uma forma mais rápida de preencher a UF:
+ * se falhar, der timeout ou o CEP não existir, a cliente sempre pode
+ * escolher o estado manualmente — a venda nunca depende do ViaCEP.
  *
  * totalPix vem pronto do pai (FavoritesPageClient, que já tem os produtos
  * carregados) — nenhuma busca de produtos nova aqui, e o valor recalcula
@@ -85,14 +87,28 @@ function StateSelect({
  * adicionar/remover peça (mesmo evento FAVORITES_CHANGED_EVENT de sempre).
  */
 export function SmartShippingBlock({ totalPix }: { totalPix: number }) {
+  const [cepInput, setCepInput] = useState<string>(() => getSavedPostalCode() ?? "");
+  const [resolvedCity, setResolvedCity] = useState<string | null>(() => getSavedShippingCity());
   const [selectedState, setSelectedState] = useState<string | null>(() => getSavedShippingState());
+  const [cepStatus, setCepStatus] = useState<CepStatus>(() =>
+    getSavedPostalCode() && getSavedShippingCity() ? "success" : "idle"
+  );
+  // Aberto de cara quando a última visita ficou no fallback manual (UF
+  // salva sem cidade resolvida) — senão fica escondido atrás do link
+  // discreto, já que o fluxo principal é o CEP.
+  const [manualOpen, setManualOpen] = useState<boolean>(
+    () => Boolean(getSavedShippingState() && !getSavedShippingCity())
+  );
   const [rules, setRules] = useState<PublicFreeShippingRule[] | null>(null);
   const [loadError, setLoadError] = useState(false);
-  const [postalCode, setPostalCode] = useState<string>(() => getSavedPostalCode() ?? "");
-  // Derivado (nunca setState síncrono dentro do efeito de montagem abaixo):
-  // "carregando" é só "tem UF, ainda sem regras, sem erro" — nada a
-  // despachar antes do fetch resolver.
-  const loading = selectedState !== null && rules === null && !loadError;
+
+  // Dígitos do último CEP que já foi consultado (sucesso ou erro) — evita
+  // repetir a chamada ao ViaCEP pro mesmo valor (change + blur do mesmo
+  // CEP completo), mas permite tentar de novo se a cliente apagar e
+  // digitar os mesmos 8 dígitos outra vez (ver handleCepChange).
+  const lastAttemptedDigitsRef = useRef<string | null>(cepStatus === "success" ? cepInput.replace(/\D/g, "") : null);
+
+  const rulesLoading = selectedState !== null && rules === null && !loadError;
 
   function fetchRules() {
     fetchRulesOnce()
@@ -103,26 +119,80 @@ export function SmartShippingBlock({ totalPix }: { totalPix: number }) {
       .catch(() => setLoadError(true));
   }
 
-  // Só dispara ao montar quando já existe UF salva de uma visita anterior
-  // — sem UF, fica parado até a cliente escolher (handleSelectState). Se
-  // este componente remontar (ver comentário de rulesPromise acima),
-  // fetchRulesOnce() reaproveita a promise já resolvida — nenhum novo GET.
+  // Só busca ao montar quando já existe UF salva de uma visita anterior
+  // (CEP resolvido ou fallback manual) — sem UF ainda, fica parado até o
+  // CEP resolver ou a cliente escolher manualmente. Se este componente
+  // remontar (ver comentário de rulesPromise acima), fetchRulesOnce()
+  // reaproveita a promise já resolvida — nenhum novo GET.
   useEffect(() => {
     if (selectedState) fetchRules();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function handleSelectState(code: string) {
-    if (!code) return;
-    setSelectedState(code);
-    saveShippingState(code);
+  async function runLookup(digits: string) {
+    if (lastAttemptedDigitsRef.current === digits) return;
+    lastAttemptedDigitsRef.current = digits;
+    setCepStatus("loading");
+
+    const result = await lookupCep(digits);
+
+    // O campo pode ter mudado de novo enquanto a consulta corria — só
+    // aplica o resultado se os dígitos ainda forem os mesmos que pediram.
+    if (lastAttemptedDigitsRef.current !== digits) return;
+
+    if (!result) {
+      setCepStatus("error");
+      setManualOpen(true);
+      return;
+    }
+
+    setCepStatus("success");
+    setResolvedCity(result.city);
+    saveShippingCity(result.city);
+    setSelectedState(result.stateCode);
+    saveShippingState(result.stateCode);
+    setManualOpen(false);
     fetchRules();
   }
 
-  function handlePostalCodeChange(raw: string) {
+  function handleCepChange(raw: string) {
     const masked = formatPostalCodeInput(raw);
-    setPostalCode(masked);
+    setCepInput(masked);
     saveShippingPostalCode(masked);
+    const digits = masked.replace(/\D/g, "");
+
+    // Qualquer edição no CEP invalida a cidade resolvida anteriormente —
+    // ela só volta a valer se a nova consulta confirmar o mesmo endereço.
+    if (resolvedCity) {
+      setResolvedCity(null);
+      clearShippingCity();
+    }
+
+    if (digits.length === 8) {
+      void runLookup(digits);
+    } else {
+      // Limpa a marca de "já tentei esses dígitos" — permite consultar de
+      // novo se a cliente completar os mesmos 8 dígitos outra vez.
+      lastAttemptedDigitsRef.current = null;
+      if (cepStatus !== "idle") setCepStatus("idle");
+    }
+  }
+
+  function handleCepBlur() {
+    const digits = cepInput.replace(/\D/g, "");
+    if (digits.length === 8) void runLookup(digits);
+  }
+
+  function handleManualSelectState(code: string) {
+    if (!code) return;
+    setSelectedState(code);
+    saveShippingState(code);
+    // Escolha manual nunca equivale a um CEP confirmado — nunca inventa
+    // CEP/cidade pra mensagem de WhatsApp (ver favorites-click-action.ts).
+    setResolvedCity(null);
+    clearShippingCity();
+    setCepStatus("idle");
+    fetchRules();
   }
 
   const rulesForState = selectedState && rules ? rules.filter((r) => r.stateCode === selectedState) : [];
@@ -131,17 +201,10 @@ export function SmartShippingBlock({ totalPix }: { totalPix: number }) {
   const unlocked = rulesForState.filter((r) => totalPix >= r.minimumAmount).sort((a, b) => a.minimumAmount - b.minimumAmount);
   const locked = rulesForState.filter((r) => totalPix < r.minimumAmount).sort((a, b) => a.minimumAmount - b.minimumAmount);
 
-  function renderContent() {
-    if (!selectedState) {
-      return (
-        <>
-          <p className="text-[15px] font-semibold leading-snug text-text">🚚 Confira suas condições de frete</p>
-          <StateSelect value="" onChange={handleSelectState} placeholder="Selecionar estado" />
-        </>
-      );
-    }
+  function renderFreeShippingMessage() {
+    if (!selectedState) return null;
 
-    if (loading) {
+    if (rulesLoading) {
       return <p className="text-sm text-text-muted">Calculando o frete para {stateName}...</p>;
     }
 
@@ -157,22 +220,9 @@ export function SmartShippingBlock({ totalPix }: { totalPix: number }) {
 
     if (rulesForState.length === 0) {
       return (
-        <>
-          <p className="text-[15px] font-semibold leading-snug text-text">
-            🚚 Vamos calcular a melhor opção de frete para você
-          </p>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-text-muted">Informe seu CEP para a vendedora calcular:</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              placeholder="00000-000"
-              value={postalCode}
-              onChange={(e) => handlePostalCodeChange(e.target.value)}
-              className="h-10 w-40 rounded-lg border border-border bg-surface px-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40"
-            />
-          </label>
-        </>
+        <p className="text-sm text-text-muted">
+          Sem regra de frete grátis cadastrada para {stateName} no momento.
+        </p>
       );
     }
 
@@ -229,14 +279,51 @@ export function SmartShippingBlock({ totalPix }: { totalPix: number }) {
 
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-border p-3.5">
-      {renderContent()}
+      <p className="text-[15px] font-semibold leading-snug text-text">🚚 Informe seu CEP para o frete</p>
 
-      {selectedState && !loading && (
-        <label className="flex flex-col gap-1 pt-1">
-          <span className="text-xs text-text-muted">Trocar estado</span>
-          <StateSelect value={selectedState} onChange={handleSelectState} placeholder="Selecionar estado" />
-        </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-xs text-text-muted">CEP</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          placeholder="00000-000"
+          value={cepInput}
+          onChange={(e) => handleCepChange(e.target.value)}
+          onBlur={handleCepBlur}
+          className={inputClass}
+        />
+      </label>
+
+      {cepStatus === "loading" && <p className="text-sm text-text-muted">Consultando CEP...</p>}
+
+      {cepStatus === "success" && resolvedCity && selectedState && (
+        <p className="text-sm font-medium text-text">
+          ✓ {resolvedCity} - {selectedState}
+        </p>
       )}
+
+      {cepStatus === "error" && (
+        <p className="text-sm text-text-muted">
+          Não conseguimos consultar esse CEP. Você pode escolher seu estado abaixo.
+        </p>
+      )}
+
+      {manualOpen ? (
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-text-muted">Estado (UF)</span>
+          <StateSelect value={selectedState ?? ""} onChange={handleManualSelectState} placeholder="Selecionar estado" />
+        </label>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setManualOpen(true)}
+          className="self-start text-xs text-text-muted underline underline-offset-2 hover:text-text"
+        >
+          Não sabe seu CEP ou não conseguiu consultar? Escolher estado
+        </button>
+      )}
+
+      {renderFreeShippingMessage()}
     </div>
   );
 }

@@ -18,6 +18,7 @@ import {
 import { resolveProductPricing, resolveTrackingPrice } from "@/lib/catalog/pricing";
 import { getSavedShippingState } from "@/lib/shipping/state-storage";
 import { getSavedPostalCode } from "@/lib/shipping/postal-code-storage";
+import { getSavedShippingCity } from "@/lib/shipping/city-storage";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
 import { submitFavoritesWhatsAppClick } from "@/lib/whatsapp/favorites-click-action";
@@ -237,11 +238,11 @@ export function FavoritesPageClient({
         // montar a mensagem; sem UF salva isso é null e a mensagem sai
         // idêntica à de sempre (ver buildFavoritesWhatsAppMessage).
         shippingStateCode: getSavedShippingState(),
-        // Mesmo espírito acima — só preenchido quando a cliente informou
-        // um CEP completo no SmartShippingBlock (UF sem regra de frete
-        // grátis); revalidado de novo no servidor antes de entrar na
-        // mensagem.
+        // Mesmo espírito acima — CEP e cidade só ficam preenchidos juntos
+        // quando o ViaCEP confirmou os dois no SmartShippingBlock;
+        // revalidado de novo no servidor antes de entrar na mensagem.
         shippingPostalCode: getSavedPostalCode(),
+        shippingCity: getSavedShippingCity(),
       });
 
       if ("error" in result) {
@@ -332,7 +333,7 @@ export function FavoritesPageClient({
         className="h-12 w-full gap-2 text-base font-semibold uppercase tracking-wide"
       >
         <WhatsAppIcon />
-        Comprar
+        Finalizar pedido
       </Button>
 
       <Link href="/novidades">

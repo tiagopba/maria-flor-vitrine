@@ -1,8 +1,8 @@
 /**
- * CEP brasileiro — só formato (8 dígitos, máscara 00000-000), nunca
- * consulta aos Correios. Usado pelo campo opcional do bloco de frete de
- * /favoritos quando a UF escolhida não tem regra de frete grátis
- * cadastrada.
+ * CEP brasileiro — só formato (8 dígitos, máscara 00000-000). A consulta
+ * real (ViaCEP) fica em viacep.ts; aqui é só validação/máscara, usado pelo
+ * campo de CEP do bloco de frete de /favoritos (SmartShippingBlock) e
+ * revalidado de novo no servidor antes de entrar na mensagem de WhatsApp.
  */
 const POSTAL_CODE_REGEX = /^\d{5}-\d{3}$/;
 
