@@ -1670,3 +1670,86 @@ memória, descartado a cada execução. `npm test` passou a incluir
   slug.
 - Merge `--no-ff` em `main` e deploy de Production registrados no commit
   seguinte a esta entrada (handoff desta mesma rodada).
+
+---
+
+## 26. Carrinho (`/favoritos`): CEP com ViaCEP alimentando o frete grátis existente + CTA "Finalizar pedido"
+
+> Branch `feat/cart-cep-shipping`. Melhoria pequena e objetiva no carrinho
+> público — **não é checkout**: sem endereço completo, sem CEP salvo em
+> banco, sem nova migration, sem tocar carrinho/favoritos/round-robin.
+
+**Pedido:** trocar o CTA `COMPRAR` por `FINALIZAR PEDIDO` e trocar a
+escolha manual de UF pelo fluxo principal de CEP (`SmartShippingBlock`,
+`/favoritos`), consultando o ViaCEP só pra descobrir UF + cidade — a UF
+resultante precisa alimentar **exatamente** a mesma regra de frete grátis
+já existente (`free_shipping_rules` / `GET /api/frete-gratis`), nunca uma
+cópia. A venda nunca pode depender da API externa.
+
+**Auditoria prévia (antes de qualquer código):** não existia nenhuma
+integração real de CEP no projeto (só validação de formato em
+`src/lib/shipping/postal-code.ts` e, num contexto totalmente diferente,
+em `src/lib/intake/cep.ts` para o fluxo pós-venda). O componente real do
+carrinho é `SmartShippingBlock.tsx` (não `FreeShippingAccordion.tsx`, que
+é só da página de produto e ficou intocado). A mensagem de WhatsApp é
+montada em `message-builder.ts`/`favorites-click-action.ts`; o
+round-robin (`resolve-seller.ts`) não foi tocado.
+
+**Implementação:**
+- CTA: `"Comprar"` → `"Finalizar pedido"` (mesmo ícone do WhatsApp inline,
+  mesmo estilo — `FavoritesPageClient.tsx`); nenhum evento/analytics
+  alterado por causa do texto.
+- `src/lib/shipping/viacep.ts` (novo): client ViaCEP com timeout de 6s;
+  qualquer falha (rede, timeout, CEP não encontrado, UF inválida) devolve
+  `null` — quem chama cai no fallback manual. A venda nunca depende desta
+  chamada.
+- `src/components/catalog/useCepShipping.ts` (novo hook): mascara o CEP
+  (`00000-000`, só dígitos), consulta o ViaCEP só ao completar 8 dígitos
+  ou no blur (nunca por tecla), e alimenta `selectedState` com a UF
+  resolvida — mesmo estado que já existia (`state-storage.ts`, localStorage,
+  **intocado**) e que já era usado pela regra de frete grátis antes desta
+  feature.
+- `SmartShippingBlock.tsx` (reescrito): vira componente controlado
+  (recebe `shipping` do hook via prop) — fluxo principal é o campo de CEP;
+  mostra `"✓ Cidade - UF"` quando resolvido; seletor manual de UF fica
+  escondido por padrão, com link discreto para abri-lo, e abre sozinho em
+  caso de falha do ViaCEP (mensagem "Não conseguimos consultar esse CEP.
+  Você pode escolher seu estado abaixo."). `FINALIZAR PEDIDO` nunca é
+  bloqueado pela consulta externa.
+- `message-builder.ts`/`favorites-click-action.ts`: mensagem de WhatsApp
+  passa a incluir `"CEP: X"` + `"Cidade/UF: Y"` quando o ViaCEP confirmou
+  os dois (par — nunca um sem o outro), ou só `"UF: Z"` no fallback manual
+  (nunca inventa CEP); tudo que já era enviado continua sendo enviado.
+
+**Ajuste pós-validação (commit `85608ee`, antes do merge):** a primeira
+rodada persistia CEP e cidade em `localStorage`
+(`postal-code-storage.ts`/`city-storage.ts`, ambos novos). O usuário pediu
+para não persistir — CEP/cidade antigos não devem reaparecer num aparelho
+compartilhado nem ficar guardados sem necessidade. Corrigido: CEP e
+cidade agora vivem só em estado React (`useCepShipping`, levantado para
+`FavoritesPageClient` — que nunca desmonta ao adicionar/remover peça, só
+o `SmartShippingBlock` desmonta via o skeleton de loading), nunca em
+localStorage; os dois arquivos de storage foram removidos (sem nenhum
+outro uso no projeto). **UF continua em `state-storage.ts`, como já era
+antes desta feature inteira — não alterado.** Confirmado em teste manual:
+com chaves antigas de CEP/cidade ainda no `localStorage` do navegador
+(resquício da primeira rodada), o código novo as ignora; após reload, o
+campo de CEP volta vazio e a UF permanece.
+
+**Testes:** nenhum arquivo em `src/lib/shipping/` ou `src/lib/whatsapp/`
+está sob as pastas que o `npm test` varre (`src/lib/{fulfillment,catalog,
+sellers,intake,validation,db}/__tests__/*.test.ts`) — nenhum teste novo
+foi adicionado; os 678 testes existentes continuam passando sem alteração
+(nenhum deles cobria este código antes nem depois).
+
+**Validação:**
+- `tsc --noEmit`, `eslint`, `npm test` (678/678), `next build`: verdes nas
+  duas rodadas (implementação e ajuste de persistência).
+- Preview `maria-flor-vitrine-git-feat-cart-cep-shipping-tiagopba.vercel.app`
+  (mesmo alias nas duas rodadas): aprovado pelo usuário depois de validação
+  manual — CEP reconhecido, cidade/UF exibidas, regra de frete grátis
+  aplicada pela UF, fallback manual funcionando, `FINALIZAR PEDIDO`
+  correto, mensagem do WhatsApp chegando com CEP + Cidade/UF + produtos/
+  tamanhos.
+- Merge `--no-ff` em `main` e deploy de Production registrados no commit
+  seguinte a esta entrada (handoff desta mesma rodada).
