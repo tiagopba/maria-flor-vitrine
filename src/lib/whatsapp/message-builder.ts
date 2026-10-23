@@ -167,6 +167,20 @@ export interface FavoritesSelectionItem {
 }
 
 /**
+ * Dados de frete opcionais pra mensagem de /favoritos — vêm do CEP
+ * consultado no ViaCEP (SmartShippingBlock/viacep.ts) ou do fallback
+ * manual de UF, nunca das duas formas misturadas: `postalCode`+`city` só
+ * aparecem juntos quando o CEP foi de fato confirmado; sem isso, no
+ * máximo `stateCode` sozinho (fallback manual) — nunca se inventa um CEP
+ * que não foi confirmado.
+ */
+export interface FavoritesShippingInfo {
+  postalCode?: string;
+  city?: string;
+  stateCode?: string;
+}
+
+/**
  * Mensagem para "Falar com uma vendedora" na página /favoritos — uma peça
  * SOLD_OUT nunca chega aqui (quem chama já filtrou antes; ver
  * favorites-click-action.ts), então todo item da lista é, por definição,
@@ -187,8 +201,7 @@ export interface FavoritesSelectionItem {
 export function buildFavoritesWhatsAppMessage(
   products: FavoritesSelectionItem[],
   selectionUrl?: string,
-  shippingStateLabel?: string,
-  shippingPostalCode?: string
+  shipping?: FavoritesShippingInfo
 ): string {
   const lines = [`Oi! Separei algumas peças na Vitrine Maria Flor ${HEART}`, ""];
 
@@ -226,20 +239,14 @@ export function buildFavoritesWhatsAppMessage(
     lines.push("", `${CAMERA} Fotos das peças:`, selectionUrl);
   }
 
-  // Totalmente opcional — só entra quando a cliente escolheu um estado no
-  // seletor de frete grátis de /favoritos (ver FreeShippingAccordion).
-  // Ausente, a mensagem fica idêntica à de sempre.
-  if (shippingStateLabel) {
-    lines.push("", `Estado para envio: ${shippingStateLabel}`);
-  }
-
-  // Só entra quando a cliente informou um CEP válido no bloco de frete de
-  // /favoritos (ver SmartShippingBlock) — nunca consultado nos Correios,
-  // só repassado pra vendedora calcular. Ausente, mensagem idêntica à de
-  // sempre.
-  if (shippingPostalCode) {
-    if (!shippingStateLabel) lines.push("");
-    lines.push(`CEP para cálculo do frete: ${shippingPostalCode}`);
+  // CEP + cidade só aparecem juntos quando o ViaCEP confirmou os dois
+  // (ver SmartShippingBlock/viacep.ts) — nunca uma mensagem com CEP sem
+  // cidade confirmada. Sem essa confirmação, cai pro fallback "UF: X" da
+  // escolha manual. Sem nada, a mensagem fica idêntica à de sempre.
+  if (shipping?.postalCode && shipping.city && shipping.stateCode) {
+    lines.push("", `CEP: ${shipping.postalCode}`, `Cidade/UF: ${shipping.city} - ${shipping.stateCode}`);
+  } else if (shipping?.stateCode) {
+    lines.push("", `UF: ${shipping.stateCode}`);
   }
 
   return lines.join("\n");

@@ -9,7 +9,7 @@ import { getSiteUrl } from "@/lib/site";
 import { formatFitSizesLabel } from "@/lib/catalog/fit-size-format";
 import { resolveProductPricing, resolveTrackingPrice } from "@/lib/catalog/pricing";
 import { getSizeFitCompatibilityWithClient } from "@/lib/db/product-size-fit";
-import { getStateLabel } from "@/lib/shipping/brazilian-states";
+import { isValidStateCode } from "@/lib/shipping/brazilian-states";
 import { isValidPostalCode } from "@/lib/shipping/postal-code";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { sendCapiEvent } from "@/lib/analytics/meta-capi";
@@ -53,22 +53,29 @@ export interface FavoritesWhatsAppInput {
   /** `window.location.href` da cliente no momento do clique — vai como `event_source_url` na CAPI. */
   eventSourceUrl: string;
   /**
-   * UF opcional escolhida no seletor de frete grátis de /favoritos — lida
-   * do localStorage pelo client, nunca confiada sem validar aqui de novo
-   * contra a lista oficial (getStateLabel devolve null pra qualquer coisa
-   * que não seja uma das 27 siglas reais). null/ausente = mensagem sai
-   * idêntica à de sempre, sem nenhuma linha extra.
+   * UF opcional resolvida pelo CEP (ViaCEP) ou escolhida manualmente no
+   * bloco de frete de /favoritos — lida do localStorage pelo client,
+   * nunca confiada sem validar aqui de novo contra a lista oficial
+   * (getStateLabel devolve null pra qualquer coisa que não seja uma das
+   * 27 siglas reais). null/ausente = mensagem sai idêntica à de sempre,
+   * sem nenhuma linha extra.
    */
   shippingStateCode?: string | null;
   /**
-   * CEP opcional informado no bloco de frete de /favoritos quando a UF
-   * escolhida não tem regra de frete grátis cadastrada — revalidado aqui
+   * CEP opcional confirmado pelo ViaCEP no bloco de frete de /favoritos
+   * (useCepShipping/SmartShippingBlock) — vem do estado de página do
+   * client (useState), NUNCA de localStorage ou banco; revalidado aqui
    * (formato 00000-000) antes de entrar na mensagem, nunca confiado sem
-   * checar de novo (mesmo espírito de shippingStateCode acima). Nunca
-   * consultado nos Correios. null/ausente/inválido = mensagem sai
-   * idêntica à de sempre, sem a linha de CEP.
+   * checar de novo. Só entra na mensagem junto de `shippingCity` (par
+   * confirmado); nunca é inventado a partir de uma escolha manual de UF.
    */
   shippingPostalCode?: string | null;
+  /**
+   * Cidade devolvida pelo ViaCEP junto do CEP acima — mesmo estado de
+   * página (nunca persistida). Mesma regra: só entra na mensagem em par
+   * com `shippingPostalCode`, nunca sozinha.
+   */
+  shippingCity?: string | null;
 }
 
 /** Dado agregado da seleção só pro Meta Pixel (`Lead`) — nunca inclui PII. */
@@ -165,9 +172,13 @@ export async function submitFavoritesWhatsAppClick(
     available.map((p) => p.id)
   );
 
-  const shippingStateLabel = input.shippingStateCode ? (getStateLabel(input.shippingStateCode) ?? undefined) : undefined;
+  const shippingStateCode =
+    input.shippingStateCode && isValidStateCode(input.shippingStateCode) ? input.shippingStateCode : undefined;
   const shippingPostalCode =
     input.shippingPostalCode && isValidPostalCode(input.shippingPostalCode) ? input.shippingPostalCode : undefined;
+  // Cidade só entra junto de um CEP já validado acima — par confirmado
+  // pelo ViaCEP, nunca uma cidade "solta" sem o CEP que a originou.
+  const shippingCity = shippingPostalCode && input.shippingCity ? input.shippingCity.trim().slice(0, 80) : undefined;
 
   const message = buildFavoritesWhatsAppMessage(
     available.map((p) => {
@@ -190,8 +201,7 @@ export async function submitFavoritesWhatsAppClick(
       };
     }),
     selectionUrl,
-    shippingStateLabel,
-    shippingPostalCode
+    { postalCode: shippingPostalCode, city: shippingCity, stateCode: shippingStateCode }
   );
 
   const eventsToInsert: AnalyticsEventInsert[] = [

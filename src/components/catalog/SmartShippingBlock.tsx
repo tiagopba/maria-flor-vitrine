@@ -1,47 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { formatBRL } from "@/components/ui/Price";
 import { BRAZILIAN_STATES } from "@/lib/shipping/brazilian-states";
-import { getSavedShippingState, saveShippingState } from "@/lib/shipping/state-storage";
-import { formatPostalCodeInput } from "@/lib/shipping/postal-code";
-import { getSavedPostalCode, saveShippingPostalCode } from "@/lib/shipping/postal-code-storage";
+import type { CepShipping } from "./useCepShipping";
 
-interface PublicFreeShippingRule {
-  stateCode: string;
-  service: "PAC" | "SEDEX";
-  minimumAmount: number;
-}
-
-/**
- * Cache em nível de módulo (não de componente) — sobrevive a remontagens
- * do SmartShippingBlock dentro da MESMA página. Necessário porque
- * FavoritesPageClient passa por um estado de loading (skeleton) a cada
- * adicionar/remover peça (novo fetch de /api/favoritos/produtos), o que
- * desmonta e remonta este componente; sem esse cache no módulo, cada
- * remontagem perderia o `rules` já buscado e refaria o GET
- * /api/frete-gratis, violando "no máximo 1 GET por carregamento". Um
- * `Promise` compartilhado garante isso mesmo com chamadas concorrentes —
- * e volta a zero no carregamento de página seguinte, já que módulos ES
- * reiniciam num hard reload/nova navegação.
- */
-let rulesPromise: Promise<PublicFreeShippingRule[]> | null = null;
-
-function fetchRulesOnce(): Promise<PublicFreeShippingRule[]> {
-  if (!rulesPromise) {
-    rulesPromise = fetch("/api/frete-gratis", { cache: "no-store" })
-      .then((res) => {
-        if (!res.ok) throw new Error("bad status");
-        return res.json() as Promise<PublicFreeShippingRule[]>;
-      })
-      .catch((err) => {
-        rulesPromise = null; // permite tentar de novo numa próxima chamada
-        throw err;
-      });
-  }
-  return rulesPromise;
-}
-
+const inputClass =
+  "h-10 w-40 rounded-lg border border-border bg-surface px-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40";
 const selectClass =
   "h-10 rounded-lg border border-border bg-surface px-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40";
 
@@ -67,63 +31,38 @@ function StateSelect({
 }
 
 /**
- * Bloco inteligente de frete de /favoritos — calcula o benefício de frete
- * grátis com base no total Pix/à vista das peças DISPONÍVEIS atualmente
- * na seleção (nunca o preço do cartão) contra `free_shipping_rules`
- * (mesma regra PAC/SEDEX do Admin, via GET /api/frete-gratis).
+ * Bloco inteligente de frete de /favoritos. Fluxo principal: a cliente
+ * informa o CEP, a gente consulta o ViaCEP só pra descobrir UF + cidade, e
+ * essa UF alimenta EXATAMENTE a mesma regra de frete grátis de sempre
+ * (`free_shipping_rules` via GET /api/frete-gratis — nunca duplicada
+ * aqui). A consulta de CEP é só uma forma mais rápida de preencher a UF:
+ * se falhar, der timeout ou o CEP não existir, a cliente sempre pode
+ * escolher o estado manualmente — a venda nunca depende do ViaCEP.
  *
- * Reaproveita a UF salva em mariaflor:shipping-state:v1 (mesma chave do
- * antigo FreeShippingAccordion — que continua intocado, usado só na
- * página de produto) e o mesmo endpoint público, que devolve TODAS as
- * regras ativas de uma vez — por isso no máximo 1 GET por visita: a
- * primeira UF escolhida (ou já salva) dispara a única busca; trocar de UF
- * depois só refiltra a lista em memória, sem nova requisição.
+ * `shipping` vem de useCepShipping(), chamado no PAI (FavoritesPageClient)
+ * — este componente é só apresentação, sem estado de CEP/cidade próprio
+ * (ver comentário em useCepShipping.ts sobre por que o estado mora lá).
  *
- * totalPix vem pronto do pai (FavoritesPageClient, que já tem os produtos
- * carregados) — nenhuma busca de produtos nova aqui, e o valor recalcula
- * sozinho a cada render porque o pai já re-renderiza a cada
- * adicionar/remover peça (mesmo evento FAVORITES_CHANGED_EVENT de sempre).
+ * totalPix vem pronto do pai, que já tem os produtos carregados — nenhuma
+ * busca de produtos nova aqui, e o valor recalcula sozinho a cada render
+ * porque o pai já re-renderiza a cada adicionar/remover peça (mesmo
+ * evento FAVORITES_CHANGED_EVENT de sempre).
  */
-export function SmartShippingBlock({ totalPix }: { totalPix: number }) {
-  const [selectedState, setSelectedState] = useState<string | null>(() => getSavedShippingState());
-  const [rules, setRules] = useState<PublicFreeShippingRule[] | null>(null);
-  const [loadError, setLoadError] = useState(false);
-  const [postalCode, setPostalCode] = useState<string>(() => getSavedPostalCode() ?? "");
-  // Derivado (nunca setState síncrono dentro do efeito de montagem abaixo):
-  // "carregando" é só "tem UF, ainda sem regras, sem erro" — nada a
-  // despachar antes do fetch resolver.
-  const loading = selectedState !== null && rules === null && !loadError;
-
-  function fetchRules() {
-    fetchRulesOnce()
-      .then((data) => {
-        setRules(data);
-        setLoadError(false);
-      })
-      .catch(() => setLoadError(true));
-  }
-
-  // Só dispara ao montar quando já existe UF salva de uma visita anterior
-  // — sem UF, fica parado até a cliente escolher (handleSelectState). Se
-  // este componente remontar (ver comentário de rulesPromise acima),
-  // fetchRulesOnce() reaproveita a promise já resolvida — nenhum novo GET.
-  useEffect(() => {
-    if (selectedState) fetchRules();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function handleSelectState(code: string) {
-    if (!code) return;
-    setSelectedState(code);
-    saveShippingState(code);
-    fetchRules();
-  }
-
-  function handlePostalCodeChange(raw: string) {
-    const masked = formatPostalCodeInput(raw);
-    setPostalCode(masked);
-    saveShippingPostalCode(masked);
-  }
+export function SmartShippingBlock({ totalPix, shipping }: { totalPix: number; shipping: CepShipping }) {
+  const {
+    cepInput,
+    resolvedCity,
+    selectedState,
+    cepStatus,
+    manualOpen,
+    rules,
+    loadError,
+    rulesLoading,
+    setManualOpen,
+    handleCepChange,
+    handleCepBlur,
+    handleManualSelectState,
+  } = shipping;
 
   const rulesForState = selectedState && rules ? rules.filter((r) => r.stateCode === selectedState) : [];
   const stateName = selectedState ? BRAZILIAN_STATES.find((s) => s.code === selectedState)?.name : undefined;
@@ -131,17 +70,10 @@ export function SmartShippingBlock({ totalPix }: { totalPix: number }) {
   const unlocked = rulesForState.filter((r) => totalPix >= r.minimumAmount).sort((a, b) => a.minimumAmount - b.minimumAmount);
   const locked = rulesForState.filter((r) => totalPix < r.minimumAmount).sort((a, b) => a.minimumAmount - b.minimumAmount);
 
-  function renderContent() {
-    if (!selectedState) {
-      return (
-        <>
-          <p className="text-[15px] font-semibold leading-snug text-text">🚚 Confira suas condições de frete</p>
-          <StateSelect value="" onChange={handleSelectState} placeholder="Selecionar estado" />
-        </>
-      );
-    }
+  function renderFreeShippingMessage() {
+    if (!selectedState) return null;
 
-    if (loading) {
+    if (rulesLoading) {
       return <p className="text-sm text-text-muted">Calculando o frete para {stateName}...</p>;
     }
 
@@ -157,22 +89,9 @@ export function SmartShippingBlock({ totalPix }: { totalPix: number }) {
 
     if (rulesForState.length === 0) {
       return (
-        <>
-          <p className="text-[15px] font-semibold leading-snug text-text">
-            🚚 Vamos calcular a melhor opção de frete para você
-          </p>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-text-muted">Informe seu CEP para a vendedora calcular:</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              placeholder="00000-000"
-              value={postalCode}
-              onChange={(e) => handlePostalCodeChange(e.target.value)}
-              className="h-10 w-40 rounded-lg border border-border bg-surface px-3 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40"
-            />
-          </label>
-        </>
+        <p className="text-sm text-text-muted">
+          Sem regra de frete grátis cadastrada para {stateName} no momento.
+        </p>
       );
     }
 
@@ -229,14 +148,51 @@ export function SmartShippingBlock({ totalPix }: { totalPix: number }) {
 
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-border p-3.5">
-      {renderContent()}
+      <p className="text-[15px] font-semibold leading-snug text-text">🚚 Informe seu CEP para o frete</p>
 
-      {selectedState && !loading && (
-        <label className="flex flex-col gap-1 pt-1">
-          <span className="text-xs text-text-muted">Trocar estado</span>
-          <StateSelect value={selectedState} onChange={handleSelectState} placeholder="Selecionar estado" />
-        </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-xs text-text-muted">CEP</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          placeholder="00000-000"
+          value={cepInput}
+          onChange={(e) => handleCepChange(e.target.value)}
+          onBlur={handleCepBlur}
+          className={inputClass}
+        />
+      </label>
+
+      {cepStatus === "loading" && <p className="text-sm text-text-muted">Consultando CEP...</p>}
+
+      {cepStatus === "success" && resolvedCity && selectedState && (
+        <p className="text-sm font-medium text-text">
+          ✓ {resolvedCity} - {selectedState}
+        </p>
       )}
+
+      {cepStatus === "error" && (
+        <p className="text-sm text-text-muted">
+          Não conseguimos consultar esse CEP. Você pode escolher seu estado abaixo.
+        </p>
+      )}
+
+      {manualOpen ? (
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-text-muted">Estado (UF)</span>
+          <StateSelect value={selectedState ?? ""} onChange={handleManualSelectState} placeholder="Selecionar estado" />
+        </label>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setManualOpen(true)}
+          className="self-start text-xs text-text-muted underline underline-offset-2 hover:text-text"
+        >
+          Não sabe seu CEP ou não conseguiu consultar? Escolher estado
+        </button>
+      )}
+
+      {renderFreeShippingMessage()}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { FavoriteProductRow, type FavoriteProductDetail } from "@/components/catalog/FavoriteProductRow";
 import { SellerSelectionDrawer } from "@/components/catalog/SellerSelectionDrawer";
 import { SmartShippingBlock } from "@/components/catalog/SmartShippingBlock";
+import { useCepShipping } from "@/components/catalog/useCepShipping";
 import { recordFavoriteEvent } from "@/lib/favorites/analytics";
 import { markJustContactedSeller } from "@/lib/favorites/post-contact";
 import {
@@ -16,8 +17,6 @@ import {
   type FavoriteEntry,
 } from "@/lib/favorites/storage";
 import { resolveProductPricing, resolveTrackingPrice } from "@/lib/catalog/pricing";
-import { getSavedShippingState } from "@/lib/shipping/state-storage";
-import { getSavedPostalCode } from "@/lib/shipping/postal-code-storage";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
 import { submitFavoritesWhatsAppClick } from "@/lib/whatsapp/favorites-click-action";
@@ -77,6 +76,12 @@ export function FavoritesPageClient({
 }) {
   const [entries, setEntries] = useState<FavoriteEntry[]>([]);
   const [fetched, setFetched] = useState<{ key: string; data: FavoriteProductDetail[] } | null>(null);
+  // Levantado aqui (não dentro de SmartShippingBlock) porque este
+  // componente nunca desmonta ao adicionar/remover peça — só o
+  // SmartShippingBlock desmonta, via o skeleton de loading (ver
+  // useCepShipping.ts). CEP/cidade ficam só neste estado de página,
+  // nunca em localStorage.
+  const shipping = useCepShipping();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -233,15 +238,16 @@ export function FavoritesPageClient({
         skipSelectionLink,
         eventId,
         eventSourceUrl: window.location.href,
-        // Totalmente opcional — lido do localStorage só agora, na hora de
-        // montar a mensagem; sem UF salva isso é null e a mensagem sai
-        // idêntica à de sempre (ver buildFavoritesWhatsAppMessage).
-        shippingStateCode: getSavedShippingState(),
-        // Mesmo espírito acima — só preenchido quando a cliente informou
-        // um CEP completo no SmartShippingBlock (UF sem regra de frete
-        // grátis); revalidado de novo no servidor antes de entrar na
-        // mensagem.
-        shippingPostalCode: getSavedPostalCode(),
+        // Lido do estado de página (useCepShipping) só agora, na hora de
+        // montar a mensagem; sem UF escolhida isso é null e a mensagem
+        // sai idêntica à de sempre (ver buildFavoritesWhatsAppMessage).
+        shippingStateCode: shipping.selectedState,
+        // CEP/cidade nunca são persistidos (nem localStorage, nem banco)
+        // — só existem neste estado de página enquanto a cliente monta o
+        // pedido. Cidade só vem preenchida quando o ViaCEP confirmou o
+        // CEP; revalidado de novo no servidor antes de entrar na mensagem.
+        shippingPostalCode: shipping.cepInput,
+        shippingCity: shipping.resolvedCity,
       });
 
       if ("error" in result) {
@@ -322,7 +328,7 @@ export function FavoritesPageClient({
         ))}
       </div>
 
-      <SmartShippingBlock totalPix={totalPix} />
+      <SmartShippingBlock totalPix={totalPix} shipping={shipping} />
 
       {validationError && <p className="text-sm text-red-600">{validationError}</p>}
 
@@ -332,7 +338,7 @@ export function FavoritesPageClient({
         className="h-12 w-full gap-2 text-base font-semibold uppercase tracking-wide"
       >
         <WhatsAppIcon />
-        Comprar
+        Finalizar pedido
       </Button>
 
       <Link href="/novidades">
