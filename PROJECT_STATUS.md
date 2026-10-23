@@ -1673,7 +1673,7 @@ memória, descartado a cada execução. `npm test` passou a incluir
 
 ---
 
-## 26. Carrinho (`/favoritos`): CEP com ViaCEP alimentando o frete grátis existente + CTA "Finalizar pedido"
+## 26. 🟢 PRODUCTION — Carrinho (`/favoritos`): CEP com ViaCEP alimentando o frete grátis existente + CTA "Finalizar pedido"
 
 > Branch `feat/cart-cep-shipping`. Melhoria pequena e objetiva no carrinho
 > público — **não é checkout**: sem endereço completo, sem CEP salvo em
@@ -1751,5 +1751,22 @@ foi adicionado; os 678 testes existentes continuam passando sem alteração
   aplicada pela UF, fallback manual funcionando, `FINALIZAR PEDIDO`
   correto, mensagem do WhatsApp chegando com CEP + Cidade/UF + produtos/
   tamanhos.
-- Merge `--no-ff` em `main` e deploy de Production registrados no commit
-  seguinte a esta entrada (handoff desta mesma rodada).
+
+**Merge e deploy de Production (mesma rodada, aprovado pelo usuário):**
+- Merge `--no-ff` de `feat/cart-cep-shipping` em `main`: commit
+  `08ac36b3c31d949054a1e7fc62af27dbf600aa40`.
+- `git push origin main` → deployment de Production
+  `dpl_utzRdksJHSXStvLbWSdKxC7vHGYp`, estado **READY**, alias
+  `www.modamariaflor.com.br` / `modamariaflor.com.br`.
+- **Smoke final (somente leitura, nenhum dado real alterado):** `/novidades`
+  carregando normal em produção; peça favoritada (só `localStorage` do
+  navegador, nenhuma escrita no Supabase) para abrir `/favoritos` com um
+  item real; CTA confirmado como `FINALIZAR PEDIDO`; CEP `79500-000`
+  resolvido pelo ViaCEP em produção → `"✓ Paranaíba - MS"` e a regra de
+  frete grátis real do banco (`"Faltam R$ 149,91... PAC grátis para Mato
+  Grosso do Sul"`). **Não** foi clicado `FINALIZAR PEDIDO` — isso criaria
+  uma seleção compartilhável e um evento `FAVORITES_WHATSAPP_CLICK` reais
+  no banco, e enviaria uma mensagem real a uma vendedora real; fora do
+  escopo de um smoke somente leitura. Peça removida do carrinho ao final
+  (limpeza do `localStorage` do navegador do agente — nenhum dado real
+  tocado).
