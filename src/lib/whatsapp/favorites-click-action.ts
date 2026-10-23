@@ -63,15 +63,17 @@ export interface FavoritesWhatsAppInput {
   shippingStateCode?: string | null;
   /**
    * CEP opcional confirmado pelo ViaCEP no bloco de frete de /favoritos
-   * (SmartShippingBlock) — revalidado aqui (formato 00000-000) antes de
-   * entrar na mensagem, nunca confiado sem checar de novo. Só entra na
-   * mensagem junto de `shippingCity` (par confirmado); nunca é inventado
-   * a partir de uma escolha manual de UF.
+   * (useCepShipping/SmartShippingBlock) — vem do estado de página do
+   * client (useState), NUNCA de localStorage ou banco; revalidado aqui
+   * (formato 00000-000) antes de entrar na mensagem, nunca confiado sem
+   * checar de novo. Só entra na mensagem junto de `shippingCity` (par
+   * confirmado); nunca é inventado a partir de uma escolha manual de UF.
    */
   shippingPostalCode?: string | null;
   /**
-   * Cidade devolvida pelo ViaCEP junto do CEP acima — mesma regra: só
-   * entra na mensagem em par com `shippingPostalCode`, nunca sozinha.
+   * Cidade devolvida pelo ViaCEP junto do CEP acima — mesmo estado de
+   * página (nunca persistida). Mesma regra: só entra na mensagem em par
+   * com `shippingPostalCode`, nunca sozinha.
    */
   shippingCity?: string | null;
 }
