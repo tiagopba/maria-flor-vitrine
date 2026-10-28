@@ -41,19 +41,32 @@ describe("pós-venda: acesso e nada automático", () => {
     assert.match(panel, /win\.location\.href = item\.url!/);
   });
 
-  it("nunca confirma sozinho: só o botão CONFIRMAR QUE ENVIEI abre a confirmação, e ABRIR/REENVIAR nunca chama confirmSent", () => {
+  it("CONFIRMAR QUE ENVIEI chama confirmSent diretamente; ABRIR/REENVIAR nunca chama confirmSent", () => {
     const panel = read(PANEL);
-    assert.match(panel, /onClick={\(\) => setConfirming\(true\)}/, "CONFIRMAR QUE ENVIEI só abre a confirmação inline");
-    assert.match(panel, /onConfirm={confirmSent}/, "só o botão CONFIRMAR ENVIO da confirmação inline chama confirmSent");
+    assert.match(panel, /onClick={confirmSent}/, "o botão CONFIRMAR QUE ENVIEI chama confirmSent no próprio clique");
     const openWhatsappBody = panel.slice(panel.indexOf("const openWhatsapp ="), panel.indexOf("const confirmSent ="));
     assert.doesNotMatch(openWhatsappBody, /confirmSent\(/, "abrir/reenviar nunca confirma por conta própria");
     assert.doesNotMatch(openWhatsappBody, /"confirmed"/, "abrir/reenviar nunca grava a fase confirmed");
   });
 
-  it("a confirmação exige uma ação explícita em dois passos (abrir a confirmação, depois CONFIRMAR ENVIO)", () => {
+  it("sem segunda confirmação: nenhum modal/pergunta extra, nenhum window.confirm, clique único grava direto", () => {
     const panel = read(PANEL);
-    assert.match(panel, /\{confirming && \(/);
-    assert.match(panel, /Confirma que esta mensagem foi realmente enviada/);
+    assert.doesNotMatch(panel, /window\.confirm/, "sem window.confirm");
+    assert.doesNotMatch(panel, /setConfirming/, "sem estado de confirmação intermediária");
+    assert.doesNotMatch(panel, /Confirma que esta mensagem foi realmente enviada/, "sem a segunda pergunta antiga");
+    assert.doesNotMatch(panel, /CONFIRMAR ENVIO/, "sem o botão da segunda etapa");
+  });
+
+  it("proteção contra duplo clique: botão desabilitado e com rótulo de carregando enquanto confirma", () => {
+    const panel = read(PANEL);
+    const confirmButton = panel.slice(panel.indexOf("{canConfirm && ("), panel.indexOf("{error &&"));
+    assert.match(confirmButton, /disabled={pending}/, "o botão fica desabilitado enquanto a action está em voo");
+    assert.match(confirmButton, /SALVANDO…/, "mostra um rótulo de carregando");
+  });
+
+  it("feedback de sucesso simples após confirmar, sem reabrir nenhum painel", () => {
+    const panel = read(PANEL);
+    assert.match(panel, /Marcado como enviado/);
   });
 });
 

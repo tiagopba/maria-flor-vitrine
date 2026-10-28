@@ -4,9 +4,30 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { adminIntakeSchema, publicSubmitSchema } from "../schema.ts";
 import { buildIntakeLinkMessage, intakeWhatsappUrl } from "../messages.ts";
+import { resolveExpectedRecipientName, type ExpectedData } from "../conferir.ts";
+import { conferirXml } from "../conferir-xml.ts";
+import { parseNfeXml } from "../../fulfillment/parse-nfe-xml.ts";
+import { NFE_XML_1215 } from "../../fulfillment/__tests__/fixtures.ts";
 
 const ROOT = process.cwd();
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8").split("\r\n").join("\n");
+
+/** Mesma fixture de conferir-xml.test.ts: dados que batem exatamente com NFE_XML_1215. */
+const XML_MATCHING_EXPECTED: ExpectedData = {
+  customerName: "MARIA DA SILVA EXEMPLO",
+  cpf: "11144477735",
+  address: {
+    street: "Avenida Brasil",
+    number: "1500",
+    complement: "APTO 12 B",
+    neighborhood: "Jardim das Palmeiras",
+    city: "Sao Paulo",
+    state: "SP",
+    postalCode: "01310100",
+  },
+  recipientName: "MARIA DA SILVA EXEMPLO",
+  saleTotal: 334.97,
+};
 
 const ADMIN = {
   customerName: "Neusa Cardim",
@@ -71,8 +92,6 @@ const PUBLIC = {
   cpf: "529.982.247-25",
   email: "teste.sintetico@example.com",
   whatsapp: "(67) 99999-9999",
-  deliveryToCustomer: true,
-  recipientName: "",
   postalCode: "79000-000",
   addressLine: "Rua Ceará",
   addressNumber: "123",
@@ -110,9 +129,12 @@ describe("formulário público da cliente", () => {
     assert.equal(publicSubmitSchema.safeParse({ ...PUBLIC, state: "XX" }).success, false);
   });
 
-  it("entrega para outra pessoa exige o nome do destinatário", () => {
-    assert.equal(publicSubmitSchema.safeParse({ ...PUBLIC, deliveryToCustomer: false, recipientName: "" }).success, false);
-    assert.ok(publicSubmitSchema.safeParse({ ...PUBLIC, deliveryToCustomer: false, recipientName: "João Silva" }).success);
+  it("não existe mais destinatário alternativo: o campo é ignorado mesmo se enviado (payload adulterado)", () => {
+    const r = publicSubmitSchema.safeParse({ ...PUBLIC, deliveryToCustomer: false, recipientName: "OUTRA PESSOA" });
+    assert.ok(r.success);
+    if (!r.success) return;
+    assert.equal("deliveryToCustomer" in r.data, false);
+    assert.equal("recipientName" in r.data, false);
   });
 
   it("CAIXA ALTA preservando acentos: nome, rua, bairro e cidade saem em maiúsculas", () => {
@@ -125,18 +147,11 @@ describe("formulário público da cliente", () => {
     assert.equal(r.data.city, "SÃO PAULO");
   });
 
-  it("CAIXA ALTA no complemento e no destinatário (quando a entrega não é para a própria cliente)", () => {
-    const r = publicSubmitSchema.safeParse({
-      ...PUBLIC,
-      addressComplement: "apto 12 b",
-      noComplement: false,
-      deliveryToCustomer: false,
-      recipientName: "joão pereira",
-    });
+  it("CAIXA ALTA no complemento", () => {
+    const r = publicSubmitSchema.safeParse({ ...PUBLIC, addressComplement: "apto 12 b", noComplement: false });
     assert.ok(r.success);
     if (!r.success) return;
     assert.equal(r.data.addressComplement, "APTO 12 B");
-    assert.equal(r.data.recipientName, "JOÃO PEREIRA");
   });
 
   it("e-mail NUNCA vira caixa alta", () => {
@@ -233,6 +248,94 @@ describe("segurança do pré-faturamento (estático)", () => {
     assert.match(sql, /revoke all on table public\.fulfillment_intakes from anon;/);
     assert.match(sql, /function public\.approve_fulfillment_intake/);
     assert.match(sql, /revoke all on function public\.approve_fulfillment_intake\(uuid, integer, jsonb\) from public, anon;/);
+  });
+});
+
+describe("destinatário único: a entrega é sempre para a própria cliente (sem alternativa no formulário público)", () => {
+  it("o formulário público não mostra mais o toggle 'entrega para mim' nem o campo de destinatário alternativo", () => {
+    const form = read("src/app/dados-envio/[token]/PublicIntakeForm.tsx");
+    assert.doesNotMatch(form, /deliveryToCustomer/);
+    assert.doesNotMatch(form, /recipientName/);
+    assert.doesNotMatch(form, /A entrega será para mim/);
+    assert.doesNotMatch(form, /Nome do destinatário/);
+  });
+
+  it("o schema público não aceita mais esses campos (não há o que adulterar)", () => {
+    const schema = read("src/lib/intake/schema.ts");
+    const publicSchemaBody = schema.slice(schema.indexOf("export const publicSubmitSchema"));
+    assert.doesNotMatch(publicSchemaBody, /deliveryToCustomer/);
+    assert.doesNotMatch(publicSchemaBody, /recipientName/);
+  });
+
+  it("o servidor grava sempre destinatário = própria cliente, nunca a partir de um campo do request", () => {
+    const action = read("src/app/dados-envio/[token]/actions.ts");
+    assert.match(action, /submitted_delivery_to_customer:\s*true,/);
+    assert.match(action, /submitted_recipient_name:\s*null,/);
+    // Nenhuma leitura de um campo "d.*" controla esses dois valores.
+    assert.doesNotMatch(action, /submitted_delivery_to_customer:\s*d\./);
+    assert.doesNotMatch(action, /submitted_recipient_name:\s*d\./);
+  });
+
+  it("request adulterado (deliveryToCustomer:false + recipientName de outra pessoa) não sobrevive ao parse", () => {
+    const tampered = {
+      fullName: "Maria Exemplo",
+      cpf: "529.982.247-25",
+      email: "maria@example.com",
+      whatsapp: "(67) 99999-9999",
+      deliveryToCustomer: false,
+      recipientName: "JOÃO OUTRO",
+      postalCode: "79000-000",
+      addressLine: "Rua Ceará",
+      addressNumber: "123",
+      addressComplement: "",
+      noComplement: true,
+      neighborhood: "Centro",
+      city: "Campo Grande",
+      state: "MS",
+    };
+    const r = publicSubmitSchema.safeParse(tampered);
+    assert.ok(r.success);
+    if (!r.success) return;
+    // zod descarta chaves desconhecidas: não existe caminho para "JOÃO OUTRO" chegar ao banco.
+    assert.deepEqual(Object.keys(r.data).includes("recipientName"), false);
+    assert.deepEqual(Object.keys(r.data).includes("deliveryToCustomer"), false);
+  });
+
+  it("registros históricos (gravados antes desta regra) continuam legíveis como estavam", () => {
+    // Coluna e dados antigos não são tocados: um registro antigo com destinatário
+    // diferente da cliente segue existindo e sendo lido normalmente pelo Confere Geral.
+    assert.equal(
+      resolveExpectedRecipientName({ submitted_delivery_to_customer: false, submitted_name: "MARIA", submitted_recipient_name: "JOÃO" }),
+      "JOÃO"
+    );
+  });
+
+  it("para envios novos, o destinatário esperado é sempre o nome da própria cliente", () => {
+    assert.equal(
+      resolveExpectedRecipientName({ submitted_delivery_to_customer: true, submitted_name: "MARIA", submitted_recipient_name: null }),
+      "MARIA"
+    );
+    // Mesmo que a coluna histórica tenha algo gravado nela por engano, delivery_to_customer=true manda.
+    assert.equal(
+      resolveExpectedRecipientName({ submitted_delivery_to_customer: true, submitted_name: "MARIA", submitted_recipient_name: "JOÃO" }),
+      "MARIA"
+    );
+  });
+
+  it("Confere Geral (XML) continua comparando o nome da cliente normalmente para envios novos", () => {
+    const expectedRecipient = resolveExpectedRecipientName({
+      submitted_delivery_to_customer: true,
+      submitted_name: "MARIA DA SILVA EXEMPLO",
+      submitted_recipient_name: null,
+    });
+    const xmlResult = parseNfeXml(NFE_XML_1215);
+    assert.equal(xmlResult.ok, true);
+    if (!xmlResult.ok) return;
+    const outcome = conferirXml({
+      expected: { ...XML_MATCHING_EXPECTED, recipientName: expectedRecipient },
+      xml: xmlResult.data,
+    });
+    assert.ok(!outcome.blocking.some((r) => r.field === "destinatario"));
   });
 });
 

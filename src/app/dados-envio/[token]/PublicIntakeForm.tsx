@@ -12,8 +12,6 @@ const EMPTY: PublicSubmitValues = {
   cpf: "",
   email: "",
   whatsapp: "",
-  deliveryToCustomer: true,
-  recipientName: "",
   postalCode: "",
   addressLine: "",
   addressNumber: "",
@@ -122,20 +120,6 @@ export function PublicIntakeForm({ token }: { token: string }) {
         <Input id="neighborhood" label="Bairro *" value={values.neighborhood} onChange={set("neighborhood")} error={errors.neighborhood} />
         <Input id="city" label="Cidade *" value={values.city} onChange={set("city")} error={errors.city} autoComplete="address-level2" />
         <Input id="state" label="UF *" value={values.state} onChange={set("state")} error={errors.state} maxLength={2} autoComplete="address-level1" />
-
-        <label className="flex items-center gap-3 text-sm text-text">
-          <input
-            type="checkbox"
-            checked={values.deliveryToCustomer}
-            onChange={(e) => setValues((v) => ({ ...v, deliveryToCustomer: e.target.checked }))}
-            className="h-5 w-5 accent-primary"
-          />
-          A entrega será para mim
-        </label>
-
-        {!values.deliveryToCustomer && (
-          <Input id="recipientName" label="Nome do destinatário *" value={values.recipientName} onChange={set("recipientName")} error={errors.recipientName} />
-        )}
       </section>
 
       {formError && (

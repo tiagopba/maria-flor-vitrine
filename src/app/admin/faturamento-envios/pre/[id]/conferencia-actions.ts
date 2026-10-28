@@ -19,6 +19,7 @@ import { createClient } from "@/lib/supabase/server";
 import { parseNfeXml } from "@/lib/fulfillment/parse-nfe-xml";
 import { normalizeForCompare } from "@/lib/fulfillment/text";
 import { canApprove, type ConfereResult } from "@/lib/intake/confere";
+import { resolveExpectedRecipientName } from "@/lib/intake/conferir";
 import { conferirXml, type ConfereXmlOutcome } from "@/lib/intake/conferir-xml";
 import { canApproveIntake, canUploadDocuments, type IntakeStatus } from "@/lib/intake/status";
 
@@ -78,7 +79,7 @@ export async function startConferenciaAction(intakeId: string, formData: FormDat
         state: row.submitted_state,
         postalCode: row.submitted_postal_code,
       },
-      recipientName: row.submitted_delivery_to_customer ? row.submitted_name : (row.submitted_recipient_name ?? ""),
+      recipientName: resolveExpectedRecipientName(row),
       saleTotal: Number(row.sale_total),
       legacyFreightOverrideActive,
     },

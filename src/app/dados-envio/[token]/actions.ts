@@ -14,8 +14,6 @@ export interface PublicSubmitValues {
   cpf: string;
   email: string;
   whatsapp: string;
-  deliveryToCustomer: boolean;
-  recipientName: string;
   postalCode: string;
   addressLine: string;
   addressNumber: string;
@@ -57,8 +55,12 @@ export async function submitPublicIntakeAction(token: string, values: PublicSubm
     submitted_cpf: d.cpf,
     submitted_email: d.email,
     submitted_whatsapp: d.whatsapp,
-    submitted_delivery_to_customer: d.deliveryToCustomer,
-    submitted_recipient_name: d.deliveryToCustomer ? null : d.recipientName,
+    // Destinatário é sempre a própria cliente nos envios novos — decidido aqui, no
+    // servidor, nunca a partir de um campo do cliente: mesmo que alguém adultere o
+    // request e envie outro valor, publicSubmitSchema nem aceita esses campos, e o
+    // banco grava sempre estes dois valores fixos.
+    submitted_delivery_to_customer: true,
+    submitted_recipient_name: null,
     submitted_postal_code: d.postalCode,
     submitted_address_line: d.addressLine,
     submitted_address_number: d.addressNumber,
