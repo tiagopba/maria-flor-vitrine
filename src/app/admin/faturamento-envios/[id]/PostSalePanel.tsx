@@ -29,28 +29,11 @@ function StatusBadge({ status }: { status: PostSaleState["status"] }) {
   return status === "SENT" ? <Badge tone="success">✓ ENVIADO</Badge> : <Badge tone="warning">EM ABERTO</Badge>;
 }
 
-function ConfirmInline({ customerFirstName, pending, onCancel, onConfirm }: { customerFirstName: string | null; pending: boolean; onCancel: () => void; onConfirm: () => void }) {
-  return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/40 p-3">
-      <p className="text-sm text-text">
-        Confirma que esta mensagem foi realmente enviada{customerFirstName ? ` para ${customerFirstName}` : ""}?
-      </p>
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={onCancel}>
-          Cancelar
-        </Button>
-        <Button type="button" size="sm" disabled={pending} onClick={onConfirm}>
-          {pending ? "CONFIRMANDO…" : "CONFIRMAR ENVIO"}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 function ActionBlock({ item, recordId, onDone }: { item: PostSaleItem; recordId: string; onDone: () => void }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
+  const [confirmPending, setConfirmPending] = useState(false);
+  const [justConfirmed, setJustConfirmed] = useState(false);
   const sent = item.state.status === "SENT";
 
   /**
@@ -81,15 +64,24 @@ function ActionBlock({ item, recordId, onDone }: { item: PostSaleItem; recordId:
     });
   };
 
+  /**
+   * CONFIRMAR QUE ENVIEI grava direto, sem segunda pergunta: a funcionária já decidiu
+   * ao clicar. `confirmPending` só controla o rótulo deste botão; `pending` (compartilhado
+   * com ABRIR) já desabilita os dois botões e impede duas requisições simultâneas —
+   * a action (confirmFollowupSent) é idempotente por baixo, então mesmo um duplo clique
+   * que escape a isso nunca duplica follow-up nem auditoria.
+   */
   const confirmSent = () => {
+    setConfirmPending(true);
     startTransition(async () => {
       const result = await registerPostSaleEvent(recordId, item.kind, "confirmed");
-      setConfirming(false);
+      setConfirmPending(false);
       if (!result.ok) {
         setError(result.error);
         return;
       }
       setError(null);
+      setJustConfirmed(true);
       onDone();
     });
   };
@@ -124,6 +116,12 @@ function ActionBlock({ item, recordId, onDone }: { item: PostSaleItem; recordId:
 
       {sent && !item.state.messageSnapshot && <p className="text-xs text-text-muted">Mensagem histórica não armazenada.</p>}
 
+      {justConfirmed && !sent && (
+        <p role="status" className="text-sm font-medium text-emerald-700">
+          ✓ Marcado como enviado
+        </p>
+      )}
+
       {displayMessage && (
         <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-xl bg-muted p-3 text-xs text-text">{displayMessage}</pre>
       )}
@@ -141,16 +139,12 @@ function ActionBlock({ item, recordId, onDone }: { item: PostSaleItem; recordId:
         <Button type="button" size="md" className="min-w-[44px]" disabled={!canOpen || pending} onClick={openWhatsapp}>
           {sent ? "REENVIAR PELO WHATSAPP" : "ABRIR WHATSAPP"}
         </Button>
-        {canConfirm && !confirming && (
-          <Button type="button" size="md" className="min-w-[44px]" variant="secondary" disabled={pending} onClick={() => setConfirming(true)}>
-            ✓ CONFIRMAR QUE ENVIEI
+        {canConfirm && (
+          <Button type="button" size="md" className="min-w-[44px]" variant="secondary" disabled={pending} onClick={confirmSent}>
+            {confirmPending ? "SALVANDO…" : "✓ CONFIRMAR QUE ENVIEI"}
           </Button>
         )}
       </div>
-
-      {confirming && (
-        <ConfirmInline customerFirstName={item.customerFirstName} pending={pending} onCancel={() => setConfirming(false)} onConfirm={confirmSent} />
-      )}
 
       {error && (
         <p role="alert" className="text-sm text-red-700">

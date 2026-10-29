@@ -33,7 +33,7 @@ const optionalText = (max: number, message: string) =>
 /**
  * CAIXA ALTA preservando acentos (ex.: "Goiânia" → "GOIÂNIA") — ".toUpperCase()"
  * nativo já preserva acento em JS. Usado nos campos "dados da cliente" do
- * formulário público: nome, rua, complemento, bairro, cidade e destinatário.
+ * formulário público: nome, rua, complemento, bairro e cidade.
  * Nunca aplicado retroativamente a dados já gravados.
  */
 const upperText = (label: string, max: number) =>
@@ -93,10 +93,19 @@ export const adminIntakeSchema = z
 
 export type AdminIntakeInput = z.output<typeof adminIntakeSchema>;
 
-/** Dados que a cliente preenche no link público. Nada aqui vai para analytics ou log. */
+/**
+ * Dados que a cliente preenche no link público. Nada aqui vai para analytics ou log.
+ *
+ * Destinatário da entrega: sempre a própria cliente (`fullName`). Não existe mais
+ * escolha de "entregar para outra pessoa" nem campo de destinatário alternativo
+ * neste formulário — isso causava divergência no Confere Geral quando o nome
+ * digitado aqui não batia com o nome na NF-e (emitida sempre para a cliente).
+ * Registros antigos que têm um destinatário diferente continuam gravados e
+ * legíveis como estão; esta regra vale só para envios novos.
+ */
 export const publicSubmitSchema = z
   .object({
-    // Nome, rua, complemento, bairro, cidade e destinatário: CAIXA ALTA preservando acentos.
+    // Nome, rua, complemento, bairro e cidade: CAIXA ALTA preservando acentos.
     fullName: fullName("Nome completo").transform((v) => v.toUpperCase()),
     // CPF: obrigatório, com dígitos verificadores (isValidCpf). Vazio e inválido têm mensagens distintas.
     cpf: z
@@ -111,8 +120,6 @@ export const publicSubmitSchema = z
       .min(1, "Informe o e-mail.")
       .refine((v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), "Informe um e-mail válido."),
     whatsapp: whatsappField,
-    deliveryToCustomer: z.boolean(),
-    recipientName: z.string().trim().transform((v) => v.toUpperCase()),
     postalCode: z
       .string()
       .transform((v) => v.replace(/\D/g, ""))
@@ -135,9 +142,6 @@ export const publicSubmitSchema = z
       .refine((v) => (BR_STATE_CODES as readonly string[]).includes(v), "UF inválida."),
   })
   .superRefine((v, ctx) => {
-    if (!v.deliveryToCustomer && v.recipientName.split(/\s+/).filter(Boolean).length < 2) {
-      ctx.addIssue({ code: "custom", path: ["recipientName"], message: "Informe o nome completo do destinatário." });
-    }
     if (!v.noComplement && v.addressComplement === "") {
       ctx.addIssue({
         code: "custom",

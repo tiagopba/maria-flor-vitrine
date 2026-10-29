@@ -60,6 +60,21 @@ function prefixed(prefix: string, results: FieldResult[]): FieldResult[] {
   return results.map((r) => ({ ...r, field: `${prefix}${r.field}` }));
 }
 
+/**
+ * Destinatário esperado na etiqueta/XML. Para envios novos, `submitted_delivery_to_customer`
+ * é sempre `true` (o formulário público não oferece mais destinatário alternativo —
+ * ver schema.ts) e o nome esperado é sempre o da própria cliente. `submitted_recipient_name`
+ * só é lido para intakes antigos, gravados antes dessa regra, que ainda têm um
+ * destinatário diferente guardado — essa coluna e esses registros não são alterados.
+ */
+export function resolveExpectedRecipientName(row: {
+  submitted_delivery_to_customer: boolean | null;
+  submitted_name: string | null;
+  submitted_recipient_name: string | null;
+}): string {
+  return row.submitted_delivery_to_customer ? (row.submitted_name ?? "") : (row.submitted_recipient_name ?? "");
+}
+
 export function conferir(input: ConfereInput): ConfereOutcome {
   const { expected, danfe, label } = input;
   const results: FieldResult[] = [];

@@ -268,8 +268,6 @@ describe("CEP: máscara e normalização", () => {
       cpf: "52998224725",
       email: "teste.final@example.com",
       whatsapp: "(11) 90000-0003",
-      deliveryToCustomer: true,
-      recipientName: "",
       addressLine: "Rua Teste Final",
       addressNumber: "100",
       addressComplement: "Apto Teste",
@@ -295,9 +293,14 @@ describe("formulário público: obrigatoriedade visível", () => {
   });
 
   it("todos os rótulos obrigatórios mostram *", () => {
-    for (const label of ["Nome completo *", "CPF *", "E-mail *", "WhatsApp *", "CEP *", "Rua *", "Número *", "Complemento *", "Bairro *", "Cidade *", "UF *", "Nome do destinatário *"]) {
+    for (const label of ["Nome completo *", "CPF *", "E-mail *", "WhatsApp *", "CEP *", "Rua *", "Número *", "Complemento *", "Bairro *", "Cidade *", "UF *"]) {
       assert.ok(FORM.includes(`label="${label}"`), label);
     }
+  });
+
+  it("não existe mais o campo de destinatário alternativo: a entrega é sempre para a própria cliente", () => {
+    assert.ok(!FORM.includes("Nome do destinatário"));
+    assert.ok(!FORM.includes("deliveryToCustomer"));
   });
 
   it("complemento continua com a alternativa 'Não possui complemento'", () => {
