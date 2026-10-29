@@ -1770,3 +1770,80 @@ foi adicionado; os 678 testes existentes continuam passando sem alteração
   escopo de um smoke somente leitura. Peça removida do carrinho ao final
   (limpeza do `localStorage` do navegador do agente — nenhum dado real
   tocado).
+
+---
+
+## 27. 🟢 PRODUCTION — Fim do destinatário alternativo na coleta pública + CONFIRMAR QUE ENVIEI sem segunda confirmação
+
+> Branch `fix/fulfillment-recipient-followup-ux`. Duas correções pequenas e
+> objetivas, sem mudar a arquitetura do módulo de Faturamento/Pré-faturamento.
+> **Nenhuma migration criada**; nenhum dado real alterado para testar.
+
+**Problema 1 — destinatário alternativo causava falso bloqueio no Confere Geral:**
+o formulário público (`/dados-envio/[token]`) deixava a cliente marcar "entregar
+para outra pessoa" e digitar um nome diferente (`recipientName`/
+`submitted_recipient_name`). A NF-e, porém, é sempre emitida para o nome
+principal da cliente — então, quando os dois nomes divergiam (ex.: cliente
+`MARIA`, destinatário `JOÃO`), o Confere Geral comparava o XML contra o nome
+alternativo e bloqueava por divergência real, mas evitável: a origem do
+conflito era o próprio campo, não um erro de digitação.
+
+**Correção 1:**
+- O formulário público não oferece mais o toggle "A entrega será para mim"
+  nem o campo "Nome do destinatário" — [PublicIntakeForm.tsx](src/app/dados-envio/[token]/PublicIntakeForm.tsx).
+  A entrega é sempre para a própria cliente.
+- `publicSubmitSchema` ([schema.ts](src/lib/intake/schema.ts)) **não aceita
+  mais** `deliveryToCustomer`/`recipientName` — campos desconhecidos são
+  descartados pelo zod antes de chegarem perto do banco.
+- Para **envios novos**, o servidor grava sempre
+  `submitted_delivery_to_customer = true` e `submitted_recipient_name = null`,
+  **hardcoded** em [actions.ts](src/app/dados-envio/[token]/actions.ts) — nunca
+  a partir de um campo do request. Um request adulterado tentando mandar outro
+  `recipientName` não tem como influenciar o que é gravado.
+- **Coluna e registros antigos intocados**: intakes gravadas antes desta regra,
+  com destinatário diferente da cliente, continuam exatamente como estavam e
+  continuam sendo lidas normalmente. A leitura ("qual é o destinatário
+  esperado na etiqueta/XML") foi extraída para uma função pura nova,
+  `resolveExpectedRecipientName` ([conferir.ts](src/lib/intake/conferir.ts)),
+  usada por [conferencia-actions.ts](src/app/admin/faturamento-envios/pre/[id]/conferencia-actions.ts)
+  — mesmo comportamento de antes (`delivery_to_customer ? nome da cliente :
+  destinatário gravado`), agora testável isoladamente. **A lógica de
+  comparação do Confere Geral em si (`conferir.ts`/`conferir-xml.ts`,
+  normalizações, veredito) não foi alterada.**
+
+**Problema 2 — segunda confirmação no `CONFIRMAR QUE ENVIEI`:** no pós-venda
+(Faturamento e Envios → detalhe do registro), clicar `✓ CONFIRMAR QUE ENVIEI`
+abria um painel inline pedindo uma segunda confirmação ("Confirma que esta
+mensagem foi realmente enviada...?" + botão "CONFIRMAR ENVIO") antes de
+gravar o follow-up como `SENT`.
+
+**Correção 2** ([PostSalePanel.tsx](src/app/admin/faturamento-envios/[id]/PostSalePanel.tsx)):
+- O clique em `✓ CONFIRMAR QUE ENVIEI` chama a Server Action
+  (`registerPostSaleEvent`/`confirmFollowupSent`) **direto**, sem painel
+  intermediário, sem `window.confirm`. Nada na Server Action mudou: ela já
+  era idempotente (`UPDATE ... WHERE status = 'OPEN'`, clique duplicado não
+  duplica follow-up nem auditoria) — ver seção 17/22.
+- Durante o envio, o botão fica desabilitado e mostra "SALVANDO…"; ao
+  concluir, mostra "✓ Marcado como enviado" (feedback simples, sem reabrir
+  nenhum painel).
+- **Nada mais do pós-venda foi tocado**: criação dos 3 follow-ups, tipos
+  `SHIPPING_NOTICE`/`DELIVERY_CONFIRMATION`/`GOOGLE_REVIEW`,
+  `POST_SALE_PENDING`, round-robin, mensagens de WhatsApp, Google Review URL,
+  `delivery_status` — todos intocados (confirmado pelos testes existentes,
+  que continuam passando sem alteração).
+
+**Testes:** 10 novos/ajustados cobrindo os 9 pontos pedidos — formulário
+público sem destinatário alternativo (estático), schema não aceita mais os
+campos, request adulterado não sobrevive ao parse, compatibilidade com
+registros históricos (`resolveExpectedRecipientName`), Confere Geral XML
+continua comparando o nome da cliente corretamente, botão confirma direto
+(sem `setConfirming`/`window.confirm`/texto da segunda pergunta), loading
+("SALVANDO…") e desabilitação durante a confirmação, feedback de sucesso, e
+a confirmação condicional (`status = 'OPEN'`) que já impedia duplicação.
+`tsc --noEmit`, `eslint`, `npm test` (**688/688**), `next build`: verdes.
+
+**Validação no Preview** (`maria-flor-vitrine-git-fix-fulfillment-recipien-a25194-tiagopba.vercel.app`,
+commit `05d1563`): aprovada pelo usuário — formulário público sem
+destinatário alternativo, fluxo de preenchimento funcionando, `CONFIRMAR QUE
+ENVIEI` executa direto, sem segunda confirmação, loading e feedback
+funcionando.
