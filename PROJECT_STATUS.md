@@ -1847,3 +1847,22 @@ commit `05d1563`): aprovada pelo usuário — formulário público sem
 destinatário alternativo, fluxo de preenchimento funcionando, `CONFIRMAR QUE
 ENVIEI` executa direto, sem segunda confirmação, loading e feedback
 funcionando.
+
+### Merge e Production
+
+- **Merge `--no-ff` de `fix/fulfillment-recipient-followup-ux` em `main`:**
+  commit `006582fcdeb171697c61bb857c2570fa4c08c7a6`. Nenhuma migration;
+  nenhum dado real alterado no merge.
+- **`git push origin main`** → deployment de Production
+  `dpl_CxoLYvmQ47PLMVNbhLhfW14zvFfV`, estado **READY**, alias
+  `www.modamariaflor.com.br` / `modamariaflor.com.br`.
+- **Smoke final (somente leitura, nenhum dado real criado/alterado):**
+  `/` carregando normal em produção (listagem de produtos real); `/admin/login`
+  carregando sem erro; `/dados-envio/<token inválido>` respondendo
+  corretamente "Este link não é válido." (rota pública funcionando, sem
+  quebrar); nenhum erro no console do navegador nas três páginas. **Não**
+  foi possível testar com um token real nem fazer login no Admin de forma
+  automatizada (login é sempre feito pelo usuário — seção 16.4); essa parte
+  (formulário público preenchido de ponta a ponta, `CONFIRMAR QUE ENVIEI` no
+  painel de pós-venda) já foi validada manualmente pelo usuário no Preview,
+  no mesmo commit (`05d1563`) que está em Production agora.
