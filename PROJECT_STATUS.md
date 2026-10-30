@@ -1962,3 +1962,18 @@ conferência existente voltando corretamente para `DOCUMENTS_PENDING`;
 alteração só de data/vendedora sem invalidar conferência; pós-aprovação com
 valor bloqueado; edição de vendedora/data/origem; auditoria
 `SALE_DETAILS_UPDATED` funcionando — tudo aprovado pelo usuário.
+
+### Merge e Production
+
+- **Merge `--no-ff` de `feat/editar-venda-faturamento` em `main`:** commit
+  `23f75c0e638a36f4ec832253f4e57043ad6f34e6`.
+- **`git push origin main`** → deployment de Production
+  `dpl_2QkAaBbdKL9RkpPRs7SqK6ugCnTt`, estado **READY**, alias
+  `www.modamariaflor.com.br` / `modamariaflor.com.br`.
+- **Smoke final (somente leitura, nenhum dado real criado/alterado):** `/`
+  carregando normal em produção (listagem de produtos real); `/admin/login`
+  carregando sem erro de console. **Não** foi possível exercitar
+  EDITAR VENDA/EDITAR DADOS DA VENDA ao vivo em Production nesta rodada —
+  exige login de Admin, que é sempre feito pelo usuário (seção 16.4); essa
+  parte já foi validada manualmente pelo usuário no Preview, no mesmo
+  commit (`7cf6824`) que está em Production agora.
