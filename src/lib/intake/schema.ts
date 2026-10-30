@@ -94,6 +94,23 @@ export const adminIntakeSchema = z
 export type AdminIntakeInput = z.output<typeof adminIntakeSchema>;
 
 /**
+ * EDITAR VENDA (pré-aprovação): só os 3 campos comerciais corrigíveis aqui —
+ * valor, data e vendedora. A regra de quando isso invalida a conferência fica em
+ * sale-details.ts (planIntakeSaleDetailsUpdate); este schema só valida o formato.
+ */
+export const editIntakeSaleDetailsSchema = z.object({
+  saleTotal: moneyField,
+  saleDate: z.string().trim().refine(isRealIsoDate, "Data da venda inválida."),
+  sellerId: z
+    .string()
+    .trim()
+    .min(1, "Escolha a vendedora.")
+    .refine((v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v), "Vendedora inválida."),
+});
+
+export type EditIntakeSaleDetailsInput = z.output<typeof editIntakeSaleDetailsSchema>;
+
+/**
  * Dados que a cliente preenche no link público. Nada aqui vai para analytics ou log.
  *
  * Destinatário da entrega: sempre a própria cliente (`fullName`). Não existe mais

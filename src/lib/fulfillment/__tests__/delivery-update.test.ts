@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { gainedTrackingInfo, planDeliveryUpdate, shouldAutoSetInTransit, type DeliveryState } from "../delivery-update.ts";
 import type { DeliveryStatus } from "../delivery.ts";
-import { deliveryUpdateSchema } from "../schema.ts";
+import { deliveryUpdateSchema, editRecordSaleDetailsSchema } from "../schema.ts";
 
 const current: DeliveryState = {
   delivery_status: "PENDING",
@@ -169,4 +169,40 @@ describe("auto IN_TRANSIT ao salvar transportadora + rastreio — matriz pedida 
   it("RESENT → não muda", () => assert.equal(auto("RESENT", false), false));
   it("DELIVERED → não muda", () => assert.equal(auto("DELIVERED", false), false));
   it("REFUNDED → não muda", () => assert.equal(auto("REFUNDED", false), false));
+});
+
+describe("editRecordSaleDetailsSchema: EDITAR DADOS DA VENDA (pós-aprovação) — sem campo de valor", () => {
+  const EDIT = { saleDate: "2026-10-20", sellerId: "11111111-1111-4111-8111-111111111111", salesOrigin: "online" };
+
+  it("aceita dados válidos e normaliza a origem para CAIXA ALTA", () => {
+    const r = editRecordSaleDetailsSchema.safeParse(EDIT);
+    assert.ok(r.success);
+    if (!r.success) return;
+    assert.equal(r.data.salesOrigin, "ONLINE");
+  });
+
+  it("data da venda é obrigatória", () => {
+    assert.equal(editRecordSaleDetailsSchema.safeParse({ ...EDIT, saleDate: "" }).success, false);
+  });
+
+  it("vendedora vazia vira null (desvincular é permitido)", () => {
+    const r = editRecordSaleDetailsSchema.safeParse({ ...EDIT, sellerId: "" });
+    assert.ok(r.success);
+    if (!r.success) return;
+    assert.equal(r.data.sellerId, null);
+  });
+
+  it("vendedora com formato inválido (não vazio, não UUID) é recusada", () => {
+    assert.equal(editRecordSaleDetailsSchema.safeParse({ ...EDIT, sellerId: "não-é-uuid" }).success, false);
+  });
+
+  it("origem 'X' ou vazia vira null — nunca grava a marca antiga da planilha", () => {
+    assert.equal(editRecordSaleDetailsSchema.safeParse({ ...EDIT, salesOrigin: "x" }).success && editRecordSaleDetailsSchema.parse({ ...EDIT, salesOrigin: "x" }).salesOrigin, null);
+    assert.equal(editRecordSaleDetailsSchema.parse({ ...EDIT, salesOrigin: "" }).salesOrigin, null);
+  });
+
+  it("não tem NENHUM campo de valor — nem no shape do zod", () => {
+    const shape = editRecordSaleDetailsSchema.shape as Record<string, unknown>;
+    assert.equal("saleTotal" in shape, false);
+  });
 });

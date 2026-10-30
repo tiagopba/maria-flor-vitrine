@@ -2,19 +2,24 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/permissions";
-import { isUuid } from "@/lib/db/fulfillment";
+import { getSellerName, isUuid } from "@/lib/db/fulfillment";
 import { getIntakeRow, listAttempts } from "@/lib/db/intakes";
+import { listSellersAdmin } from "@/lib/db/sellers";
+import { selectableSellers } from "@/lib/sellers/management";
 import { formatBRL, formatIsoDate, formatStoreDateTime } from "@/lib/fulfillment/format";
 import { formatCustomerWhatsapp } from "@/lib/fulfillment/phone";
 import { formatPayment } from "@/lib/intake/payment";
 import { CANCEL_REASON_LABELS, isCancelReason } from "@/lib/intake/cancel";
+import { canEditIntakeSaleDetails } from "@/lib/intake/sale-details";
 import { INTAKE_STATUS_LABELS, canCancelIntake, canReopenCollection, canUploadDocuments, type IntakeStatus } from "@/lib/intake/status";
 import { isIntakeTokenExpired } from "@/lib/intake/token";
 import { formatCpfCnpj, formatPostalCode } from "@/lib/fulfillment/text";
 import { ReopenPanel } from "./ReopenPanel";
 import { CancelIntakePanel } from "./CancelIntakePanel";
 import { ConferenciaPanel, type AttemptView } from "./ConferenciaPanel";
+import { EditIntakeSaleModal } from "./EditIntakeSaleModal";
 import { NfeDataSection } from "./NfeDataSection";
+import { updateIntakeSaleDetailsAction } from "./sale-details-actions";
 
 /**
  * CAIXA ALTA só pra exibição/cópia (nunca grava nada — ver NfeDataSection).
@@ -48,6 +53,9 @@ export default async function PreFaturamentoDetailPage({ params }: { params: Pro
   const expired = isIntakeTokenExpired(row.token_expires_at);
   const received = status !== "AWAITING_CUSTOMER_DATA";
   const cancelled = status === "CANCELLED";
+  const canEditSale = canEditIntakeSaleDetails(status);
+  const [sellerName, allSellers] = await Promise.all([getSellerName(row.seller_id), listSellersAdmin()]);
+  const editableSellers = selectableSellers(allSellers).map((s) => ({ id: s.id, name: s.name }));
   const attempts: AttemptView[] = received
     ? (await listAttempts(row.id)).map((a) => {
         const c = (a.comparison ?? {}) as { results?: AttemptView["results"]; extracted?: AttemptView["extracted"] };
@@ -80,10 +88,22 @@ export default async function PreFaturamentoDetailPage({ params }: { params: Pro
       </div>
 
       <section className="rounded-2xl border border-admin-border bg-white p-5">
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-text-muted">Venda</h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted">Venda</h2>
+          {canEditSale && (
+            <EditIntakeSaleModal
+              intakeId={row.id}
+              current={{ saleTotal: Number(row.sale_total), saleDate: row.sale_date, sellerId: row.seller_id }}
+              sellers={editableSellers}
+              hasAnyAttempt={attempts.length > 0}
+              action={updateIntakeSaleDetailsAction}
+            />
+          )}
+        </div>
         <dl className="grid gap-4 sm:grid-cols-2">
           <Field label="Data da venda" value={formatIsoDate(row.sale_date)} />
           <Field label="Valor da venda" value={formatBRL(Number(row.sale_total))} />
+          <Field label="Vendedora" value={sellerName ?? "Não informada"} />
           <Field label="Venda STI3" value={row.sti3_sale_id} />
           <Field label="Pagamento" value={formatPayment(row.payment_method)} />
           <Field label="WhatsApp" value={formatCustomerWhatsapp(row.customer_whatsapp) ?? "Não cadastrado"} />
