@@ -320,3 +320,33 @@ export const DELIVERY_UPDATE_FIELD_NAMES = [
   "notes",
   "confirmClearDelivery",
 ] as const;
+
+/**
+ * "EDITAR DADOS DA VENDA" (pós-aprovação): só vendedora, data e origem — de propósito,
+ * sem `saleTotal` nenhum. O valor que participou da conferência contra a NF-e fica
+ * travado nesta versão (decisão de negócio, não técnica — ver sale-details.ts).
+ */
+export const editRecordSaleDetailsSchema = z.object({
+  saleDate: z
+    .string()
+    .trim()
+    .refine((v) => v !== "", "Informe a data da venda.")
+    .refine((v) => v === "" || isValidIsoDate(v), "Data da venda inválida."),
+  sellerId: z
+    .string()
+    .trim()
+    .refine((v) => v === "" || UUID_PATTERN.test(v), "Vendedora inválida.")
+    .transform((v) => (v === "" ? null : v)),
+  // Mesma regra de fulfillmentRecordSchema: "X" era só a marca de "vendedora desconhecida"
+  // na planilha antiga, nunca é gravado.
+  salesOrigin: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .refine((v) => v.length <= 60, "Origem muito longa.")
+    .transform((v) => (v === "" || v === "X" ? null : v)),
+});
+
+export type EditRecordSaleDetailsInput = z.output<typeof editRecordSaleDetailsSchema>;
+
+export const EDIT_RECORD_SALE_FIELD_NAMES = ["saleDate", "sellerId", "salesOrigin"] as const;

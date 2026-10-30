@@ -223,6 +223,30 @@ export async function markAttemptReviewed(attemptId: string, reviewedFields: str
   if (error) throw new Error(error.message);
 }
 
+/**
+ * EDITAR VENDA: grava os campos comerciais corrigidos (e, quando a regra em
+ * sale-details.ts decidir, força o status de volta para DOCUMENTS_PENDING na
+ * MESMA operação — nunca em dois passos, para não existir uma janela com o
+ * valor novo e o status antigo). Mesmo guard de setIntakeStatusRow: nunca
+ * escreve numa intake já aprovada ou cancelada, mesmo que o chamador tenha
+ * lido o estado um instante antes.
+ */
+export async function updateIntakeSaleDetails(input: {
+  id: string;
+  update: { sale_total?: number; sale_date?: string; seller_id?: string };
+  forceDocumentsPending: boolean;
+}): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("fulfillment_intakes")
+    .update(input.forceDocumentsPending ? { ...input.update, status: "DOCUMENTS_PENDING" } : input.update)
+    .eq("id", input.id)
+    .not("status", "in", "(APPROVED,CANCELLED)")
+    .select("id");
+  if (error) throw new Error(error.message);
+  return (data ?? []).length === 1;
+}
+
 export async function setIntakeStatusRow(id: string, status: IntakeRow["status"]): Promise<void> {
   const supabase = await createClient();
   const { error } = await supabase

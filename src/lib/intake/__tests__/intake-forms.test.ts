@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { adminIntakeSchema, publicSubmitSchema } from "../schema.ts";
+import { adminIntakeSchema, editIntakeSaleDetailsSchema, publicSubmitSchema } from "../schema.ts";
 import { buildIntakeLinkMessage, intakeWhatsappUrl } from "../messages.ts";
 import { resolveExpectedRecipientName, type ExpectedData } from "../conferir.ts";
 import { conferirXml } from "../conferir-xml.ts";
@@ -54,6 +54,32 @@ describe("número da venda STI3", () => {
 
   it("limite de tamanho razoável", () => {
     assert.equal(adminIntakeSchema.safeParse({ ...ADMIN, sti3SaleId: "9".repeat(41) }).success, false);
+  });
+});
+
+describe("EDITAR VENDA (pré-aprovação): formato dos campos", () => {
+  const EDIT = { saleTotal: "179,99", saleDate: "2026-10-20", sellerId: "11111111-1111-4111-8111-111111111111" };
+
+  it("aceita dados válidos e normaliza valor", () => {
+    const r = editIntakeSaleDetailsSchema.safeParse(EDIT);
+    assert.ok(r.success);
+    if (!r.success) return;
+    assert.equal(r.data.saleTotal, 179.99);
+    assert.equal(r.data.saleDate, "2026-10-20");
+    assert.equal(r.data.sellerId, "11111111-1111-4111-8111-111111111111");
+  });
+
+  it("valor zero ou negativo é recusado (mesma regra de moneyField)", () => {
+    assert.equal(editIntakeSaleDetailsSchema.safeParse({ ...EDIT, saleTotal: "0" }).success, false);
+  });
+
+  it("data inválida é recusada", () => {
+    assert.equal(editIntakeSaleDetailsSchema.safeParse({ ...EDIT, saleDate: "2026-02-31" }).success, false);
+  });
+
+  it("vendedora vazia ou com formato inválido é recusada", () => {
+    assert.equal(editIntakeSaleDetailsSchema.safeParse({ ...EDIT, sellerId: "" }).success, false);
+    assert.equal(editIntakeSaleDetailsSchema.safeParse({ ...EDIT, sellerId: "não-é-uuid" }).success, false);
   });
 });
 

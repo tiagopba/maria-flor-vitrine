@@ -1866,3 +1866,99 @@ funcionando.
   (formulário público preenchido de ponta a ponta, `CONFIRMAR QUE ENVIEI` no
   painel de pós-venda) já foi validada manualmente pelo usuário no Preview,
   no mesmo commit (`05d1563`) que está em Production agora.
+
+---
+
+## 28. 🟢 PRODUCTION — EDITAR VENDA (pré-aprovação) e EDITAR DADOS DA VENDA (pós-aprovação)
+
+> Branch `feat/editar-venda-faturamento`. Antes desta rodada, nenhum campo
+> comercial (valor, data, vendedora, origem) podia ser corrigido depois da
+> criação — nem na intake, nem no fulfillment aprovado.
+
+**Problema resolvido:** um erro de digitação no valor (ou na data, ou na
+vendedora) ao criar a solicitação não tinha correção — a única saída era
+cancelar e recriar a venda do zero, perdendo o progresso da coleta/conferência.
+
+### 28.1 Auditoria prévia (antes de qualquer código)
+Confirmado por leitura de código: `sale_total`, `sale_date` e `seller_id`
+nascem em `createIntakeRow` e nunca mais eram escritos por nenhum caminho;
+`sales_origin` **nem existe** em `fulfillment_intakes` (só em
+`fulfillment_records`, sempre `null` nos registros aprovados via intake/XML).
+Só `sale_total` participa de `ExpectedData`/comparação do Confere Geral
+(`conferir.ts`/`conferir-xml.ts`) — data e vendedora nunca entram em nenhuma
+comparação contra DANFE/XML.
+
+### 28.2 EDITAR VENDA (pré-aprovação, `fulfillment_intakes`)
+Botão no detalhe de `/admin/faturamento-envios/pre/[id]` ("Venda"), permitido
+em qualquer status exceto `APPROVED`/`CANCELLED` (`CANCELLED` também é
+bloqueado por trigger do próprio banco, independente do app). Campos: valor,
+data da venda, vendedora.
+- **Sem conferência ainda (nenhuma tentativa):** qualquer um dos 3 campos
+  salva normalmente.
+- **Já existe conferência e o valor muda:** salva o valor **e** força a
+  intake de volta para `DOCUMENTS_PENDING` na MESMA operação de `UPDATE`
+  (nunca em dois passos) — `planIntakeSaleDetailsUpdate`
+  ([sale-details.ts](src/lib/intake/sale-details.ts)). A tentativa antiga
+  nunca é apagada nem reescrita; só deixa de poder aprovar, porque
+  `canApproveIntake`/a própria RPC `approve_fulfillment_intake` já recusam
+  fora de `CHECKING`/`REVIEW_REQUIRED` (duas camadas independentes, nenhuma
+  nova). Reenviar o XML cria uma tentativa nova, calculada com o valor
+  corrigido.
+- **Só data e/ou vendedora mudam (mesmo com conferência existente): nunca
+  invalida nada** — não participam de `ExpectedData`.
+- Decisão recalculada no servidor a partir do banco (status +
+  `fulfillment_verification_attempts` lidos de novo a cada chamada) — nunca
+  confiada ao que a tela mandou; um request adulterado não tem como manter
+  `CHECKING`/`REVIEW_REQUIRED` depois de mudar o valor.
+- Auditoria: reaproveita a ação `INTAKE_EDITED` (já esperada em Production
+  por ajustes anteriores do projeto — nenhuma migration nova para
+  `fulfillment_intake_audit_logs` nesta rodada), com `changed_fields` e
+  valores anterior/novo (sem PII: valor, data e id da vendedora não são
+  dados pessoais da cliente).
+
+### 28.3 EDITAR DADOS DA VENDA (pós-aprovação, `fulfillment_records`)
+Botão no detalhe de `/admin/faturamento-envios/[id]` ("Venda e entrega").
+Permite corrigir **vendedora, data e origem** — o **valor fica travado**
+nesta versão (decisão de negócio: já participou da prova de conferência
+contra a NF-e; não existe nenhum campo de valor no formulário nem no schema
+— estruturalmente impossível de editar por aqui). Se um dia for necessário
+corrigir valor pós-aprovação, será um fluxo administrativo específico,
+separado desta rodada. Vendedora aceita qualquer vendedora existente
+(ativa ou inativa — mesma regra de registros históricos, que já mostram o
+nome de vendedoras inativas normalmente). Auditoria: ação nova
+`SALE_DETAILS_UPDATED` em `fulfillment_audit_logs`, com `changed_fields` e
+valores anterior/novo (sem PII).
+
+### 28.4 Migration aplicada
+`supabase/migrations/20261030100000_fulfillment_sale_details_edit_audit.sql`
+— **aplicada manualmente em Production e confirmada pelo usuário**, incluindo
+`SALE_DETAILS_UPDATED`. Escopo reduzido de propósito: toca **só**
+`fulfillment_audit_logs_action_check`, acrescentando `SALE_DETAILS_UPDATED`
+aos 10 valores já vigentes (confirmados em
+`20261015100000_fulfillment_tracking_pending.sql`, a migration anterior mais
+recente a tocar essa constraint) — nenhum valor removido.
+**`fulfillment_intake_audit_logs` não foi tocado nesta migration** (ação
+`INTAKE_EDITED` já fazia parte do estado esperado de Production por ajustes
+anteriores do projeto). Nenhuma linha foi lida, apagada ou alterada; nenhuma
+coluna de `delivery_status`, nenhuma intake, nenhuma tentativa de conferência
+e nenhum `fulfillment_record` foi tocado; nenhuma policy, grant ou RLS foi
+tocada. O arquivo da migration permanece no repositório para histórico.
+
+### 28.5 Testes
+13 arquivos novos/ajustados: lógica pura (`planIntakeSaleDetailsUpdate`,
+`planRecordSaleDetailsUpdate`), schemas (`editIntakeSaleDetailsSchema`,
+`editRecordSaleDetailsSchema` — sem nenhum campo de valor no segundo),
+segurança estática (`requireAdmin`, decisão recalculada do banco nunca do
+cliente, valor novo + status forçado na mesma operação de `UPDATE`, guard
+contra escrever em intake aprovada/cancelada, ausência total de
+`sale_total`/`saleTotal` no caminho pós-aprovação, ação de auditoria correta
+em cada caminho) e a migration (idempotente, só a constraint certa, sem
+tocar dado/policy/RLS, 11 valores finais sem duplicados).
+
+### 28.6 Validação no Preview — aprovada
+Commit `7cf6824` (`maria-flor-vitrine-git-feat-editar-venda-faturamento-tiagopba.vercel.app`):
+edição de valor/data/vendedora antes da aprovação; alteração de valor com
+conferência existente voltando corretamente para `DOCUMENTS_PENDING`;
+alteração só de data/vendedora sem invalidar conferência; pós-aprovação com
+valor bloqueado; edição de vendedora/data/origem; auditoria
+`SALE_DETAILS_UPDATED` funcionando — tudo aprovado pelo usuário.

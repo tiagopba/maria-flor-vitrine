@@ -13,7 +13,9 @@ import { formatPayment } from "@/lib/intake/payment";
 import { DeliveryStatusBadge } from "../RecordsTable";
 import { CopyButton } from "./CopyButton";
 import { CustomerWhatsappPanel } from "./CustomerWhatsappPanel";
+import { EditRecordSaleModal } from "./EditRecordSaleModal";
 import { PostSalePanel, type PostSaleItem } from "./PostSalePanel";
+import { updateRecordSaleDetailsAction } from "./sale-details-actions";
 import { TrackingPendingPanel } from "./TrackingPendingPanel";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -40,12 +42,15 @@ const documentButton =
 export function RecordDetailView({
   record,
   sellerName,
+  sellers,
   postSale,
   customerWhatsapp,
 }: {
   record: FulfillmentRecord;
   /** Nome da vendedora de record.seller_id (public.sellers), quando houver. */
   sellerName: string | null;
+  /** Todas as vendedoras (ativas e inativas) para o seletor de EDITAR DADOS DA VENDA. */
+  sellers: { id: string; name: string; active: boolean }[];
   /** Pós-venda: mensagens, links e estados já calculados no servidor. */
   postSale: PostSaleItem[];
   /** WhatsApp do cliente já formatado para exibir (null = não cadastrado). */
@@ -128,7 +133,22 @@ export function RecordDetailView({
       </div>
 
       <div className="flex flex-col gap-5">
-        <Section title="Venda e entrega">
+        <section className="rounded-2xl border border-border bg-surface p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted">Venda e entrega</h2>
+            <EditRecordSaleModal
+              recordId={record.id}
+              current={{
+                saleTotal: record.sale_total !== null ? Number(record.sale_total) : null,
+                saleDate: record.sale_date,
+                sellerId: record.seller_id,
+                salesOrigin: record.sales_origin,
+              }}
+              sellers={sellers}
+              action={updateRecordSaleDetailsAction}
+            />
+          </div>
+          <dl className="grid gap-4 sm:grid-cols-2">
           <Field label="Data da venda">{record.sale_date ? formatIsoDate(record.sale_date) : ""}</Field>
           <Field label="Vendedora">{sellerName ?? UNKNOWN_SELLER_LABEL}</Field>
           <Field label="Origem da venda">{record.sales_origin ? formatOriginLabel(record.sales_origin) : ""}</Field>
@@ -151,7 +171,8 @@ export function RecordDetailView({
               {record.notes ? <span className="whitespace-pre-wrap">{record.notes}</span> : ""}
             </Field>
           </div>
-        </Section>
+          </dl>
+        </section>
 
         <Section title="Cliente">
           <Field label="Nome">{record.customer_name}</Field>

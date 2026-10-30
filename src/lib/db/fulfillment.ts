@@ -344,6 +344,18 @@ export async function isActiveSeller(sellerId: string): Promise<boolean> {
   return Boolean(data);
 }
 
+/**
+ * A vendedora existe (ativa OU inativa)? Usada em EDITAR DADOS DA VENDA: um registro
+ * já aprovado pode ser corrigido para uma vendedora inativa, do mesmo jeito que um
+ * registro histórico já mostra o nome de uma vendedora inativa normalmente.
+ */
+export async function sellerExists(sellerId: string): Promise<boolean> {
+  if (!isUuid(sellerId)) return false;
+  const supabase = await createClient();
+  const { data } = await supabase.from("sellers").select("id").eq("id", sellerId).maybeSingle();
+  return Boolean(data);
+}
+
 export async function getSellerName(sellerId: string | null): Promise<string | null> {
   if (!sellerId) return null;
   const supabase = await createClient();
@@ -360,6 +372,20 @@ export async function updateFulfillmentDelivery(id: string, update: DeliveryStat
     .eq("id", id)
     .select("id")
     .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Não foi possível atualizar o registro.");
+}
+
+/**
+ * EDITAR DADOS DA VENDA (pós-aprovação): só vendedora, data e origem — nunca
+ * `sale_total`, que não existe nem no tipo de entrada (sale-details.ts).
+ */
+export async function updateFulfillmentSaleDetails(
+  id: string,
+  update: { sale_date?: string; seller_id?: string | null; sales_origin?: string | null }
+): Promise<void> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("fulfillment_records").update(update).eq("id", id).select("id").maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Não foi possível atualizar o registro.");
 }

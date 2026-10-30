@@ -493,7 +493,11 @@ export interface Database {
             | "DELIVERY_CONFIRMATION_CONFIRMED"
             | "GOOGLE_REVIEW_WHATSAPP_OPENED"
             | "GOOGLE_REVIEW_CONFIRMED"
-            | "TRACKING_CODE_SAVED";
+            | "TRACKING_CODE_SAVED"
+            // EDITAR DADOS DA VENDA (pós-aprovação): vendedora, data e origem — nunca o
+            // valor. Ação nova nesta rodada (ver migration
+            // 20261030100000_fulfillment_sale_details_edit_audit.sql, ainda não aplicada).
+            | "SALE_DETAILS_UPDATED";
           actor_id: string | null;
           details: Record<string, unknown>;
           created_at: string;
