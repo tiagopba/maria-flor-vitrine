@@ -77,15 +77,19 @@ describe("EDITAR VENDA / EDITAR DADOS DA VENDA: acesso e nada confiado ao client
   });
 });
 
-describe("migration 20261030100000: aditiva, idempotente, sem tocar dados", () => {
+describe("migration 20261030100000: escopo reduzido, só fulfillment_audit_logs, aditiva, idempotente, sem tocar dados", () => {
   const migration = read(MIGRATION);
 
   it("mesmo padrão idempotente (drop + add) das migrations anteriores desta tabela", () => {
     assert.match(migration, /drop constraint if exists fulfillment_audit_logs_action_check/);
-    assert.match(migration, /drop constraint if exists fulfillment_intake_audit_logs_action_check/);
   });
 
-  it("inclui a ação nova (SALE_DETAILS_UPDATED) e preserva todas as 10 ações antigas de fulfillment_audit_logs", () => {
+  it("NUNCA toca fulfillment_intake_audit_logs (EDITAR VENDA reaproveita INTAKE_EDITED, já esperado em Production — fora de escopo aqui)", () => {
+    assert.doesNotMatch(migration, /fulfillment_intake_audit_logs/);
+    assert.doesNotMatch(migration, /INTAKE_EDITED/);
+  });
+
+  it("inclui a ação nova (SALE_DETAILS_UPDATED) e preserva todas as 10 ações já aceitas (confirmadas em 20261015100000, a migration mais recente que tocou essa constraint)", () => {
     for (const a of [
       "CREATED",
       "DOCUMENT_VIEWED",
@@ -103,24 +107,10 @@ describe("migration 20261030100000: aditiva, idempotente, sem tocar dados", () =
     }
   });
 
-  it("preserva as 13 ações já documentadas de fulfillment_intake_audit_logs (inclusive INTAKE_EDITED), sem criar nenhuma nova", () => {
-    for (const a of [
-      "INTAKE_CREATED",
-      "INTAKE_LINK_OPENED",
-      "INTAKE_DATA_RECEIVED",
-      "INTAKE_LINK_REOPENED",
-      "INTAKE_CHECK_STARTED",
-      "INTAKE_BLOCKED",
-      "INTAKE_CHECK_RESTARTED",
-      "INTAKE_REVIEW_COMPLETED",
-      "INTAKE_APPROVED",
-      "FULFILLMENT_CREATED",
-      "INTAKE_CANCELLED",
-      "INTAKE_EDITED",
-      "LEGACY_FREIGHT_OVERRIDE_APPLIED",
-    ]) {
-      assert.match(migration, new RegExp(`'${a}'`), a);
-    }
+  it("a lista final tem exatamente 11 valores (10 antigos + 1 novo), nenhum duplicado", () => {
+    const values = [...migration.matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
+    assert.equal(values.length, 11);
+    assert.equal(new Set(values).size, 11, "sem duplicados");
   });
 
   // Só o SQL executável (sem comentários) — a prosa explica o que NÃO é tocado,
@@ -134,8 +124,8 @@ describe("migration 20261030100000: aditiva, idempotente, sem tocar dados", () =
     assert.doesNotMatch(sql, /\b(delete|truncate|drop table|drop column|insert into|update\s+public\.)\b/i);
   });
 
-  it("não cria/altera policy, grant nem RLS — só as duas constraints", () => {
+  it("não cria/altera policy, grant nem RLS — só esta constraint", () => {
     assert.doesNotMatch(sql, /\b(grant|revoke|create policy|alter policy|row level security)\b/i);
-    assert.equal((sql.match(/\balter table\b/gi) ?? []).length, 4, "2 drop constraint + 2 add constraint");
+    assert.equal((sql.match(/\balter table\b/gi) ?? []).length, 2, "1 drop constraint + 1 add constraint");
   });
 });
