@@ -1,10 +1,13 @@
 "use server";
 
 import { createHash } from "node:crypto";
-import { headers } from "next/headers";
+import { after } from "next/server";
+import { cookies, headers } from "next/headers";
 import { createPublicClient } from "@/lib/supabase/public";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { recordInstitutionalEvent } from "@/lib/institutional/analytics";
+import { sendCapiEvent } from "@/lib/analytics/meta-capi";
+import { hashEmail, hashExternalId, hashFullNameParts } from "@/lib/analytics/meta-hash";
 import { EMAIL_OTP_LENGTH } from "./otp-constants";
 
 /**
@@ -60,6 +63,7 @@ async function logAbuseSignal(action: "send" | "verify", leadId: string) {
 
 type LeadOtpRow = {
   id: string;
+  name: string | null;
   email: string | null;
   auth_user_id: string | null;
   whatsapp_verified_at: string | null;
@@ -79,7 +83,7 @@ async function resolveLead(token: string): Promise<LeadOtpRow | null> {
   const { data } = await admin
     .from("leads")
     .select(
-      "id, email, auth_user_id, whatsapp_verified_at, email_verified_at, session_id, utm_source, utm_medium, utm_campaign, utm_content, referrer"
+      "id, name, email, auth_user_id, whatsapp_verified_at, email_verified_at, session_id, utm_source, utm_medium, utm_campaign, utm_content, referrer"
     )
     .eq("resume_token_hash", hashToken(token))
     .gt("resume_token_expires_at", new Date().toISOString())
@@ -102,6 +106,43 @@ function recordOfferLeadConfirmed(lead: LeadOtpRow): void {
     utmContent: lead.utm_content,
     referrer: lead.referrer,
   }).catch(() => {});
+}
+
+/**
+ * Conversions API — CompleteRegistration, mesmo event_id do Pixel do
+ * browser (ver OffersFormClient.handleConfirmCode). Chamado só pelos dois
+ * pontos de confirmEmailOtp que já são guardados por `!lead.email_verified_at`
+ * (confirmação REAL e de primeira vez, nunca reenviado em retomada/resumo).
+ * `eventId`/`eventSourceUrl` ausentes (chamador antigo ou falha ao gerar no
+ * client) só faz este evento virar no-op — nunca lança, nunca bloqueia a
+ * confirmação em si. Mesmo padrão fail-open de sendCapiEvent.
+ */
+function sendCompleteRegistrationCapi(lead: LeadOtpRow, eventId?: string, eventSourceUrl?: string): void {
+  if (!eventId || !eventSourceUrl || !lead.email) return;
+
+  after(async () => {
+    try {
+      const [hdrs, cookieStore] = await Promise.all([headers(), cookies()]);
+      await sendCapiEvent({
+        eventName: "CompleteRegistration",
+        eventId,
+        eventSourceUrl,
+        userData: {
+          clientIpAddress: hdrs.get("x-forwarded-for")?.split(",")[0]?.trim(),
+          clientUserAgent: hdrs.get("user-agent") ?? undefined,
+          fbp: cookieStore.get("_fbp")?.value,
+          fbc: cookieStore.get("_fbc")?.value,
+          em: hashEmail(lead.email as string),
+          ...(lead.name ? hashFullNameParts(lead.name) : {}),
+          externalId: lead.session_id ? hashExternalId(lead.session_id) : undefined,
+        },
+        customData: { content_name: "Grupo de Ofertas", status: true },
+      });
+    } catch {
+      // sendCapiEvent já trata os próprios erros internamente; nunca deve
+      // chegar aqui, mas por segurança nunca deixa nada escapar do after().
+    }
+  });
 }
 
 export type StartEmailOtpResult = { success: true; email: string } | { error: string };
@@ -170,7 +211,17 @@ export async function startEmailOtp(token: string): Promise<StartEmailOtpResult>
 
 export type ConfirmEmailOtpResult = { success: true } | { error: string };
 
-export async function confirmEmailOtp(token: string, code: string): Promise<ConfirmEmailOtpResult> {
+/**
+ * `eventId`/`eventSourceUrl` opcionais — mesmo par gerado no client pro
+ * `fbq('track', 'CompleteRegistration', ..., {eventID})`, repassado aqui só
+ * pra CAPI poder deduplicar (ver sendCompleteRegistrationCapi acima).
+ */
+export async function confirmEmailOtp(
+  token: string,
+  code: string,
+  eventId?: string,
+  eventSourceUrl?: string
+): Promise<ConfirmEmailOtpResult> {
   const trimmedCode = code.trim();
   if (!new RegExp(`^\\d{${EMAIL_OTP_LENGTH}}$`).test(trimmedCode)) {
     return { error: `Digite o código de ${EMAIL_OTP_LENGTH} dígitos que enviamos.` };
@@ -222,7 +273,10 @@ export async function confirmEmailOtp(token: string, code: string): Promise<Conf
     if (updateError) {
       console.error("[confirmEmailOtp] falha ao marcar email_verified_at:", updateError.message);
     }
-    if (!lead.email_verified_at) recordOfferLeadConfirmed(lead);
+    if (!lead.email_verified_at) {
+      recordOfferLeadConfirmed(lead);
+      sendCompleteRegistrationCapi(lead, eventId, eventSourceUrl);
+    }
     return { success: true };
   }
 
@@ -242,7 +296,10 @@ export async function confirmEmailOtp(token: string, code: string): Promise<Conf
     console.error("[confirmEmailOtp] falha ao marcar email_verified_at:", updateError.message);
   }
 
-  if (!lead.email_verified_at) recordOfferLeadConfirmed(lead);
+  if (!lead.email_verified_at) {
+    recordOfferLeadConfirmed(lead);
+    sendCompleteRegistrationCapi(lead, eventId, eventSourceUrl);
+  }
 
   return { success: true };
 }

@@ -49,7 +49,8 @@ export function MetaPixel() {
         n.callMethod.apply(n,arguments):n.queue.push(arguments)};
         if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
         n.queue=[];t=b.createElement(e);t.async=!0;
-        t.src=v;s=b.getElementsByTagName(e)[0];
+        t.src=v;t.onload=function(){f.__onMetaFbeventsLoaded&&f.__onMetaFbeventsLoaded()};
+        s=b.getElementsByTagName(e)[0];
         s.parentNode.insertBefore(t,s)}(window, document,'script',
         'https://connect.facebook.net/en_US/fbevents.js');
         fbq('init', '${pixelId}');
@@ -62,6 +63,14 @@ export function MetaPixel() {
         // <Script> ter rodado. NÃO usar a prop onReady do <Script> aqui —
         // pra script inline ela dispara antes do elemento ser inserido no
         // DOM nesta versão do Next.js, ou seja, antes de fbq existir.
+        //
+        // t.onload acima (no <script src=".../fbevents.js"> de verdade,
+        // não neste inline) é um sinal DIFERENTE e mais tardio: só dispara
+        // quando o arquivo real termina de baixar/rodar — momento em que
+        // _fbp/_fbc já foram gravados de verdade pelo Pixel. Ver
+        // waitForFacebookBrowserIds em lib/analytics/meta-pixel.ts, usado
+        // pela Conversions API pra não mandar user_data sem esses cookies
+        // só por corrida de timing.
       `}
     </Script>
   );

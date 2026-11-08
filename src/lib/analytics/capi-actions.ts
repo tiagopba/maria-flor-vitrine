@@ -3,6 +3,7 @@
 import { after } from "next/server";
 import { cookies, headers } from "next/headers";
 import { sendCapiEvent } from "@/lib/analytics/meta-capi";
+import { hashExternalId } from "@/lib/analytics/meta-hash";
 
 /**
  * Server Actions estreitas (whitelist por assinatura, não um endpoint
@@ -20,6 +21,8 @@ export interface ProductCapiInput {
   productCode: string;
   productName: string;
   price: number;
+  /** session_id anônimo do navegador (ver lib/session/visitor-id.ts) — nunca PII, só melhora correspondência via external_id hasheado (ver lib/analytics/meta-hash.ts). */
+  sessionId: string;
 }
 
 export interface AddToCartCapiInput extends ProductCapiInput {
@@ -40,6 +43,7 @@ export async function sendViewContentCapi(input: ProductCapiInput): Promise<void
           clientUserAgent: hdrs.get("user-agent") ?? undefined,
           fbp: cookieStore.get("_fbp")?.value,
           fbc: cookieStore.get("_fbc")?.value,
+          externalId: hashExternalId(input.sessionId),
         },
         customData: {
           content_ids: [input.productCode],
@@ -70,6 +74,7 @@ export async function sendAddToCartCapi(input: AddToCartCapiInput): Promise<void
           clientUserAgent: hdrs.get("user-agent") ?? undefined,
           fbp: cookieStore.get("_fbp")?.value,
           fbc: cookieStore.get("_fbc")?.value,
+          externalId: hashExternalId(input.sessionId),
         },
         customData: {
           content_ids: [input.productCode],

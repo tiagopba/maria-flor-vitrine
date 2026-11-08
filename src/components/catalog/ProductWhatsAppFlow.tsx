@@ -11,7 +11,7 @@ import { addFavorite, getFavorites, markFlowConfirmed, setSelectedSize as persis
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
 import { captureAndPersistUtm } from "@/lib/utm/persist";
 import { submitWhatsAppClick } from "@/lib/whatsapp/click-action";
-import { trackAddToCart, trackPixelEvent } from "@/lib/analytics/meta-pixel";
+import { trackAddToCart, trackPixelEvent, waitForFacebookBrowserIds } from "@/lib/analytics/meta-pixel";
 import { sendAddToCartCapi } from "@/lib/analytics/capi-actions";
 import type { ProductStatus } from "@/types/database";
 
@@ -182,14 +182,22 @@ export function ProductWhatsAppFlow({
     if (isRealChange) {
       const eventId = crypto.randomUUID();
       trackAddToCart({ code: productCode, name: productName, price }, size, eventId);
-      sendAddToCartCapi({
-        eventId,
-        eventSourceUrl: window.location.href,
-        productCode,
-        productName,
-        price,
-        selectedSize: size,
-      }).catch(() => {});
+
+      // Mesma espera com timeout curto do ViewContent (ver ProductViewTracker)
+      // — nunca atrasa a UI (o popup abaixo roda de qualquer jeito, fora
+      // desta promise), só a chamada de rede invisível à CAPI.
+      const sessionId = getVisitorSessionId();
+      waitForFacebookBrowserIds().then(() => {
+        sendAddToCartCapi({
+          eventId,
+          eventSourceUrl: window.location.href,
+          productCode,
+          productName,
+          price,
+          selectedSize: size,
+          sessionId,
+        }).catch(() => {});
+      });
     }
 
     setSizeSheetOpen(false);

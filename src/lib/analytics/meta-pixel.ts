@@ -85,6 +85,60 @@ export function markMetaPixelReady(): void {
 // no único instante em que o script inline poderia precisar dela.
 if (typeof window !== "undefined") {
   window.__flushMetaPixelQueue = markMetaPixelReady;
+  window.__onMetaFbeventsLoaded = markFbeventsLoaded;
+}
+
+/**
+ * Sinalizado só pelo `onload` do `<script src=".../fbevents.js">` REAL (ver
+ * MetaPixel.tsx) — diferente de `markMetaPixelReady` acima, que só garante
+ * que o SHIM `window.fbq` existe (o arquivo real pode ainda estar
+ * baixando). É só a partir deste ponto que `_fbp`/`_fbc` já foram gravados
+ * de verdade pelo próprio Pixel no navegador.
+ */
+let fbeventsLoaded = false;
+const fbeventsLoadedWaiters: Array<() => void> = [];
+
+function markFbeventsLoaded(): void {
+  if (fbeventsLoaded) return;
+  fbeventsLoaded = true;
+  while (fbeventsLoadedWaiters.length > 0) {
+    const resolve = fbeventsLoadedWaiters.shift();
+    resolve?.();
+  }
+}
+
+function readCookie(name: string): string | undefined {
+  if (typeof document === "undefined") return undefined;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : undefined;
+}
+
+/**
+ * Espera o Pixel real terminar de carregar (até `timeoutMs`) antes de deixar
+ * uma chamada à Conversions API seguir — é só a partir daí que `_fbp`/`_fbc`
+ * existem de verdade no navegador (sem essa espera, o primeiro evento de
+ * uma sessão nova quase sempre corre na frente do cookie, e a CAPI manda
+ * `user_data` só com IP+UA). Nunca bloqueia indefinidamente (timeout curto,
+ * resolve de qualquer jeito) e nunca gera/força nenhum cookie — só espera o
+ * que a Meta já ia gravar sozinha, ou desiste e segue sem ele.
+ *
+ * Usado só por chamadas de CAPI fire-and-forget (ViewContent/AddToCart, ver
+ * ProductViewTracker/ProductWhatsAppFlow) — nunca por um fluxo que a
+ * cliente está esperando na tela (Lead do WhatsApp/Ofertas continuam no
+ * timing de sempre, sem essa espera, pra nunca atrasar a ação real).
+ */
+export function waitForFacebookBrowserIds(timeoutMs = 600): Promise<void> {
+  if (fbeventsLoaded || readCookie("_fbp")) return Promise.resolve();
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    fbeventsLoadedWaiters.push(finish);
+    setTimeout(finish, timeoutMs);
+  });
 }
 
 /**

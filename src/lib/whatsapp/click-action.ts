@@ -8,6 +8,7 @@ import { resolveProductPricing, resolveTrackingPrice } from "@/lib/catalog/prici
 import { getColorNamesByIds } from "@/lib/db/colors";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { sendCapiEvent } from "@/lib/analytics/meta-capi";
+import { hashExternalId } from "@/lib/analytics/meta-hash";
 import { buildProductDoubtWhatsAppMessage, buildSoldOutWhatsAppMessage, buildWhatsAppUrl } from "./message-builder";
 import { resolveSeller } from "./resolve-seller";
 
@@ -127,6 +128,7 @@ export async function submitWhatsAppClick(input: WhatsAppClickInput): Promise<Wh
             clientUserAgent: hdrs.get("user-agent") ?? undefined,
             fbp: cookieStore.get("_fbp")?.value,
             fbc: cookieStore.get("_fbc")?.value,
+            externalId: hashExternalId(input.sessionId),
           },
           customData: {
             content_ids: [product.code],

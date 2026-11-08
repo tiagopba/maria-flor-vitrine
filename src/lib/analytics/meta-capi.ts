@@ -31,6 +31,13 @@ export interface CapiUserData {
   fbp?: string;
   /** Cookie `_fbc`, só existe quando a visita veio de um clique em anúncio (fbclid). */
   fbc?: string;
+  /** SHA-256 do e-mail normalizado — calculado em lib/analytics/meta-hash.ts, nunca aqui; só quando coletado legitimamente. */
+  em?: string;
+  /** SHA-256 do primeiro/último nome normalizados — idem acima. */
+  fn?: string;
+  ln?: string;
+  /** SHA-256 de um identificador interno não-PII (ex.: session_id) — melhora correspondência quando não há e-mail/telefone, nunca usado pra inferir identidade real. */
+  externalId?: string;
 }
 
 export interface SendCapiEventInput {
@@ -74,6 +81,10 @@ export async function sendCapiEvent(input: SendCapiEventInput): Promise<void> {
             client_user_agent: input.userData.clientUserAgent,
             fbp: input.userData.fbp,
             fbc: input.userData.fbc,
+            em: input.userData.em,
+            fn: input.userData.fn,
+            ln: input.userData.ln,
+            external_id: input.userData.externalId,
           },
           ...(input.customData ? { custom_data: input.customData } : {}),
         },

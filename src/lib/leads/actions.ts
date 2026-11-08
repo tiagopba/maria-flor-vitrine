@@ -1,10 +1,14 @@
 "use server";
 
 import { randomBytes, createHash } from "node:crypto";
+import { after } from "next/server";
+import { cookies, headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPrivacyPolicyVersion } from "@/lib/site-settings/institutional";
 import { offerLeadSchema } from "@/lib/validation/lead";
 import { recordInstitutionalEvent } from "@/lib/institutional/analytics";
+import { sendCapiEvent } from "@/lib/analytics/meta-capi";
+import { hashEmail, hashExternalId, hashFullNameParts } from "@/lib/analytics/meta-hash";
 import type { Database } from "@/types/database";
 
 type LeadInsert = Database["public"]["Tables"]["leads"]["Insert"];
@@ -19,6 +23,10 @@ export interface SubmitOfferLeadInput {
   utmCampaign: string | null;
   utmContent: string | null;
   referrer: string | null;
+  /** Mesmo valor enviado como `eventID` no `fbq('track', 'Lead', ...)` do browser — permite a Meta deduplicar. */
+  eventId: string;
+  /** `window.location.href` da cliente no momento do envio — vai como `event_source_url` na CAPI. */
+  eventSourceUrl: string;
 }
 
 export interface OfferLeadFieldErrors {
@@ -152,6 +160,38 @@ export async function submitOfferLead(input: SubmitOfferLeadInput): Promise<Subm
     utmContent: input.utmContent,
     referrer: input.referrer,
     metadata: { updated_existing: existingId !== null },
+  });
+
+  // Conversions API — Lead server-side, mesmo event_id do Pixel do browser
+  // (ver OffersFormClient.handleSubmit). Só chega aqui depois de `parsed`
+  // (zod já exigiu marketingConsent === true pra validar) e da gravação do
+  // lead, então nome/e-mail são os mesmos realmente coletados com
+  // consentimento explícito — nunca inventados. Roda via after() (depois da
+  // resposta já enviada ao client, nunca atrasa o fluxo real) e nunca lança
+  // (sendCapiEvent já é fail-open por padrão).
+  const { eventId, eventSourceUrl } = input;
+  after(async () => {
+    try {
+      const [hdrs, cookieStore] = await Promise.all([headers(), cookies()]);
+      await sendCapiEvent({
+        eventName: "Lead",
+        eventId,
+        eventSourceUrl,
+        userData: {
+          clientIpAddress: hdrs.get("x-forwarded-for")?.split(",")[0]?.trim(),
+          clientUserAgent: hdrs.get("user-agent") ?? undefined,
+          fbp: cookieStore.get("_fbp")?.value,
+          fbc: cookieStore.get("_fbc")?.value,
+          em: hashEmail(email),
+          ...hashFullNameParts(name),
+          externalId: hashExternalId(input.sessionId),
+        },
+        customData: { content_name: "Grupo de Ofertas" },
+      });
+    } catch {
+      // sendCapiEvent já trata os próprios erros internamente; nunca deve
+      // chegar aqui, mas por segurança nunca deixa nada escapar do after().
+    }
   });
 
   return { success: true, resumeToken };

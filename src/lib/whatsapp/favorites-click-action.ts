@@ -13,6 +13,7 @@ import { isValidStateCode } from "@/lib/shipping/brazilian-states";
 import { isValidPostalCode } from "@/lib/shipping/postal-code";
 import { getPaymentSettings } from "@/lib/site-settings/payments";
 import { sendCapiEvent } from "@/lib/analytics/meta-capi";
+import { hashExternalId } from "@/lib/analytics/meta-hash";
 import type { Database } from "@/types/database";
 import { buildFavoritesWhatsAppMessage, buildWhatsAppUrl } from "./message-builder";
 import { resolveSeller } from "./resolve-seller";
@@ -272,6 +273,7 @@ export async function submitFavoritesWhatsAppClick(
           clientUserAgent: hdrs.get("user-agent") ?? undefined,
           fbp: cookieStore.get("_fbp")?.value,
           fbc: cookieStore.get("_fbc")?.value,
+          externalId: hashExternalId(input.sessionId),
         },
         customData: {
           content_ids: leadData.contentIds,

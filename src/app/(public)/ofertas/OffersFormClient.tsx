@@ -143,6 +143,11 @@ export function OffersFormClient({
     setSubmitting(true);
 
     const utm = captureAndPersistUtm();
+    // Gerado uma única vez aqui — mesmo valor usado em `fbq('track', 'Lead',
+    // ..., {eventID})` E no `event_id` da Conversions API (dentro de
+    // submitOfferLead), pra Meta deduplicar os dois lados como um único
+    // evento.
+    const eventId = crypto.randomUUID();
     const result = await submitOfferLead({
       name,
       email,
@@ -153,6 +158,8 @@ export function OffersFormClient({
       utmCampaign: utm.utm_campaign ?? null,
       utmContent: utm.utm_content ?? null,
       referrer: utm.referrer ?? null,
+      eventId,
+      eventSourceUrl: window.location.href,
     });
 
     if ("errors" in result) {
@@ -161,7 +168,7 @@ export function OffersFormClient({
       return;
     }
 
-    trackPixelEvent("Lead", { content_name: "Grupo de Ofertas" });
+    trackPixelEvent("Lead", { content_name: "Grupo de Ofertas" }, eventId);
 
     writeResumeToken(result.resumeToken);
     setResumeToken(result.resumeToken);
@@ -188,7 +195,10 @@ export function OffersFormClient({
     setOtpError(null);
     setOtpSubmitting(true);
 
-    const result = await confirmEmailOtp(resumeToken, code);
+    // Mesmo esquema de dedupe do Lead acima — gerado uma única vez aqui,
+    // repassado pra CAPI dentro de confirmEmailOtp.
+    const eventId = crypto.randomUUID();
+    const result = await confirmEmailOtp(resumeToken, code, eventId, window.location.href);
 
     setOtpSubmitting(false);
 
@@ -199,7 +209,7 @@ export function OffersFormClient({
     }
 
     clearResumeToken();
-    trackPixelEvent("CompleteRegistration", { content_name: "Grupo de Ofertas", status: true });
+    trackPixelEvent("CompleteRegistration", { content_name: "Grupo de Ofertas", status: true }, eventId);
     setStep("done");
   }
 

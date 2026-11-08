@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { recordAnalyticsEvent } from "@/lib/analytics/track";
-import { trackViewContent } from "@/lib/analytics/meta-pixel";
+import { trackViewContent, waitForFacebookBrowserIds } from "@/lib/analytics/meta-pixel";
 import { sendViewContentCapi } from "@/lib/analytics/capi-actions";
 import { getDeviceType } from "@/lib/analytics/device";
 import { getVisitorSessionId } from "@/lib/session/visitor-id";
@@ -35,9 +35,10 @@ export function ProductViewTracker({
     trackedFor.current = productId;
 
     const utm = captureAndPersistUtm();
+    const sessionId = getVisitorSessionId();
     recordAnalyticsEvent({
       eventType: "PRODUCT_VIEW",
-      sessionId: getVisitorSessionId(),
+      sessionId,
       productId,
       categoryId,
       source: "product_page",
@@ -53,13 +54,22 @@ export function ProductViewTracker({
     // gerado só aqui, depois do guard acima, uma vez por visualização real.
     const eventId = crypto.randomUUID();
     trackViewContent({ code, name, price }, eventId);
-    sendViewContentCapi({
-      eventId,
-      eventSourceUrl: window.location.href,
-      productCode: code,
-      productName: name,
-      price,
-    }).catch(() => {});
+
+    // Espera (com timeout curto, nunca indefinido) o Pixel real terminar de
+    // carregar antes de mandar a CAPI — sem isso, o PRIMEIRO ViewContent de
+    // uma sessão nova quase sempre corre na frente do cookie `_fbp`, que só
+    // é gravado quando o fbevents.js termina de carregar. Nunca atrasa nada
+    // visível: é só esta chamada de rede invisível (fire-and-forget).
+    waitForFacebookBrowserIds().then(() => {
+      sendViewContentCapi({
+        eventId,
+        eventSourceUrl: window.location.href,
+        productCode: code,
+        productName: name,
+        price,
+        sessionId,
+      }).catch(() => {});
+    });
   }, [productId, categoryId, code, name, price]);
 
   return null;
