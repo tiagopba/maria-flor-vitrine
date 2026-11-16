@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { FulfillmentRecord } from "@/lib/db/fulfillment";
+import type { CustomerHistory } from "@/lib/db/customers";
 import { UNKNOWN_SELLER_LABEL, formatOriginLabel, isPendingTracking } from "@/lib/fulfillment/delivery";
 import {
   HISTORICAL_NO_DOCUMENTS_MESSAGE,
@@ -12,6 +13,7 @@ import { formatCpfCnpj, formatPostalCode } from "@/lib/fulfillment/text";
 import { formatPayment } from "@/lib/intake/payment";
 import { DeliveryStatusBadge } from "../RecordsTable";
 import { CopyButton } from "./CopyButton";
+import { CustomerHistoryPanel } from "./CustomerHistoryPanel";
 import { CustomerWhatsappPanel } from "./CustomerWhatsappPanel";
 import { EditRecordSaleModal } from "./EditRecordSaleModal";
 import { PostSalePanel, type PostSaleItem } from "./PostSalePanel";
@@ -45,6 +47,7 @@ export function RecordDetailView({
   sellers,
   postSale,
   customerWhatsapp,
+  customerHistory,
 }: {
   record: FulfillmentRecord;
   /** Nome da vendedora de record.seller_id (public.sellers), quando houver. */
@@ -55,6 +58,8 @@ export function RecordDetailView({
   postSale: PostSaleItem[];
   /** WhatsApp do cliente já formatado para exibir (null = não cadastrado). */
   customerWhatsapp: string | null;
+  /** null = venda sem CPF confiável vinculado (sem customer_id) — a seção não aparece. */
+  customerHistory: CustomerHistory | null;
 }) {
   const documents = documentAvailability(record);
 
@@ -131,6 +136,12 @@ export function RecordDetailView({
       <div className="mb-5">
         <PostSalePanel recordId={record.id} items={postSale} />
       </div>
+
+      {customerHistory && (
+        <div className="mb-5">
+          <CustomerHistoryPanel recordId={record.id} history={customerHistory} />
+        </div>
+      )}
 
       <div className="flex flex-col gap-5">
         <section className="rounded-2xl border border-border bg-surface p-5">

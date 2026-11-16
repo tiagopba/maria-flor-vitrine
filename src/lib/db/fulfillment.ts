@@ -7,6 +7,8 @@ import { buildSearchFilter } from "@/lib/fulfillment/search";
 import { collectFilterOptions, fetchAllPages } from "@/lib/fulfillment/paginate";
 import { listSellersAdmin } from "@/lib/db/sellers";
 import type { FulfillmentRecordFields } from "@/lib/fulfillment/schema";
+import { isCustomerReviewStatus, reviewRowState, type CustomerReviewStatus, type ReviewRowState } from "@/lib/fulfillment/customer-review";
+import { computeFulfillmentIndicators, type FulfillmentIndicators } from "@/lib/fulfillment/listing-indicators";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database";
 
@@ -19,6 +21,14 @@ export type FulfillmentAuditAction = Database["public"]["Tables"]["fulfillment_a
 
 export const FULFILLMENT_BUCKET = "fulfillment-documents";
 export const FULFILLMENT_PAGE_SIZE = 25;
+
+/** Situação de avaliação de UMA venda — segue o follow-up GOOGLE_REVIEW desta venda
+ * JUNTO do estado GLOBAL da cliente (ver reviewRowState, lib/fulfillment/customer-review.ts). */
+export interface ReviewColumnData {
+  followupStatus: "OPEN" | "SENT";
+  globalStatus: CustomerReviewStatus | null;
+  rowState: ReviewRowState;
+}
 
 export type FulfillmentListItem = Pick<
   FulfillmentRecord,
@@ -39,13 +49,19 @@ export type FulfillmentListItem = Pick<
   | "delivery_status"
   | "record_source"
   | "notes"
+  | "customer_id"
 > & {
-  /** Pelo menos 1 follow-up OPEN — decide o grupo DELIVERED × POST_SALE_PENDING (delivery-priority.ts). */
+  /** Pelo menos 1 follow-up OPEN que conta como pendência real — decide o grupo
+   * DELIVERED × POST_SALE_PENDING (delivery-priority.ts). Inclui SHIPPING_NOTICE/
+   * DELIVERY_CONFIRMATION sempre, e GOOGLE_REVIEW só quando `reviewColumn.rowState`
+   * for "AVAILABLE" (nunca um GOOGLE_REVIEW OPEN já bloqueado pelo estado global). */
   hasOpenFollowup: boolean;
+  /** null = migration da Fase 3 (customers/avaliação) ainda não aplicada neste banco. */
+  reviewColumn: ReviewColumnData | null;
 };
 
 const LIST_COLUMNS =
-  "id, customer_name, customer_cpf, nfe_number, invoice_total, carrier, shipping_service, tracking_code, created_at, sale_date, seller_id, sales_origin, expected_delivery_date, delivered_at, delivery_status, record_source, notes";
+  "id, customer_name, customer_cpf, nfe_number, invoice_total, carrier, shipping_service, tracking_code, created_at, sale_date, seller_id, sales_origin, expected_delivery_date, delivered_at, delivery_status, record_source, notes, customer_id";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -63,8 +79,10 @@ export function isMissingTableError(error: { code?: string } | null | undefined)
 }
 
 export type ListFulfillmentResult =
-  | { status: "ok"; records: FulfillmentListItem[]; hasMore: boolean }
+  | { status: "ok"; records: FulfillmentListItem[]; hasMore: boolean; indicators: FulfillmentIndicators }
   | { status: "unavailable" };
+
+const SHIPPING_DELIVERY_TYPES = ["SHIPPING_NOTICE", "DELIVERY_CONFIRMATION"] as const;
 
 export async function listFulfillmentRecords(filters: FulfillmentListFilters): Promise<ListFulfillmentResult> {
   const supabase = await createClient();
@@ -72,27 +90,15 @@ export async function listFulfillmentRecords(filters: FulfillmentListFilters): P
 
   const searchFilter = filters.query ? buildSearchFilter(filters.query) : null;
 
-  // Pendência de follow-up: calculada numa tabela pequena (3 linhas por registro), não
-  // na busca principal — o volume de pedidos não chega lá. Sempre buscado (não só
-  // quando o filtro de follow-up está ativo): também decide o grupo de apresentação
-  // DELIVERED × POST_SALE_PENDING (ver delivery-priority.ts), então precisa valer
-  // pra toda a listagem, não só pro filtro "Com pendência".
-  const openFollowupIds = await listRecordIdsWithOpenFollowups();
-  let followupIdFilter: string[] | null = null;
-  if (filters.followup === "pending") {
-    const pendingIds = [...openFollowupIds];
-    if (pendingIds.length === 0) return { status: "ok", records: [], hasMore: false };
-    followupIdFilter = pendingIds;
-  }
-
   // Busca o conjunto inteiro que bate com os filtros de banco (teto de
   // fetchAllPages: 1000 páginas de 1000 = 1 milhão de linhas, muito além do
-  // volume real) — a ordenação por urgência (EM_ATRASO primeiro etc.) e a
-  // paginação acontecem em memória logo abaixo, porque dependem de "hoje" e
-  // não só de colunas do banco.
-  let rows: Omit<FulfillmentListItem, "hasOpenFollowup">[];
+  // volume real) — a ordenação por urgência (EM_ATRASO primeiro etc.), o
+  // filtro de follow-up e a paginação acontecem em memória logo abaixo,
+  // porque dependem de "hoje" e de dados de outras tabelas pequenas
+  // (follow-ups, avaliação), não só de colunas do banco.
+  let rows: Omit<FulfillmentListItem, "hasOpenFollowup" | "reviewColumn">[];
   try {
-    rows = await fetchAllPages<Omit<FulfillmentListItem, "hasOpenFollowup">>(async (from, to) => {
+    rows = await fetchAllPages<Omit<FulfillmentListItem, "hasOpenFollowup" | "reviewColumn">>(async (from, to) => {
       let query = supabase.from("fulfillment_records").select(LIST_COLUMNS).order("id").range(from, to);
       if (searchFilter) query = query.or(searchFilter);
       if (filters.saleFrom) query = query.gte("sale_date", filters.saleFrom);
@@ -104,7 +110,6 @@ export async function listFulfillmentRecords(filters: FulfillmentListFilters): P
       else if (filters.seller) query = query.eq("seller_id", filters.seller);
       if (filters.origin === FILTER_NONE) query = query.is("sales_origin", null);
       else if (filters.origin) query = query.eq("sales_origin", filters.origin);
-      if (filters.followup === "pending" && followupIdFilter) query = query.in("id", followupIdFilter);
       const { data, error } = await query;
       if (error) throw error;
       return data ?? [];
@@ -114,18 +119,48 @@ export async function listFulfillmentRecords(filters: FulfillmentListFilters): P
     throw error instanceof Error ? error : new Error(String(error));
   }
 
-  if (filters.followup === "completed") {
-    rows = rows.filter((r) => !openFollowupIds.has(r.id));
-  }
+  // Pendência de follow-up — tabelas pequenas (poucas linhas por registro), não na
+  // busca principal: o volume de pedidos não chega lá. Escopado às linhas já
+  // filtradas acima (nunca a tabela inteira). SHIPPING_NOTICE/DELIVERY_CONFIRMATION
+  // sempre contam; GOOGLE_REVIEW só conta como pendência real quando `rowState` for
+  // "AVAILABLE" — nunca um GOOGLE_REVIEW OPEN já bloqueado pelo estado GLOBAL da
+  // cliente (pedido explícito da Fase 4: não apresentar avaliação bloqueada como
+  // pendência aberta).
+  const recordIds = rows.map((r) => r.id);
+  const [shippingDeliveryOpenIds, reviewColumnByRecord] = await Promise.all([
+    getShippingDeliveryOpenRecordIds(recordIds),
+    getReviewColumnData(rows),
+  ]);
+
+  const todayIso = todayIsoInStoreTimeZone();
+  const withFlags: FulfillmentListItem[] = rows.map((r) => {
+    const reviewColumn = reviewColumnByRecord?.[r.id] ?? null;
+    const hasOpenFollowup = Boolean(shippingDeliveryOpenIds?.has(r.id)) || reviewColumn?.rowState === "AVAILABLE";
+    return { ...r, hasOpenFollowup, reviewColumn };
+  });
+
+  let withFollowupFilter = withFlags;
+  if (filters.followup === "pending") withFollowupFilter = withFlags.filter((r) => r.hasOpenFollowup);
+  if (filters.followup === "completed") withFollowupFilter = withFlags.filter((r) => !r.hasOpenFollowup);
+
+  // Indicadores do topo da listagem (Fase 4): sobre o conjunto já filtrado pelos
+  // filtros avançados (busca, datas, vendedora, origem, transportadora, status, UF,
+  // follow-up) — ANTES do filtro de grupo (chip de situação / mostrarEntregues), pra
+  // funcionar como visão geral estável que não some ao trocar de aba.
+  const indicators = computeFulfillmentIndicators(
+    withFollowupFilter.map((r) => ({
+      customerId: r.customer_id,
+      group: displayGroupFor(r, todayIso),
+      reviewState: r.reviewColumn?.rowState ?? null,
+    }))
+  );
 
   // Precedência dos filtros de entregues (shouldIncludeGroup, pura e testada
   // em delivery-filters.test.ts): chip Entregues e status=DELIVERED sempre
   // mostram DELIVERED, nunca uma lista vazia por causa do toggle. O grupo
   // (DELIVERED × POST_SALE_PENDING) depende de follow-up real, nunca só de
   // delivery_status.
-  const todayIso = todayIsoInStoreTimeZone();
-  const withFollowupFlag = rows.map((r) => ({ ...r, hasOpenFollowup: openFollowupIds.has(r.id) }));
-  const filteredRows = withFollowupFlag.filter((r) => shouldIncludeGroup(displayGroupFor(r, todayIso), filters));
+  const filteredRows = withFollowupFilter.filter((r) => shouldIncludeGroup(displayGroupFor(r, todayIso), filters));
   const sorted = sortRecordsForListing(filteredRows, todayIso);
 
   const from = (page - 1) * FULFILLMENT_PAGE_SIZE;
@@ -133,33 +168,92 @@ export async function listFulfillmentRecords(filters: FulfillmentListFilters): P
     status: "ok",
     records: sorted.slice(from, from + FULFILLMENT_PAGE_SIZE),
     hasMore: sorted.length > from + FULFILLMENT_PAGE_SIZE,
+    indicators,
   };
 }
 
 /**
- * IDs de registros com pelo menos 1 follow-up OPEN. Usado para o filtro "Com
- * pendência" e para a contagem na listagem — não para decidir nada automático.
+ * IDs (dentre `recordIds`) com SHIPPING_NOTICE ou DELIVERY_CONFIRMATION ainda OPEN —
+ * GOOGLE_REVIEW nunca entra aqui (ver getReviewColumnData, que decide a pendência de
+ * avaliação junto do estado global da cliente). `null` = tabela ainda não existe
+ * neste banco (migration não aplicada).
  */
-export async function listRecordIdsWithOpenFollowups(): Promise<Set<string>> {
+async function getShippingDeliveryOpenRecordIds(recordIds: readonly string[]): Promise<Set<string> | null> {
+  if (recordIds.length === 0) return new Set();
   const supabase = await createClient();
-  const { data, error } = await supabase.from("fulfillment_followups").select("record_id").eq("status", "OPEN");
-  if (isMissingTableError(error)) return new Set();
+  const { data, error } = await supabase
+    .from("fulfillment_followups")
+    .select("record_id")
+    .eq("status", "OPEN")
+    .in("type", SHIPPING_DELIVERY_TYPES)
+    .in("record_id", recordIds as string[]);
+  if (isMissingTableError(error)) return null;
   if (error) throw new Error(error.message);
   return new Set((data ?? []).map((r) => r.record_id));
 }
 
 /**
- * Quantos follow-ups ainda estão OPEN, por registro — para o badge "N em aberto" na
+ * Situação de avaliação (GOOGLE_REVIEW) de cada registro em `rows` — follow-up DESTA
+ * venda + estado GLOBAL da cliente (reviewRowState, lib/fulfillment/customer-review.ts).
+ * `rows` já traz `customer_id` (da query principal), então não busca
+ * fulfillment_records de novo. `null` = fulfillment_followups ainda não existe neste
+ * banco. Se só customer_review_status/customers ainda não existir (Fase 2/3 não
+ * aplicada), degrada sozinho: globalStatus fica null para todo mundo e
+ * reviewRowState cai no comportamento de antes (só o follow-up decide) — nunca quebra.
+ */
+async function getReviewColumnData(
+  rows: readonly { id: string; customer_id: string | null }[]
+): Promise<Record<string, ReviewColumnData> | null> {
+  if (rows.length === 0) return {};
+  const supabase = await createClient();
+  const recordIds = rows.map((r) => r.id);
+
+  const { data: followupRows, error: followupError } = await supabase
+    .from("fulfillment_followups")
+    .select("record_id, status")
+    .eq("type", "GOOGLE_REVIEW")
+    .in("record_id", recordIds);
+  if (isMissingTableError(followupError)) return null;
+  if (followupError) throw new Error(followupError.message);
+
+  const customerIds = [...new Set(rows.map((r) => r.customer_id).filter((id): id is string => Boolean(id)))];
+  const globalByCustomer = new Map<string, CustomerReviewStatus>();
+  if (customerIds.length > 0) {
+    const { data: statusRows, error: statusError } = await supabase
+      .from("customer_review_status")
+      .select("customer_id, status")
+      .in("customer_id", customerIds);
+    if (statusError && !isMissingTableError(statusError)) throw new Error(statusError.message);
+    for (const row of statusRows ?? []) {
+      if (isCustomerReviewStatus(row.status)) globalByCustomer.set(row.customer_id, row.status);
+    }
+  }
+
+  const customerByRecord = new Map(rows.map((r) => [r.id, r.customer_id]));
+  const result: Record<string, ReviewColumnData> = {};
+  for (const fr of followupRows ?? []) {
+    const customerId = customerByRecord.get(fr.record_id) ?? null;
+    const globalStatus = customerId ? globalByCustomer.get(customerId) ?? null : null;
+    const followupStatus = fr.status as "OPEN" | "SENT";
+    result[fr.record_id] = { followupStatus, globalStatus, rowState: reviewRowState(followupStatus, globalStatus) };
+  }
+  return result;
+}
+
+/**
+ * Quantos follow-ups de ENVIO/RECEBIMENTO (nunca avaliação, que tem coluna própria —
+ * ver ReviewColumnData) ainda estão OPEN, por registro — para o badge "N em aberto" na
  * listagem. `null` quando a migration ainda não foi aplicada (tabela não existe): a UI
  * deve mostrar "—", nunca "Concluídos" por falta de dado.
  */
-export async function getFollowupOpenCounts(recordIds: readonly string[]): Promise<Record<string, number> | null> {
+export async function getShippingDeliveryOpenCounts(recordIds: readonly string[]): Promise<Record<string, number> | null> {
   if (recordIds.length === 0) return {};
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("fulfillment_followups")
     .select("record_id")
     .eq("status", "OPEN")
+    .in("type", SHIPPING_DELIVERY_TYPES)
     .in("record_id", recordIds as string[]);
   if (isMissingTableError(error)) return null;
   if (error) throw new Error(error.message);

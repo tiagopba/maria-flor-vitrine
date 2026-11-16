@@ -3,7 +3,8 @@ import Link from "next/link";
 import { SuccessToast } from "@/components/admin/SuccessToast";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { requireAdmin } from "@/lib/auth/permissions";
-import { FULFILLMENT_PAGE_SIZE, getFollowupOpenCounts, getFulfillmentFilterOptions, listFulfillmentRecords } from "@/lib/db/fulfillment";
+import { FULFILLMENT_PAGE_SIZE, getFulfillmentFilterOptions, getShippingDeliveryOpenCounts, listFulfillmentRecords } from "@/lib/db/fulfillment";
+import { IndicatorsBar } from "./IndicatorsBar";
 import {
   ALL_DELIVERY_STATUSES,
   DELIVERY_STATUS_LABELS,
@@ -49,7 +50,7 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
   );
   const hasQuickFilters = Boolean(filters.situacao || filters.mostrarEntregues);
   const sellerNames = Object.fromEntries(options.sellers.map((s) => [s.id, s.name]));
-  const followupCounts = result.status === "ok" ? await getFollowupOpenCounts(result.records.map((r) => r.id)) : null;
+  const followupCounts = result.status === "ok" ? await getShippingDeliveryOpenCounts(result.records.map((r) => r.id)) : null;
   // Mantém no select uma transportadora/origem filtrada mesmo que nenhum registro a use mais.
   const carriers = [...new Set([...options.carriers, ...(filters.carrier ? [filters.carrier] : [])])].sort();
   const origins = [
@@ -78,6 +79,8 @@ export default async function FulfillmentPage({ searchParams }: PageProps<"/admi
           Cadastro manual
         </Link>
       </div>
+
+      {result.status === "ok" && <IndicatorsBar indicators={result.indicators} />}
 
       <QuickFilters filters={filters} />
 

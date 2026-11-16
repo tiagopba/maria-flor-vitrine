@@ -475,8 +475,56 @@ export interface Database {
           created_by: string | null;
           created_at: string;
           updated_at: string;
+          // Vínculo automático por CPF válido — ver migrations
+          // 20261116100000_fulfillment_customers.sql (coluna) e
+          // 20261116120000_fulfillment_customer_review_backend.sql (trigger
+          // que preenche). NULL = sem CPF com dígito verificador válido,
+          // comportamento igual ao de antes desta coluna existir.
+          customer_id: string | null;
         },
         "customer_name" | "sale_date"
+      >;
+
+      // Cliente identificada por CPF (dígito verificador válido) — nunca por
+      // nome. Ver migration 20261116100000_fulfillment_customers.sql.
+      customers: Table<
+        {
+          id: string;
+          cpf_digits: string;
+          display_name: string;
+          created_at: string;
+          updated_at: string;
+        },
+        "cpf_digits" | "display_name"
+      >;
+
+      // Estado GLOBAL de avaliação por cliente (não por venda) — ver
+      // migration 20261116110000_fulfillment_customer_review_status.sql.
+      customer_review_status: Table<
+        {
+          customer_id: string;
+          status: "NEVER_ASKED" | "REQUESTED" | "REVIEWED" | "DISMISSED" | "DOES_NOT_WANT";
+          last_requested_at: string | null;
+          last_requested_sale_id: string | null;
+          reviewed_at: string | null;
+          updated_by: string | null;
+          updated_at: string;
+        },
+        "customer_id"
+      >;
+
+      // Histórico append-only de mudanças de customer_review_status — mesmo
+      // padrão de fulfillment_audit_logs (sem policy de update/delete).
+      customer_review_events: Table<
+        {
+          id: string;
+          customer_id: string;
+          sale_id: string | null;
+          action: "REQUESTED" | "REVIEWED" | "DISMISSED" | "DOES_NOT_WANT" | "REOPENED";
+          actor_id: string | null;
+          created_at: string;
+        },
+        "customer_id" | "action"
       >;
 
       fulfillment_audit_logs: Table<
@@ -639,6 +687,16 @@ export interface Database {
       apply_legacy_freight_override: {
         Args: { p_intake: string; p_actor: string };
         Returns: string;
+      };
+      // Ver migration 20261116120000_fulfillment_customer_review_backend.sql
+      // (preparada, não aplicada).
+      confirm_google_review_sent: {
+        Args: { p_record_id: string; p_message: string };
+        Returns: { written: boolean };
+      };
+      set_customer_review_outcome: {
+        Args: { p_customer_id: string; p_outcome: string; p_sale_id?: string | null };
+        Returns: { status: string };
       };
       try_claim_email_otp_send: {
         Args: {

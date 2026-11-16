@@ -4,6 +4,7 @@ import { SuccessToast } from "@/components/admin/SuccessToast";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { getFulfillmentRecord, getSellerName } from "@/lib/db/fulfillment";
 import { listSellersAdmin } from "@/lib/db/sellers";
+import { getCustomerHistory } from "@/lib/db/customers";
 import { listFollowups, listPostSaleEvents } from "@/lib/db/post-sale";
 import {
   FOLLOWUP_TYPE_BY_KIND,
@@ -30,7 +31,13 @@ export default async function FulfillmentDetailPage({ params }: PageProps<"/admi
   const { id } = await params;
   const record = await getFulfillmentRecord(id);
   if (!record) notFound();
-  const [sellerName, allSellers] = await Promise.all([getSellerName(record.seller_id), listSellersAdmin()]);
+  const [sellerName, allSellers, customerHistory] = await Promise.all([
+    getSellerName(record.seller_id),
+    listSellersAdmin(),
+    // null = venda sem CPF confiável vinculado (sem customer_id) — a seção de
+    // histórico da cliente simplesmente não aparece, nunca quebra a página.
+    record.customer_id ? getCustomerHistory(record.customer_id) : Promise.resolve(null),
+  ]);
 
   // WhatsApp do cliente: NULL nos registros atuais. Sem ele, o link fica vazio e a tela oferece só copiar.
   const customerPhone: string | null = record.customer_whatsapp ?? null;
@@ -86,6 +93,7 @@ export default async function FulfillmentDetailPage({ params }: PageProps<"/admi
         sellers={allSellers.map((s) => ({ id: s.id, name: s.name, active: s.active }))}
         postSale={postSale}
         customerWhatsapp={formatCustomerWhatsapp(customerPhone)}
+        customerHistory={customerHistory}
       />
     </>
   );

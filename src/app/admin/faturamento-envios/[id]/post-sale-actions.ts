@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { getFulfillmentRecord, isUuid } from "@/lib/db/fulfillment";
-import { confirmFollowupSent, insertPostSaleAudit, listFollowups, listPostSaleEvents } from "@/lib/db/post-sale";
+import { confirmFollowupSent, confirmGoogleReviewSent, insertPostSaleAudit, listFollowups, listPostSaleEvents } from "@/lib/db/post-sale";
 import {
   FOLLOWUP_TYPE_BY_KIND,
   POST_SALE_ACTIONS,
@@ -70,7 +70,13 @@ export async function registerPostSaleEvent(recordId: string, kind: string, phas
   if (phase === "confirmed") {
     const message = buildMessage(kind, record);
     if (!message) return { ok: false, error: "Não foi possível montar a mensagem para confirmar." };
-    const result = await confirmFollowupSent({ recordId, kind, actorId: admin.id, messageSnapshot: message });
+    // GOOGLE_REVIEW: passa pela RPC atômica (follow-up da venda + estado
+    // GLOBAL da cliente, revalidado no servidor — ver confirmGoogleReviewSent).
+    // tracking/delivery: inalterados, continuam no UPDATE simples de sempre.
+    const result =
+      kind === "review"
+        ? await confirmGoogleReviewSent({ recordId, messageSnapshot: message })
+        : await confirmFollowupSent({ recordId, kind, actorId: admin.id, messageSnapshot: message });
     if (!result.ok) return result;
     // Clique duplicado (já estava SENT): não duplica a linha de auditoria.
     if (!result.written) return { ok: true };

@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
-import type { FulfillmentListItem } from "@/lib/db/fulfillment";
+import type { FulfillmentListItem, ReviewColumnData } from "@/lib/db/fulfillment";
 import { DELIVERY_STATUS_LABELS, describeSellerOrigin, isPendingTracking, statusesForSource, type DeliveryStatus } from "@/lib/fulfillment/delivery";
 import { displayGroupFor, todayIsoInStoreTimeZone } from "@/lib/fulfillment/delivery-priority";
+import { REVIEW_ROW_STATE_LABELS, type ReviewRowState } from "@/lib/fulfillment/customer-review";
 import { formatCarrier, formatIsoDate } from "@/lib/fulfillment/format";
 import { maskCpfCnpj } from "@/lib/fulfillment/text";
 import { QuickEditModal } from "./QuickEditModal";
@@ -61,6 +62,33 @@ function FollowupBadge({ openCount }: { openCount: number | undefined }) {
   );
 }
 
+const REVIEW_ROW_BADGE: Record<ReviewRowState, { icon: string; tone: "primary" | "warning" | "success" | "neutral" }> = {
+  AVAILABLE: { icon: "🟢", tone: "primary" },
+  REQUESTED: { icon: "📨", tone: "warning" },
+  REVIEWED: { icon: "⭐", tone: "success" },
+  DOES_NOT_WANT: { icon: "🚫", tone: "neutral" },
+  DISMISSED: { icon: "➖", tone: "neutral" },
+};
+
+/**
+ * Situação da avaliação: SEMPRE `reviewColumn.rowState` (follow-up da venda +
+ * estado GLOBAL da cliente já combinados — ver reviewRowState), nunca o
+ * follow-up isolado. `null` = migration da Fase 3 ainda não aplicada neste
+ * banco (mostra "—", igual ao padrão já usado pra follow-ups).
+ */
+function ReviewStatusBadge({ reviewColumn }: { reviewColumn: ReviewColumnData | null }) {
+  if (!reviewColumn) return <span className="text-xs text-text-muted">—</span>;
+  const { icon, tone } = REVIEW_ROW_BADGE[reviewColumn.rowState];
+  const label = REVIEW_ROW_STATE_LABELS[reviewColumn.rowState];
+  return (
+    <span title={label}>
+      <Badge tone={tone} className="whitespace-nowrap">
+        {icon} {label}
+      </Badge>
+    </span>
+  );
+}
+
 export function RecordsTable({
   records,
   sellerNames,
@@ -84,11 +112,15 @@ export function RecordsTable({
             <th className="px-4 py-3 font-medium">Venda</th>
             <th className="px-4 py-3 font-medium">Cliente</th>
             <th className="px-4 py-3 font-medium">Vendedora/Origem</th>
-            <th className="px-4 py-3 font-medium">Transporte</th>
+            {/* Entrega e rastreamento */}
+            <th className="border-l border-border px-4 py-3 font-medium">Transporte</th>
             <th className="px-4 py-3 font-medium">Rastreio</th>
             <th className="px-4 py-3 font-medium">Previsão</th>
             <th className="px-4 py-3 font-medium">Status</th>
-            <th className="px-4 py-3 font-medium">Follow-ups</th>
+            {/* Follow-ups de envio/recebimento (nunca avaliação — ver coluna própria abaixo) */}
+            <th className="border-l border-border px-4 py-3 font-medium">Follow-ups</th>
+            {/* Situação da avaliação */}
+            <th className="border-l border-border px-4 py-3 font-medium">Avaliação</th>
             <th className="px-4 py-3" />
           </tr>
         </thead>
@@ -120,7 +152,7 @@ export function RecordsTable({
                   <div>{sellerOrigin.primary}</div>
                   {sellerOrigin.secondary && <div className="text-xs text-text-muted">{sellerOrigin.secondary}</div>}
                 </td>
-                <td className="px-4 py-2 text-text">{formatCarrier(record.carrier, record.shipping_service)}</td>
+                <td className="border-l border-border/60 px-4 py-2 text-text">{formatCarrier(record.carrier, record.shipping_service)}</td>
                 <td className="px-4 py-2 font-mono text-text">{record.tracking_code ?? "—"}</td>
                 <td className="whitespace-nowrap px-4 py-2 text-text-muted">
                   {formatIsoDate(record.expected_delivery_date)}
@@ -129,7 +161,11 @@ export function RecordsTable({
                   <div className="flex flex-wrap items-center gap-1.5">
                     <DeliveryStatusBadge status={record.delivery_status} />
                     {isOverdue && <OverdueBadge />}
-                    {isPostSalePending && <PostSalePendingBadge openCount={followupOpenCounts?.[record.id] ?? 0} />}
+                    {isPostSalePending && (
+                      <PostSalePendingBadge
+                        openCount={(followupOpenCounts?.[record.id] ?? 0) + (record.reviewColumn?.rowState === "AVAILABLE" ? 1 : 0)}
+                      />
+                    )}
                   </div>
                   {record.delivery_status === "DELIVERED" && record.delivered_at && (
                     <div className="mt-0.5 whitespace-nowrap text-xs text-text-muted">
@@ -144,8 +180,11 @@ export function RecordsTable({
                     </div>
                   )}
                 </td>
-                <td className="whitespace-nowrap px-4 py-2">
+                <td className="whitespace-nowrap border-l border-border/60 px-4 py-2">
                   <FollowupBadge openCount={followupOpenCounts === null ? undefined : followupOpenCounts[record.id] ?? 0} />
+                </td>
+                <td className="whitespace-nowrap border-l border-border/60 px-4 py-2">
+                  <ReviewStatusBadge reviewColumn={record.reviewColumn} />
                 </td>
                 <td className="px-4 py-2 text-right">
                   <div className="flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap">

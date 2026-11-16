@@ -123,3 +123,29 @@ export async function confirmFollowupSent(input: {
   if (current?.status === "SENT") return { ok: true, written: false };
   return { ok: false, error: "Follow-up não encontrado para este registro." };
 }
+
+/**
+ * CONFIRMAR QUE ENVIEI — só para GOOGLE_REVIEW. Diferente de
+ * confirmFollowupSent (tracking/delivery, inalterado): aqui a confirmação do
+ * follow-up DESTA venda e a atualização do estado GLOBAL da cliente
+ * (customer_review_status) precisam ser tudo-ou-nada, então passam pela RPC
+ * atômica confirm_google_review_sent (ver migration
+ * 20261116120000_fulfillment_customer_review_backend.sql) em vez de um
+ * UPDATE solto — mesma lição de edit_fulfillment_intake: nunca duas
+ * chamadas separadas pra uma operação logicamente única. A RPC já revalida
+ * o estado da cliente no servidor (nunca confia em estado que a tela já
+ * tinha antes do clique) e trava a linha de customer_review_status — duas
+ * tentativas simultâneas nunca passam as duas.
+ */
+export async function confirmGoogleReviewSent(input: {
+  recordId: string;
+  messageSnapshot: string;
+}): Promise<ConfirmFollowupResult> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("confirm_google_review_sent", {
+    p_record_id: input.recordId,
+    p_message: input.messageSnapshot,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, written: Boolean((data as { written?: boolean } | null)?.written) };
+}
